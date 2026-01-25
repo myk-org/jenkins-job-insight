@@ -45,32 +45,13 @@ class TestFailure(BaseModel):
     )
 
 
-class BugReport(BaseModel):
-    """Bug report generated from failure analysis."""
-
-    title: str = Field(description="Bug report title")
-    description: str = Field(description="Detailed bug description")
-    severity: Literal["critical", "high", "medium", "low"] = Field(
-        description="Bug severity level"
-    )
-    component: str = Field(description="Affected component or module")
-    evidence: str = Field(description="Evidence from logs or test output")
-
-
 class FailureAnalysis(BaseModel):
     """Analysis result for a single test failure."""
 
     test_name: str = Field(description="Name of the failed test")
     error: str = Field(description="Error message or exception")
-    classification: Literal["code_issue", "product_bug"] = Field(
-        description="Whether this is a test code issue or a product bug"
-    )
-    explanation: str = Field(description="Explanation of the failure cause")
-    fix_suggestion: str | None = Field(
-        default=None, description="Suggested fix for the issue"
-    )
-    bug_report: BugReport | None = Field(
-        default=None, description="Bug report if classified as product bug"
+    analysis: str = Field(
+        description="Full Claude CLI analysis output (human readable)"
     )
 
 

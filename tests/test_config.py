@@ -29,9 +29,6 @@ class TestSettings:
         }
         with patch.dict(os.environ, env, clear=True):
             settings = Settings()
-            assert settings.gemini_api_key is None
-            assert settings.google_project_id is None
-            assert settings.google_credentials_json is None
             assert settings.slack_webhook_url is None
             assert settings.tests_repo_url is None
             assert settings.callback_url is None
@@ -59,27 +56,7 @@ class TestSettings:
     ) -> None:
         """Test that optional fields are loaded when provided."""
         settings = Settings()
-        assert settings.gemini_api_key == full_env_vars["GEMINI_API_KEY"]
         assert settings.slack_webhook_url == full_env_vars["SLACK_WEBHOOK_URL"]
-
-    def test_settings_default_google_region(
-        self, mock_env_vars: dict[str, str]
-    ) -> None:
-        """Test that google_region has a default value."""
-        settings = Settings()
-        assert settings.google_region == "us-east5"
-
-    def test_settings_custom_google_region(self) -> None:
-        """Test that google_region can be overridden."""
-        env = {
-            "JENKINS_URL": "https://jenkins.example.com",
-            "JENKINS_USER": "testuser",
-            "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
-            "GOOGLE_REGION": "europe-west1",
-        }
-        with patch.dict(os.environ, env, clear=False):
-            settings = Settings()
-            assert settings.google_region == "europe-west1"
 
     def test_settings_validation_error_missing_jenkins_url(self) -> None:
         """Test that ValidationError is raised when JENKINS_URL is missing."""

@@ -85,7 +85,7 @@ class TestFormatSlackMessage:
     def test_format_slack_message_product_bug_label(
         self, sample_analysis_result: AnalysisResult
     ) -> None:
-        """Test that product_bug uses PRODUCT BUG label."""
+        """Test that analysis with PRODUCT BUG is included in message."""
         message = format_slack_message(sample_analysis_result)
 
         # Find section with failure - all content is in code blocks
@@ -94,15 +94,19 @@ class TestFormatSlackMessage:
             if block["type"] == "section":
                 all_text += block["text"]["text"]
 
-        assert "[PRODUCT BUG]" in all_text
+        assert "PRODUCT BUG" in all_text
 
     def test_format_slack_message_code_issue_label(self) -> None:
-        """Test that code_issue uses CODE ISSUE label."""
+        """Test that analysis with CODE ISSUE is included in message."""
         failure = FailureAnalysis(
             test_name="test_example",
             error="AssertionError",
-            classification="code_issue",
-            explanation="Test issue",
+            analysis="""=== CLASSIFICATION ===
+CODE ISSUE
+
+=== ANALYSIS ===
+Test issue
+""",
         )
         result = AnalysisResult(
             job_id="test-123",
@@ -119,7 +123,7 @@ class TestFormatSlackMessage:
             if block["type"] == "section":
                 all_text += block["text"]["text"]
 
-        assert "[CODE ISSUE]" in all_text
+        assert "CODE ISSUE" in all_text
 
     def test_format_slack_message_no_failures(self) -> None:
         """Test message formatting with no failures."""
@@ -143,8 +147,12 @@ class TestFormatSlackMessage:
             FailureAnalysis(
                 test_name=f"test_{i}",
                 error=f"Error {i}",
-                classification="code_issue" if i % 2 == 0 else "product_bug",
-                explanation=f"Explanation {i}",
+                analysis=f"""=== CLASSIFICATION ===
+{"CODE ISSUE" if i % 2 == 0 else "PRODUCT BUG"}
+
+=== ANALYSIS ===
+Explanation {i}
+""",
             )
             for i in range(3)
         ]

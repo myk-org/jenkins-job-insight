@@ -7,13 +7,11 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "python-jenkins",
-    "google-genai",
-    "anthropic[vertex]",
-    "google-auth",
     "httpx",
     "pydantic-settings",
     "gitpython",
     "aiosqlite",
+    "python-simple-logger",
 ]
 
 [project.scripts]

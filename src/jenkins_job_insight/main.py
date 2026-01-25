@@ -1,10 +1,10 @@
-import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
+from simple_logger.logger import get_logger
 
 from jenkins_job_insight.analyzer import analyze_job
 from jenkins_job_insight.config import Settings, get_settings
@@ -12,7 +12,7 @@ from jenkins_job_insight.models import AnalysisResult, AnalyzeRequest
 from jenkins_job_insight.output import format_result_as_text, send_callback, send_slack
 from jenkins_job_insight.storage import get_result, init_db, list_results, save_result
 
-logger = logging.getLogger(__name__)
+logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
 
 async def deliver_results(
@@ -81,6 +81,10 @@ async def process_analysis(request: AnalyzeRequest, settings: Settings) -> None:
     jenkins_url = build_jenkins_url(
         settings.jenkins_url, request.job_name, request.build_number
     )
+    logger.info(
+        f"Analysis request received for {request.job_name} #{request.build_number} "
+        f"(job_id: {job_id})"
+    )
     await save_result(job_id, jenkins_url, "pending", None)
     try:
         result = await analyze_job(request, settings, job_id)
@@ -89,11 +93,15 @@ async def process_analysis(request: AnalyzeRequest, settings: Settings) -> None:
         await save_result(
             job_id, jenkins_url, "completed", result.model_dump(mode="json")
         )
+        logger.info(
+            f"Analysis completed for {request.job_name} #{request.build_number} "
+            f"(job_id: {job_id})"
+        )
 
         await deliver_results(result, request, settings)
 
     except Exception as e:
-        logger.exception("Analysis failed for job %s", job_id)
+        logger.exception(f"Analysis failed for job {job_id}: {e}")
         await save_result(job_id, jenkins_url, "failed", {"error": str(e)})
 
 
@@ -112,12 +120,19 @@ async def analyze(
     Use ?output=text for human-readable plain text format (only applies to sync mode).
     """
     if sync:
+        logger.info(
+            f"Sync analysis request received for {request.job_name} #{request.build_number}"
+        )
         result = await analyze_job(request, settings)
         jenkins_url = build_jenkins_url(
             settings.jenkins_url, request.job_name, request.build_number
         )
         await save_result(
             result.job_id, jenkins_url, "completed", result.model_dump(mode="json")
+        )
+        logger.info(
+            f"Sync analysis completed for {request.job_name} #{request.build_number} "
+            f"(job_id: {result.job_id})"
         )
 
         await deliver_results(result, request, settings)

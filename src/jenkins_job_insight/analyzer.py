@@ -1,28 +1,33 @@
 import asyncio
-import json
+import hashlib
+import os
 import re
+import subprocess
 import uuid
+from collections import defaultdict
 from pathlib import Path
 from typing import NoReturn
 
 import jenkins
 from fastapi import HTTPException
+from simple_logger.logger import get_logger
 
-from jenkins_job_insight.ai import AIClient, get_ai_client
 from jenkins_job_insight.config import Settings
 from jenkins_job_insight.jenkins import JenkinsClient
 from jenkins_job_insight.models import (
     AnalysisResult,
     AnalyzeRequest,
-    BugReport,
     ChildJobAnalysis,
     FailureAnalysis,
     TestFailure,
 )
 from jenkins_job_insight.repository import RepositoryManager
 
-VALID_SEVERITIES = {"critical", "high", "medium", "low"}
-VALID_CLASSIFICATIONS = {"code_issue", "product_bug"}
+# AI CLI provider: "claude" or "gemini"
+AI_PROVIDER = os.getenv("AI_PROVIDER", "claude").lower()
+
+logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
+
 FALLBACK_TAIL_LINES = 200
 MAX_CONCURRENT_AI_CALLS = 10
 
@@ -31,6 +36,24 @@ ERROR_PATTERN = re.compile(
     r"\b(error|fail(ed|ure)?|exception|traceback|assert(ion)?|warn(ing)?|critical|fatal)\b",
     re.IGNORECASE,
 )
+
+
+def get_failure_signature(failure: TestFailure) -> str:
+    """Create a signature for grouping identical failures.
+
+    Uses error message and first few lines of stack trace to identify
+    failures that are essentially the same issue.
+
+    Args:
+        failure: The test failure to create a signature for.
+
+    Returns:
+        MD5 hash string representing the failure signature.
+    """
+    # Use error message and first 5 lines of stack trace
+    stack_lines = failure.stack_trace.split("\n")[:5]
+    signature_text = f"{failure.error_message}|{'|'.join(stack_lines)}"
+    return hashlib.md5(signature_text.encode()).hexdigest()
 
 
 async def run_parallel_with_limit(
@@ -56,6 +79,46 @@ async def run_parallel_with_limit(
         *[bounded(c) for c in coroutines],
         return_exceptions=True,
     )
+
+
+async def call_ai_cli(prompt: str, cwd: Path | None = None) -> str:
+    """Call AI CLI (Claude or Gemini) with given prompt.
+
+    Args:
+        prompt: The prompt to send to the AI CLI.
+        cwd: Working directory for AI to explore (typically repo path).
+
+    Returns:
+        AI CLI output as string.
+    """
+    if AI_PROVIDER == "gemini":
+        # Gemini CLI: gemini --yolo "prompt"
+        cmd = ["gemini", "--yolo", prompt]
+    else:
+        # Claude CLI: claude --dangerously-skip-permissions -p "prompt"
+        cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
+
+    logger.info(f"Calling {AI_PROVIDER.upper()} CLI")
+
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run,
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=600,  # 10 minute timeout
+        )
+    except subprocess.TimeoutExpired:
+        return f"{AI_PROVIDER.upper()} CLI error: Analysis timed out after 10 minutes"
+
+    if result.returncode != 0:
+        return f"{AI_PROVIDER.upper()} CLI error: {result.stderr}"
+
+    logger.debug(
+        f"{AI_PROVIDER.upper()} CLI response length: {len(result.stdout)} chars"
+    )
+    return result.stdout
 
 
 def extract_relevant_console_lines(console_output: str) -> str:
@@ -111,158 +174,6 @@ def extract_relevant_console_lines(console_output: str) -> str:
     )
 
 
-def find_test_file(repo_path: Path, test_class: str) -> str | None:
-    """Find and read test file matching the test class name.
-
-    Args:
-        repo_path: Path to the cloned repository.
-        test_class: Full test class name (e.g., tests.test_mtv_warm_migration.TestClass).
-
-    Returns:
-        The content of the test file if found, None otherwise.
-    """
-    # Convert class name to path: tests.test_mtv_warm_migration.TestClass -> tests/test_mtv_warm_migration.py
-    parts = test_class.rsplit(".", 1)
-    if len(parts) >= 1:
-        module_path = parts[0].replace(".", "/") + ".py"
-        test_file = repo_path / module_path
-        if test_file.exists():
-            return test_file.read_text()
-
-    # Fallback: search for files containing the class name
-    class_name = parts[-1] if parts else test_class
-    for py_file in repo_path.rglob("*.py"):
-        try:
-            content = py_file.read_text()
-            if test_class in content or class_name in content:
-                return content
-        except (OSError, UnicodeDecodeError):
-            continue
-    return None
-
-
-def find_file_in_repo(repo_path: Path, filename: str) -> Path | None:
-    """Find file in repository with priority search.
-
-    Args:
-        repo_path: Repository root path.
-        filename: File name or path to find.
-
-    Returns:
-        Path to file if found, None otherwise.
-    """
-    # Normalize the filename
-    filename = filename.replace("\\", "/")
-    if filename.startswith("/"):
-        filename = Path(filename).name
-    while filename.startswith("./") or filename.startswith("../"):
-        filename = filename.split("/", 1)[-1] if "/" in filename else filename
-
-    # Try direct path first
-    direct = repo_path / filename
-    if direct.exists() and direct.is_file():
-        try:
-            direct.relative_to(repo_path)  # Security check
-            return direct
-        except ValueError:
-            pass
-
-    # Search in priority directories
-    priority_dirs = ["tests", "test", "src", "utilities", "libs", "lib"]
-    basename = Path(filename).name
-
-    for priority_dir in priority_dirs:
-        search_path = repo_path / priority_dir
-        if search_path.exists():
-            for found in search_path.rglob(basename):
-                if found.is_file():
-                    return found
-
-    # Full repo search as fallback
-    for found in repo_path.rglob(basename):
-        if found.is_file():
-            return found
-
-    return None
-
-
-def extract_files_from_failure_text(
-    repo_path: Path,
-    failure_text: str | None,
-    max_files: int = 5,
-) -> list[tuple[str, str]]:
-    """Extract relevant files mentioned in failure text/stack trace.
-
-    Based on testinsight-ai's _extract_relevant_repository_files.
-
-    Args:
-        repo_path: Path to cloned repository.
-        failure_text: Error message, stack trace, or failure output.
-        max_files: Maximum number of files to extract.
-
-    Returns:
-        List of (relative_path, content) tuples.
-    """
-    if not failure_text:
-        failure_text = ""
-
-    files: list[tuple[str, str]] = []
-    seen_paths: set[str] = set()
-
-    # Pattern 1: Python files in pytest/traceback format
-    test_file_patterns = [
-        r'File "([^"]+\.py)"',  # Python traceback: File "path/file.py", line X
-        r"([\w\-/]+\.py)::",  # pytest: path/test-file.py::test_function
-        r"([\w\-/]+\.py)",  # General Python files
-    ]
-
-    for pattern in test_file_patterns:
-        matches = re.findall(pattern, failure_text)
-        for match in matches:
-            file_name = match if isinstance(match, str) else match[0]
-            file_name = file_name.split("::")[0] if "::" in file_name else file_name
-
-            # Try to find file in repo
-            file_path = find_file_in_repo(repo_path, file_name)
-            if file_path and file_path.exists():
-                try:
-                    content = file_path.read_text()
-                    relative_path = str(file_path.relative_to(repo_path))
-                    if relative_path not in seen_paths:
-                        seen_paths.add(relative_path)
-                        files.append((relative_path, content))
-                except (OSError, UnicodeDecodeError):
-                    continue
-
-            if len(files) >= max_files:
-                return files
-
-    # Pattern 2: Any file path mentioned in the text
-    if len(files) < max_files:
-        path_pattern = r"([A-Za-z0-9_./\-]+\.(?:py|yaml|yml|json|sh))"
-        candidates = re.findall(path_pattern, failure_text)
-        for candidate in candidates:
-            candidate = candidate.strip()
-            if not candidate:
-                continue
-
-            file_path = find_file_in_repo(repo_path, candidate)
-            if file_path and file_path.exists():
-                try:
-                    content = file_path.read_text()
-                    relative_path = str(file_path.relative_to(repo_path))
-                    if relative_path not in seen_paths:
-                        seen_paths.add(relative_path)
-                        files.append((relative_path, content))
-                except (OSError, UnicodeDecodeError):
-                    continue
-
-            if len(files) >= max_files:
-                return files
-
-    return files
-
-
 def handle_jenkins_exception(
     e: Exception, job_name: str, build_number: int
 ) -> NoReturn:
@@ -314,68 +225,6 @@ def handle_jenkins_exception(
         status_code=502,
         detail=f"Failed to connect to Jenkins: {e!s}",
     )
-
-
-ANALYSIS_PROMPT = """You are an expert at analyzing Jenkins CI/CD test failures.
-
-CLASSIFICATION RULES - READ CAREFULLY:
-
-code_issue = Problems in TEST CODE or TEST INFRASTRUCTURE:
-  - Test fixtures failing (download failures, setup errors)
-  - Setup/teardown failures
-  - Wrong assertions in test code
-  - Missing dependencies in test code
-  - Environment/configuration issues in tests
-  - Network/download failures during test setup
-  - File not found errors in test utilities
-  - ANY infrastructure issue that prevents tests from running
-
-product_bug = ONLY when test correctly caught a bug in the PRODUCT BEING TESTED:
-  - Product API returned wrong status code when test ran correctly
-  - Product returned incorrect data
-  - Product behavior differs from specification
-  - The test executed but product output was wrong
-
-DEFAULT: If unclear or cannot determine, classify as code_issue.
-Product bugs require CLEAR EVIDENCE the product itself is broken, not test infrastructure.
-
-For code_issue, provide fix_suggestion with:
-  - Exact file path from the repository
-  - Function/method to modify
-  - Actual code change needed
-
-For product_bug, provide bug_report with actionable details.
-
-Respond in JSON format:
-{
-  "summary": "Brief overview",
-  "failures": [
-    {
-      "test_name": "...",
-      "error": "brief error description",
-      "classification": "code_issue" or "product_bug",
-      "explanation": "detailed explanation",
-      "fix_suggestion": "file path, function, and code change" (if code_issue),
-      "bug_report": {"title": "...", "description": "...", "severity": "...", "component": "...", "evidence": "..."} (if product_bug)
-    }
-  ]
-}
-"""
-
-
-def load_analysis_prompt(prompt_file: str) -> str:
-    """Load analysis prompt from file or use default.
-
-    Args:
-        prompt_file: Path to the custom prompt file.
-
-    Returns:
-        The custom prompt content if file exists, otherwise the default ANALYSIS_PROMPT.
-    """
-    prompt_path = Path(prompt_file)
-    if prompt_path.exists():
-        return prompt_path.read_text()
-    return ANALYSIS_PROMPT
 
 
 def extract_failed_child_jobs(build_info: dict) -> list[tuple[str, int]]:
@@ -508,238 +357,159 @@ async def analyze_single_test_failure(
     failure: TestFailure,
     console_context: str,
     repo_path: Path | None,
-    ai_client: AIClient,
-    settings: Settings,
 ) -> FailureAnalysis:
-    """Analyze a single test failure with dedicated AI context.
-
-    Each test gets its own AI call with fresh context for better analysis.
+    """Analyze a single test failure using Claude CLI.
 
     Args:
         failure: The test failure to analyze.
         console_context: Relevant console lines for context.
         repo_path: Path to cloned test repo (optional).
-        ai_client: AI client for analysis.
-        settings: Application settings.
 
     Returns:
-        FailureAnalysis with classification and suggestions.
+        FailureAnalysis with Claude's analysis.
     """
-    # Get source code for THIS specific test only
-    test_code = ""
-    if repo_path:
-        test_class = failure.test_name.rsplit(".", 1)[0]
-        source = await asyncio.to_thread(find_test_file, repo_path, test_class)
-        if source:
-            test_code = f"\n\nTEST SOURCE CODE:\n{source}"
-
-    # Get source code from stack trace/error
-    files_context = ""
-    if repo_path:
-        # Build failure text from all available info
-        failure_text = (
-            f"{failure.error_message}\n{failure.stack_trace}\n{console_context}"
-        )
-        extracted_files = await asyncio.to_thread(
-            extract_files_from_failure_text, repo_path, failure_text, 3
-        )
-
-        if extracted_files:
-            files_context = "\n\nRELEVANT SOURCE FILES:\n"
-            for file_path, content in extracted_files:
-                files_context += f"\n=== {file_path} ===\n{content}\n"
-
-    # Build focused prompt for this single test
-    analysis_prompt = load_analysis_prompt(settings.prompt_file)
-    prompt = f"""Analyze this single test failure:
+    prompt = f"""Analyze this test failure from a Jenkins CI job.
 
 TEST: {failure.test_name}
-STATUS: {failure.status}
 ERROR: {failure.error_message}
 STACK TRACE:
 {failure.stack_trace}
-{test_code}
-{files_context}
 
-RELEVANT CONSOLE CONTEXT:
+CONSOLE CONTEXT:
 {console_context}
 
-CLASSIFICATION RULES:
+You have access to the test repository. Explore the code to understand the failure.
 
-code_issue = Problems in TEST CODE or TEST INFRASTRUCTURE:
-  - Test fixtures failing (download failures, setup errors)
-  - Setup/teardown failures
-  - Wrong assertions in test code
-  - Missing dependencies in test code
-  - Environment/configuration issues in tests
-  - Network/download failures during test setup
-  - File not found errors in test utilities
-  - ANY infrastructure issue that prevents tests from running
+Respond using this EXACT format:
 
-product_bug = ONLY when test correctly caught a bug in the PRODUCT BEING TESTED:
-  - Product API returned wrong status code when test ran correctly
-  - Product returned incorrect data
-  - Product behavior differs from specification
-  - The test executed but product output was wrong
+=== CLASSIFICATION ===
+[CODE ISSUE or PRODUCT BUG]
 
-DEFAULT: If unclear or cannot determine, classify as code_issue.
+=== TEST ===
+{failure.test_name}
 
-Respond in JSON format:
-{{
-    "test_name": "{failure.test_name}",
-    "error": "brief error description",
-    "classification": "code_issue" or "product_bug",
-    "explanation": "detailed explanation",
-    "fix_suggestion": "Provide a SPECIFIC fix with: (1) File path: exact path to the file, (2) Location: function/line to modify, (3) Change: the actual code change needed. Example: 'In utilities/virtctl.py, in the download_virtctl() function, add validation after the download: if os.path.getsize(tar_path) == 0: raise ValueError(\"Downloaded file is empty\")'." (only if code_issue, otherwise omit),
-    "bug_report": {{"title": "...", "description": "...", "severity": "critical|high|medium|low", "component": "...", "evidence": "..."}} (only if product_bug, otherwise omit)
-}}
+=== ANALYSIS ===
+[Your detailed analysis - what the test does, why it failed]
+
+=== FIX === (only if CODE ISSUE)
+File: [exact path]
+Line: [line number]
+Change: [specific code change]
+
+=== BUG REPORT === (only if PRODUCT BUG)
+Title: [concise bug title]
+Severity: [critical/high/medium/low]
+Component: [affected component]
+Description: [what product behavior is broken]
+Evidence: [relevant log snippets]
 """
 
-    try:
-        response_text = await asyncio.to_thread(
-            ai_client.analyze, prompt, system_prompt=analysis_prompt
-        )
-        response_data = parse_ai_response(response_text)
+    logger.info(f"Calling {AI_PROVIDER.upper()} CLI for test: {failure.test_name}")
+    analysis_output = await call_ai_cli(prompt, cwd=repo_path)
 
-        # Build single failure from response
-        # Wrap in failures array if AI returned a single object
-        if "failures" not in response_data:
-            response_data = {"failures": [response_data]}
-        failures = build_failures_from_response(response_data)
-        if failures:
-            return failures[0]
-
-        # Fallback if parsing failed
-        return FailureAnalysis(
-            test_name=failure.test_name,
-            error=failure.error_message,
-            classification="code_issue",
-            explanation="AI analysis failed to parse response",
-        )
-    except Exception as e:
-        return FailureAnalysis(
-            test_name=failure.test_name,
-            error=failure.error_message,
-            classification="code_issue",
-            explanation=f"AI analysis failed: {e}",
-        )
+    return FailureAnalysis(
+        test_name=failure.test_name,
+        error=failure.error_message,
+        analysis=analysis_output,
+    )
 
 
-def parse_ai_response(response_text: str) -> dict:
-    """Parse AI response text into a dictionary.
+async def analyze_failure_group(
+    failures: list[TestFailure],
+    console_context: str,
+    repo_path: Path | None,
+) -> list[FailureAnalysis]:
+    """Analyze a group of failures with the same error signature.
 
-    Attempts to parse JSON directly, then falls back to extracting JSON from text.
+    Only calls Claude CLI once for the group, then applies the analysis
+    to all failures in the group.
 
     Args:
-        response_text: The AI response text, potentially containing JSON.
+        failures: List of test failures with the same error signature.
+        console_context: Relevant console lines for context.
+        repo_path: Path to cloned test repo (optional).
 
     Returns:
-        Parsed dictionary with 'summary' and 'failures' keys.
+        List of FailureAnalysis objects, one per failure in the group.
     """
-    try:
-        return json.loads(response_text)
-    except json.JSONDecodeError:
-        # Try to extract JSON from response
-        json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
-        if json_match:
-            try:
-                return json.loads(json_match.group())
-            except json.JSONDecodeError:
-                pass
-        return {"summary": "Failed to parse AI response", "failures": []}
+    # Use the first failure as representative
+    representative = failures[0]
+    test_names = [f.test_name for f in failures]
 
+    prompt = f"""Analyze this test failure from a Jenkins CI job.
 
-def ensure_string(value: object) -> str:
-    """Convert various types to string for Pydantic model compatibility.
+AFFECTED TESTS ({len(failures)} tests with same error):
+{chr(10).join(f"- {name}" for name in test_names)}
 
-    AI responses sometimes return dicts or lists where strings are expected.
+ERROR: {representative.error_message}
+STACK TRACE:
+{representative.stack_trace}
 
-    Args:
-        value: The value to convert (string, dict, list, or None).
+CONSOLE CONTEXT:
+{console_context}
 
-    Returns:
-        A string representation of the value.
-    """
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, dict):
-        # Format dict as readable string
-        parts = []
-        for k, v in value.items():
-            parts.append(f"{k}: {v}")
-        return "\n".join(parts)
-    if isinstance(value, list):
-        return "\n".join(str(item) for item in value)
-    return str(value)
+You have access to the test repository. Explore the code to understand the failure.
 
+Note: Multiple tests failed with the same error. Provide ONE analysis that applies to all of them.
 
-def build_failures_from_response(response_data: dict) -> list[FailureAnalysis]:
-    """Build FailureAnalysis objects from parsed AI response.
+Respond using this EXACT format:
 
-    Args:
-        response_data: Parsed AI response dictionary.
+=== CLASSIFICATION ===
+[CODE ISSUE or PRODUCT BUG]
 
-    Returns:
-        List of FailureAnalysis objects.
-    """
-    failures = []
-    for f in response_data.get("failures", []):
-        bug_report = None
-        if f.get("bug_report"):
-            br = f["bug_report"]
-            severity = br.get("severity", "medium")
-            if severity not in VALID_SEVERITIES:
-                severity = "medium"
-            bug_report = BugReport(
-                title=ensure_string(br.get("title", "")),
-                description=ensure_string(br.get("description", "")),
-                severity=severity,
-                component=br.get("component", "Unknown"),
-                evidence=ensure_string(br.get("evidence", "")),
-            )
+=== AFFECTED TESTS ===
+{chr(10).join(test_names)}
 
-        classification = f.get("classification", "code_issue")
-        if classification not in VALID_CLASSIFICATIONS:
-            classification = "code_issue"
+=== ANALYSIS ===
+[Your detailed analysis - what caused this common failure]
 
-        fix_suggestion_value = f.get("fix_suggestion")
-        failures.append(
-            FailureAnalysis(
-                test_name=f.get("test_name", "Unknown"),
-                error=ensure_string(f.get("error", "")),
-                classification=classification,
-                explanation=ensure_string(f.get("explanation", "")),
-                fix_suggestion=ensure_string(fix_suggestion_value)
-                if fix_suggestion_value
-                else None,
-                bug_report=bug_report,
-            )
+=== FIX === (only if CODE ISSUE)
+File: [exact path]
+Line: [line number]
+Change: [specific code change that fixes all affected tests]
+
+=== BUG REPORT === (only if PRODUCT BUG)
+Title: [concise bug title]
+Severity: [critical/high/medium/low]
+Component: [affected component]
+Description: [what product behavior is broken]
+Evidence: [relevant log snippets]
+"""
+
+    logger.info(
+        f"Calling {AI_PROVIDER.upper()} CLI for failure group ({len(failures)} tests with same error)"
+    )
+    analysis_output = await call_ai_cli(prompt, cwd=repo_path)
+
+    # Apply the same analysis to all failures in the group
+    return [
+        FailureAnalysis(
+            test_name=f.test_name,
+            error=f.error_message,
+            analysis=analysis_output,
         )
-    return failures
+        for f in failures
+    ]
 
 
 async def analyze_child_job(
     job_name: str,
     build_number: int,
     jenkins_client: JenkinsClient,
-    ai_client: AIClient,
-    settings: Settings,
+    jenkins_base_url: str,
     depth: int = 0,
     max_depth: int = 3,
     repo_path: Path | None = None,
 ) -> ChildJobAnalysis:
     """Analyze a single child job, recursively analyzing its failed children.
 
-    Each child job gets its own AI call to manage context size.
+    Each child job gets its own Claude CLI call to manage context size.
 
     Args:
         job_name: Name of the Jenkins job to analyze.
         build_number: Build number to analyze.
         jenkins_client: Jenkins API client.
-        ai_client: AI client for analysis.
-        settings: Application settings.
+        jenkins_base_url: Base URL of Jenkins server.
         depth: Current recursion depth (0 = direct child of main job).
         max_depth: Maximum recursion depth to prevent infinite loops.
         repo_path: Path to cloned test repository for source code lookup.
@@ -749,7 +519,7 @@ async def analyze_child_job(
     """
     # Construct Jenkins URL for this child job
     job_path = "/job/".join(job_name.split("/"))
-    jenkins_url = f"{settings.jenkins_url.rstrip('/')}/job/{job_path}/{build_number}/"
+    jenkins_url = f"{jenkins_base_url.rstrip('/')}/job/{job_path}/{build_number}/"
 
     if depth >= max_depth:
         return ChildJobAnalysis(
@@ -800,8 +570,7 @@ async def analyze_child_job(
                 child_name,
                 child_num,
                 jenkins_client,
-                ai_client,
-                settings,
+                jenkins_base_url,
                 depth + 1,
                 max_depth,
                 repo_path,
@@ -826,21 +595,12 @@ async def analyze_child_job(
             else:
                 child_analyses.append(result)
 
-        # This job failed because children failed - skip AI analysis
+        # This job failed because children failed - skip Claude CLI analysis
         # Count failures from child analyses
-        code_issues = 0
-        product_bugs = 0
-        for child in child_analyses:
-            for f in child.failures:
-                if f.classification == "code_issue":
-                    code_issues += 1
-                else:
-                    product_bugs += 1
-
-        total_failures = code_issues + product_bugs
+        total_failures = sum(len(child.failures) for child in child_analyses)
         summary = f"Pipeline failed due to {len(child_analyses)} child job(s)."
         if total_failures > 0:
-            summary += f" Total: {total_failures} failure(s) - {code_issues} code issue(s), {product_bugs} product bug(s). See child analyses below."
+            summary += f" Total: {total_failures} failure(s) analyzed. See child analyses below."
 
         return ChildJobAnalysis(
             job_name=job_name,
@@ -865,51 +625,68 @@ async def analyze_child_job(
     # Extract relevant console lines for context
     console_context = extract_relevant_console_lines(console_output)
 
-    # If we have test failures, analyze each in parallel with dedicated AI context
+    # If we have test failures, group by signature and analyze unique groups
     if test_failures:
+        # Group failures by signature to avoid analyzing identical errors multiple times
+        failure_groups: dict[str, list[TestFailure]] = defaultdict(list)
+        for tf in test_failures:
+            sig = get_failure_signature(tf)
+            failure_groups[sig].append(tf)
+
+        logger.info(
+            f"Grouped {len(test_failures)} failures into {len(failure_groups)} unique error types"
+        )
+
+        # Analyze each unique failure group in parallel
         tasks = [
-            analyze_single_test_failure(
-                failure=tf,
+            analyze_failure_group(
+                failures=group,
                 console_context=console_context,
                 repo_path=repo_path,
-                ai_client=ai_client,
-                settings=settings,
             )
-            for tf in test_failures
+            for group in failure_groups.values()
         ]
-        failure_results = await run_parallel_with_limit(tasks)
+        group_results = await run_parallel_with_limit(tasks)
 
-        # Handle exceptions in results
+        # Flatten results and handle exceptions
         failures = []
-        for i, result in enumerate(failure_results):
+        group_list = list(failure_groups.values())
+        for i, result in enumerate(group_results):
             if isinstance(result, Exception):
-                tf = test_failures[i]
-                failures.append(
-                    FailureAnalysis(
-                        test_name=tf.test_name,
-                        error=tf.error_message,
-                        classification="code_issue",
-                        explanation=f"Analysis failed: {result}",
+                # Create error entries for all failures in this group
+                for tf in group_list[i]:
+                    failures.append(
+                        FailureAnalysis(
+                            test_name=tf.test_name,
+                            error=tf.error_message,
+                            analysis=f"Analysis failed: {result}",
+                        )
                     )
-                )
             else:
-                failures.append(result)
+                failures.extend(result)
 
         # Generate summary from parallel results
-        code_issues = sum(1 for f in failures if f.classification == "code_issue")
-        product_bugs = sum(1 for f in failures if f.classification == "product_bug")
+        total_failures = len(failures)
+        unique_errors = len(failure_groups)
+
+        # Include deduplication info in summary if applicable
+        if unique_errors < total_failures:
+            summary = (
+                f"{total_failures} failure(s) analyzed "
+                f"({unique_errors} unique error type(s))"
+            )
+        else:
+            summary = f"{total_failures} failure(s) analyzed"
 
         return ChildJobAnalysis(
             job_name=job_name,
             build_number=build_number,
             jenkins_url=jenkins_url,
-            summary=f"Analyzed {len(failures)} test failure(s): {code_issues} code issue(s), {product_bugs} product bug(s)",
+            summary=summary,
             failures=failures,
         )
 
-    # No structured test failures - fall back to single AI analysis of console output
-    analysis_prompt = load_analysis_prompt(settings.prompt_file)
-
+    # No structured test failures - fall back to single Claude CLI analysis of console output
     prompt = f"""Analyze this failed Jenkins job:
 
 Job: {job_name} #{build_number}
@@ -917,30 +694,28 @@ Job: {job_name} #{build_number}
 CONSOLE OUTPUT (errors/failures/warnings extracted):
 {console_context}
 
-BUILD INFO:
-{json.dumps(build_info, indent=2)}
-"""
-    try:
-        response_text = await asyncio.to_thread(
-            ai_client.analyze, prompt, system_prompt=analysis_prompt
-        )
-        response_data = parse_ai_response(response_text)
-        failures = build_failures_from_response(response_data)
+You have access to the repository if one was cloned. Explore to understand the failure.
 
-        return ChildJobAnalysis(
-            job_name=job_name,
-            build_number=build_number,
-            jenkins_url=jenkins_url,
-            summary=response_data.get("summary", "Analysis complete"),
-            failures=failures,
-        )
-    except Exception as e:
-        return ChildJobAnalysis(
-            job_name=job_name,
-            build_number=build_number,
-            jenkins_url=jenkins_url,
-            note=f"AI analysis failed: {e}",
-        )
+Respond with:
+- What failed and why
+- Classification: CODE ISSUE or PRODUCT BUG
+- Recommended fix or bug report details
+"""
+    analysis_output = await call_ai_cli(prompt, cwd=repo_path)
+
+    return ChildJobAnalysis(
+        job_name=job_name,
+        build_number=build_number,
+        jenkins_url=jenkins_url,
+        summary="Analysis complete",
+        failures=[
+            FailureAnalysis(
+                test_name=f"{job_name}#{build_number}",
+                error="Console-only analysis",
+                analysis=analysis_output,
+            )
+        ],
+    )
 
 
 async def analyze_job(
@@ -950,6 +725,10 @@ async def analyze_job(
     if job_id is None:
         job_id = str(uuid.uuid4())
 
+    job_name = request.job_name
+    build_number = request.build_number
+    logger.info(f"Starting analysis for job {job_name} #{build_number}")
+
     # Get Jenkins data
     jenkins_client = JenkinsClient(
         url=settings.jenkins_url,
@@ -957,10 +736,6 @@ async def analyze_job(
         password=settings.jenkins_password,
         ssl_verify=settings.jenkins_ssl_verify,
     )
-
-    # Use job_name and build_number directly from request
-    job_name = request.job_name
-    build_number = request.build_number
 
     # Construct full Jenkins URL for the result
     # Handle folder-style job names by replacing '/' with '/job/'
@@ -1006,10 +781,8 @@ async def analyze_job(
     if not failed_child_jobs:
         failed_child_jobs = extract_failed_child_jobs_from_console(console_output)
 
+    logger.debug(f"Extracted {len(failed_child_jobs)} failed child jobs")
     child_job_analyses: list[ChildJobAnalysis] = []
-
-    # Create AI client for analysis (used for both main job and child jobs)
-    ai_client = get_ai_client(settings)
 
     # Clone repo for context BEFORE child job analysis so it's available for all jobs
     # Use request value if provided, otherwise fall back to settings
@@ -1023,11 +796,13 @@ async def analyze_job(
         if repo_manager:
             repo_manager.__enter__()
             try:
+                logger.info(f"Cloning repository: {tests_repo_url}")
                 repo_path = await asyncio.to_thread(
                     repo_manager.clone, str(tests_repo_url)
                 )
                 repo_context = f"\nRepository cloned from: {tests_repo_url}"
             except Exception as e:
+                logger.warning(f"Failed to clone repository: {e}")
                 repo_context = f"\nFailed to clone repo: {e}"
 
         # Analyze failed child jobs IN PARALLEL with bounded concurrency
@@ -1037,8 +812,7 @@ async def analyze_job(
                     job_name=child_name,
                     build_number=child_num,
                     jenkins_client=jenkins_client,
-                    ai_client=ai_client,
-                    settings=settings,
+                    jenkins_base_url=settings.jenkins_url,
                     depth=0,
                     max_depth=3,
                     repo_path=repo_path,
@@ -1070,23 +844,15 @@ async def analyze_job(
         test_failures = (
             extract_failures_from_test_report(test_report) if test_report else []
         )
+        logger.info(f"Found {len(test_failures)} test failures to analyze")
 
         # If this job has failed children AND no test failures, it's a pipeline/orchestrator
-        # Skip AI analysis - just return the child analyses
+        # Skip Claude CLI analysis - just return the child analyses
         if child_job_analyses and not test_failures:
-            code_issues = 0
-            product_bugs = 0
-            for child in child_job_analyses:
-                for f in child.failures:
-                    if f.classification == "code_issue":
-                        code_issues += 1
-                    else:
-                        product_bugs += 1
-
-            total_failures = code_issues + product_bugs
+            total_failures = sum(len(child.failures) for child in child_job_analyses)
             summary = f"Pipeline failed due to {len(child_job_analyses)} child job(s)."
             if total_failures > 0:
-                summary += f" Total: {total_failures} failure(s) - {code_issues} code issue(s), {product_bugs} product bug(s). See child analyses below."
+                summary += f" Total: {total_failures} failure(s) analyzed. See child analyses below."
 
             return AnalysisResult(
                 job_id=job_id,
@@ -1100,63 +866,84 @@ async def analyze_job(
         # Extract relevant console lines for context
         console_context = extract_relevant_console_lines(console_output)
 
-        # Analyze main job test failures IN PARALLEL with bounded concurrency
+        # Analyze main job test failures, grouping by signature to deduplicate
+        unique_errors = 0
         if test_failures:
+            # Group failures by signature to avoid analyzing identical errors multiple times
+            failure_groups: dict[str, list[TestFailure]] = defaultdict(list)
+            for tf in test_failures:
+                sig = get_failure_signature(tf)
+                failure_groups[sig].append(tf)
+
+            unique_errors = len(failure_groups)
+            logger.info(
+                f"Grouped {len(test_failures)} failures into {unique_errors} unique error types"
+            )
+
+            # Analyze each unique failure group in parallel
             failure_tasks = [
-                analyze_single_test_failure(
-                    failure=tf,
+                analyze_failure_group(
+                    failures=group,
                     console_context=console_context,
                     repo_path=repo_path,
-                    ai_client=ai_client,
-                    settings=settings,
                 )
-                for tf in test_failures
+                for group in failure_groups.values()
             ]
-            failure_results = await run_parallel_with_limit(failure_tasks)
+            group_results = await run_parallel_with_limit(failure_tasks)
 
-            # Handle exceptions in results
+            # Flatten results and handle exceptions
             failures = []
-            for i, result in enumerate(failure_results):
+            group_list = list(failure_groups.values())
+            for i, result in enumerate(group_results):
                 if isinstance(result, Exception):
-                    tf = test_failures[i]
-                    failures.append(
-                        FailureAnalysis(
-                            test_name=tf.test_name,
-                            error=tf.error_message,
-                            classification="code_issue",
-                            explanation=f"Analysis failed: {result}",
+                    # Create error entries for all failures in this group
+                    for tf in group_list[i]:
+                        failures.append(
+                            FailureAnalysis(
+                                test_name=tf.test_name,
+                                error=tf.error_message,
+                                analysis=f"Analysis failed: {result}",
+                            )
                         )
-                    )
                 else:
-                    failures.append(result)
+                    failures.extend(result)
         else:
-            # No structured test failures - fall back to single AI analysis of console output
-            analysis_prompt = load_analysis_prompt(settings.prompt_file)
-
+            # No structured test failures - fall back to single Claude CLI analysis
             prompt = f"""Analyze this failed Jenkins job:
 
 Job: {job_name} #{build_number}
 
 CONSOLE OUTPUT (errors/failures/warnings extracted):
 {console_context}
-
-BUILD INFO:
-{json.dumps(build_info, indent=2)}
 {repo_context}
+
+You have access to the repository if one was cloned. Explore to understand the failure.
+
+Respond with:
+- What failed and why
+- Classification: CODE ISSUE or PRODUCT BUG
+- Recommended fix or bug report details
 """
+            analysis_output = await call_ai_cli(prompt, cwd=repo_path)
 
-            response_text = await asyncio.to_thread(
-                ai_client.analyze, prompt, system_prompt=analysis_prompt
-            )
-
-            # Parse response and build failures using helper functions
-            response_data = parse_ai_response(response_text)
-            failures = build_failures_from_response(response_data)
+            failures = [
+                FailureAnalysis(
+                    test_name=f"{job_name}#{build_number}",
+                    error="Console-only analysis",
+                    analysis=analysis_output,
+                )
+            ]
 
         # Build summary from parallel results
-        code_issues = sum(1 for f in failures if f.classification == "code_issue")
-        product_bugs = sum(1 for f in failures if f.classification == "product_bug")
-        summary = f"{len(failures)} failure(s) analyzed: {code_issues} code issue(s), {product_bugs} product bug(s)"
+        total_failures = len(failures)
+        # Include deduplication info in summary if applicable
+        if unique_errors > 0 and unique_errors < total_failures:
+            summary = (
+                f"{total_failures} failure(s) analyzed "
+                f"({unique_errors} unique error type(s))"
+            )
+        else:
+            summary = f"{total_failures} failure(s) analyzed"
 
         if child_job_analyses:
             summary = (
@@ -1164,6 +951,7 @@ BUILD INFO:
                 f"job(s) were analyzed recursively."
             )
 
+        logger.info(f"Analysis complete: {len(failures)} failures analyzed")
         return AnalysisResult(
             job_id=job_id,
             jenkins_url=jenkins_build_url,

@@ -14,17 +14,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Gemini API configuration
-    gemini_api_key: str | None = None
-
-    # Google Cloud configuration
-    google_project_id: str | None = None
-    google_region: str = "us-east5"
-    google_credentials_json: str | None = None
-
-    # AI model selection
-    gemini_model: str = "gemini-2.5-pro"
-    claude_model: str = "claude-sonnet-4-5"
+    # Claude Code CLI configuration (set by container environment)
+    # These env vars are read by the claude CLI, not by this application:
+    # - CLAUDE_CODE_USE_VERTEX=1
+    # - CLOUD_ML_REGION=<region>
+    # - ANTHROPIC_VERTEX_PROJECT_ID=<project>
+    # - ANTHROPIC_MODEL=<model>
+    # - ANTHROPIC_SMALL_FAST_MODEL=<model>
 
     # Jenkins configuration
     jenkins_url: str

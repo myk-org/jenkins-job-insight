@@ -1,10 +1,14 @@
 """Jenkins API client wrapper."""
 
+import os
 from urllib.parse import urlparse
 
 import jenkins
 import urllib3
 from pydantic import HttpUrl
+from simple_logger.logger import get_logger
+
+logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
 
 class JenkinsClient(jenkins.Jenkins):
@@ -22,6 +26,7 @@ class JenkinsClient(jenkins.Jenkins):
             ssl_verify: Whether to verify SSL certificates. Set to False for self-signed certs.
         """
         super().__init__(url=url, username=username, password=password)
+        logger.info(f"Connecting to Jenkins: {url}")
         if not ssl_verify:
             self._session.verify = False
             # Suppress InsecureRequestWarning
@@ -37,6 +42,7 @@ class JenkinsClient(jenkins.Jenkins):
         Returns:
             Console output as a string.
         """
+        logger.debug(f"Fetching console output: {job_name} #{build_number}")
         return self.get_build_console_output(job_name, build_number)
 
     def get_build_info_safe(self, job_name: str, build_number: int) -> dict:
@@ -49,6 +55,7 @@ class JenkinsClient(jenkins.Jenkins):
         Returns:
             Build information dictionary.
         """
+        logger.debug(f"Fetching build info: {job_name} #{build_number}")
         return super().get_build_info(job_name, build_number)
 
     def get_test_report(self, job_name: str, build_number: int) -> dict | None:
@@ -64,6 +71,7 @@ class JenkinsClient(jenkins.Jenkins):
         Returns:
             Test report dictionary if available, None if no test report exists.
         """
+        logger.debug(f"Fetching test report: {job_name} #{build_number}")
         try:
             return self.get_build_test_report(job_name, build_number)
         except Exception:

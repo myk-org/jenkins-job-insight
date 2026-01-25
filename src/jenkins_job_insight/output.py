@@ -1,8 +1,15 @@
 """Output delivery for callbacks and Slack notifications."""
 
-import httpx
+import os
 
-from jenkins_job_insight.models import AnalysisResult, ChildJobAnalysis
+import httpx
+from simple_logger.logger import get_logger
+
+from collections import defaultdict
+
+from jenkins_job_insight.models import AnalysisResult, ChildJobAnalysis, FailureAnalysis
+
+logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
 
 async def send_callback(
@@ -17,6 +24,7 @@ async def send_callback(
         result: Analysis result to deliver.
         headers: Optional headers to include in the request.
     """
+    logger.info(f"Sending callback to {callback_url}")
     async with httpx.AsyncClient() as client:
         await client.post(
             callback_url,
@@ -82,6 +90,7 @@ async def send_slack(webhook_url: str, result: AnalysisResult) -> None:
         webhook_url: Slack webhook URL.
         result: Analysis result to send.
     """
+    logger.info("Sending Slack notification")
     message = format_slack_message(result)
     async with httpx.AsyncClient() as client:
         await client.post(webhook_url, json=message, timeout=30.0)
@@ -109,10 +118,36 @@ def format_child_analysis_as_text(
         lines.append(f"{prefix}Note: {child.note}")
     if child.summary:
         lines.append(f"{prefix}Summary: {child.summary}")
-    for f in child.failures:
-        icon = "[BUG]" if f.classification == "product_bug" else "[CODE]"
-        explanation_preview = f.explanation
-        lines.append(f"{prefix}  {icon} {f.test_name}: {explanation_preview}")
+
+    # Group failures by analysis content to avoid duplicates
+    if child.failures:
+        analysis_groups: dict[str, list[FailureAnalysis]] = defaultdict(list)
+        for f in child.failures:
+            analysis_groups[f.analysis].append(f)
+
+        for analysis_text, failures_in_group in analysis_groups.items():
+            test_names = [f.test_name for f in failures_in_group]
+            representative = failures_in_group[0]
+
+            lines.append(
+                f"{prefix}  ({len(failures_in_group)} test(s) with same error)"
+            )
+
+            # List affected tests
+            if len(failures_in_group) > 1:
+                lines.append(f"{prefix}  Affected tests:")
+                for name in test_names:
+                    lines.append(f"{prefix}    - {name}")
+            else:
+                lines.append(f"{prefix}  Test: {test_names[0]}")
+
+            lines.append(f"{prefix}  Error: {representative.error}")
+            lines.append(f"{prefix}  Analysis:")
+            # Indent the analysis output
+            for line in analysis_text.split("\n"):
+                lines.append(f"{prefix}    {line}")
+            lines.append("")
+
     for nested in child.failed_children:
         lines.extend(format_child_analysis_as_text(nested, indent + 1))
     return lines
@@ -145,33 +180,41 @@ def format_result_as_text(result: AnalysisResult) -> str:
         lines.append("FAILURES:")
         lines.append("=" * 60)
 
-        for i, f in enumerate(result.failures, 1):
-            icon = (
-                "[PRODUCT BUG]" if f.classification == "product_bug" else "[CODE ISSUE]"
-            )
+        # Group failures by analysis content to avoid duplicates
+        analysis_groups: dict[str, list[FailureAnalysis]] = defaultdict(list)
+        for f in result.failures:
+            analysis_groups[f.analysis].append(f)
+
+        group_num = 0
+        for analysis_text, failures_in_group in analysis_groups.items():
+            group_num += 1
+            test_names = [f.test_name for f in failures_in_group]
+            representative = failures_in_group[0]
+
             lines.extend(
                 [
                     "",
-                    f"[{i}] {icon}",
-                    f"Test: {f.test_name}",
-                    f"Error: {f.error}",
-                    "",
-                    "Explanation:",
-                    f.explanation,
+                    f"[{group_num}] ({len(failures_in_group)} test(s) with same error)",
                 ]
             )
-            if f.fix_suggestion:
-                lines.extend(["", "Fix Suggestion:", f.fix_suggestion])
-            if f.bug_report:
-                lines.extend(
-                    [
-                        "",
-                        "Bug Report:",
-                        f"  Title: {f.bug_report.title}",
-                        f"  Severity: {f.bug_report.severity}",
-                        f"  Component: {f.bug_report.component}",
-                    ]
-                )
+
+            # List affected tests
+            if len(failures_in_group) > 1:
+                lines.append("Affected tests:")
+                for name in test_names:
+                    lines.append(f"  - {name}")
+            else:
+                lines.append(f"Test: {test_names[0]}")
+
+            lines.extend(
+                [
+                    f"Error: {representative.error}",
+                    "",
+                    "Analysis:",
+                ]
+            )
+            # Add the full analysis output (already formatted by AI)
+            lines.append(analysis_text)
             lines.append("-" * 40)
 
     if result.child_job_analyses:

@@ -5,6 +5,9 @@ import os
 from pathlib import Path
 
 import aiosqlite
+from simple_logger.logger import get_logger
+
+logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
 DB_PATH = Path(os.getenv("DB_PATH", "/data/results.db"))
 
@@ -14,6 +17,7 @@ async def init_db() -> None:
 
     Creates the results table if it does not exist.
     """
+    logger.info(f"Initializing database at {DB_PATH}")
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
@@ -42,6 +46,7 @@ async def save_result(
         status: Current status of the analysis.
         result: Optional result data to store.
     """
+    logger.debug(f"Saving result for job_id: {job_id} (status: {status})")
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """

@@ -8,7 +8,6 @@ from pydantic import ValidationError
 from jenkins_job_insight.models import (
     AnalysisResult,
     AnalyzeRequest,
-    BugReport,
     FailureAnalysis,
     JobStatus,
 )
@@ -65,98 +64,61 @@ class TestAnalyzeRequest:
             )
 
 
-class TestBugReport:
-    """Tests for the BugReport model."""
-
-    def test_bug_report_creation(self) -> None:
-        """Test creating a valid BugReport."""
-        report = BugReport(
-            title="Test Bug",
-            description="Bug description",
-            severity="high",
-            component="auth",
-            evidence="Error log excerpt",
-        )
-        assert report.title == "Test Bug"
-        assert report.severity == "high"
-
-    @pytest.mark.parametrize("severity", ["critical", "high", "medium", "low"])
-    def test_bug_report_valid_severities(self, severity: str) -> None:
-        """Test that all valid severity values are accepted."""
-        report = BugReport(
-            title="Test",
-            description="Desc",
-            severity=severity,
-            component="comp",
-            evidence="evidence",
-        )
-        assert report.severity == severity
-
-    def test_bug_report_invalid_severity(self) -> None:
-        """Test that invalid severity raises ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            BugReport(
-                title="Test",
-                description="Desc",
-                severity="invalid",
-                component="comp",
-                evidence="evidence",
-            )
-        errors = exc_info.value.errors()
-        assert any("severity" in str(e) for e in errors)
-
-
 class TestFailureAnalysis:
     """Tests for the FailureAnalysis model."""
 
-    def test_failure_analysis_code_issue(self) -> None:
-        """Test creating a code_issue FailureAnalysis."""
+    def test_failure_analysis_creation(self) -> None:
+        """Test creating a valid FailureAnalysis."""
         analysis = FailureAnalysis(
             test_name="test_example",
-            error="AssertionError",
-            classification="code_issue",
-            explanation="The test assertion is wrong",
-            fix_suggestion="Update the expected value",
+            error="AssertionError: Expected True, got False",
+            analysis="=== CLASSIFICATION ===\nCODE ISSUE\n\n=== ANALYSIS ===\nThe test assertion is wrong",
         )
-        assert analysis.classification == "code_issue"
-        assert analysis.fix_suggestion is not None
-        assert analysis.bug_report is None
+        assert analysis.test_name == "test_example"
+        assert analysis.error == "AssertionError: Expected True, got False"
+        assert "CLASSIFICATION" in analysis.analysis
 
-    def test_failure_analysis_product_bug(self, sample_bug_report: BugReport) -> None:
-        """Test creating a product_bug FailureAnalysis."""
+    def test_failure_analysis_with_multiline_analysis(self) -> None:
+        """Test FailureAnalysis with multiline analysis content."""
+        analysis_text = """=== CLASSIFICATION ===
+PRODUCT BUG
+
+=== TEST ===
+test_login
+
+=== ANALYSIS ===
+The authentication service is failing with a 500 error.
+
+=== BUG REPORT ===
+Title: Authentication fails with valid credentials
+Severity: high
+Component: auth
+Description: Users cannot log in
+Evidence: HTTP 500 response
+"""
         analysis = FailureAnalysis(
             test_name="test_login",
-            error="HTTP 500",
-            classification="product_bug",
-            explanation="Server error",
-            bug_report=sample_bug_report,
+            error="HTTP 500 Internal Server Error",
+            analysis=analysis_text,
         )
-        assert analysis.classification == "product_bug"
-        assert analysis.bug_report is not None
-        assert analysis.fix_suggestion is None
+        assert analysis.test_name == "test_login"
+        assert "PRODUCT BUG" in analysis.analysis
+        assert "BUG REPORT" in analysis.analysis
 
-    @pytest.mark.parametrize("classification", ["code_issue", "product_bug"])
-    def test_failure_analysis_valid_classifications(self, classification: str) -> None:
-        """Test that valid classification values are accepted."""
-        analysis = FailureAnalysis(
-            test_name="test",
-            error="error",
-            classification=classification,
-            explanation="explanation",
-        )
-        assert analysis.classification == classification
-
-    def test_failure_analysis_invalid_classification(self) -> None:
-        """Test that invalid classification raises ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
+    def test_failure_analysis_required_fields(self) -> None:
+        """Test that all required fields must be provided."""
+        with pytest.raises(ValidationError):
             FailureAnalysis(
-                test_name="test",
-                error="error",
-                classification="invalid",
-                explanation="explanation",
+                test_name="test_example",
+                # missing error and analysis
             )
-        errors = exc_info.value.errors()
-        assert any("classification" in str(e) for e in errors)
+
+        with pytest.raises(ValidationError):
+            FailureAnalysis(
+                test_name="test_example",
+                error="Error message",
+                # missing analysis
+            )
 
 
 class TestAnalysisResult:

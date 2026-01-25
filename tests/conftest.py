@@ -12,7 +12,6 @@ from jenkins_job_insight.config import Settings
 from jenkins_job_insight.models import (
     AnalysisResult,
     AnalyzeRequest,
-    BugReport,
     FailureAnalysis,
 )
 
@@ -36,7 +35,6 @@ def full_env_vars() -> Generator[dict[str, str], None, None]:
         "JENKINS_URL": "https://jenkins.example.com",
         "JENKINS_USER": "testuser",
         "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
-        "GEMINI_API_KEY": "test-gemini-key",  # pragma: allowlist secret
         "SLACK_WEBHOOK_URL": "https://hooks.slack.com/test",
     }
     with patch.dict(os.environ, env, clear=False):
@@ -70,27 +68,27 @@ def sample_analyze_request() -> AnalyzeRequest:
 
 
 @pytest.fixture
-def sample_bug_report() -> BugReport:
-    """Create a sample bug report for testing."""
-    return BugReport(
-        title="Login fails with valid credentials",
-        description="Users cannot log in even with correct username and password",
-        severity="high",
-        component="auth",
-        evidence="Error: Authentication service returned 500",
-    )
-
-
-@pytest.fixture
-def sample_failure_analysis(sample_bug_report: BugReport) -> FailureAnalysis:
+def sample_failure_analysis() -> FailureAnalysis:
     """Create a sample failure analysis for testing."""
     return FailureAnalysis(
         test_name="test_login_success",
         error="AssertionError: Expected 200, got 500",
-        classification="product_bug",
-        explanation="The authentication service is returning an error",
-        fix_suggestion=None,
-        bug_report=sample_bug_report,
+        analysis="""=== CLASSIFICATION ===
+PRODUCT BUG
+
+=== TEST ===
+test_login_success
+
+=== ANALYSIS ===
+The authentication service is returning an error.
+
+=== BUG REPORT ===
+Title: Login fails with valid credentials
+Severity: high
+Component: auth
+Description: Users cannot log in even with correct username and password
+Evidence: Error: Authentication service returned 500
+""",
     )
 
 
@@ -124,19 +122,21 @@ def mock_jenkins_client() -> MagicMock:
 
 
 @pytest.fixture
-def mock_ai_client() -> MagicMock:
-    """Create a mock AI client."""
-    mock = MagicMock()
-    mock.analyze.return_value = """{
-        "summary": "1 failure found",
-        "failures": [
-            {
-                "test_name": "test_example",
-                "error": "AssertionError",
-                "classification": "code_issue",
-                "explanation": "Test assertion is incorrect",
-                "fix_suggestion": "Update the assertion"
-            }
-        ]
-    }"""
-    return mock
+def mock_ai_cli() -> Generator[MagicMock, None, None]:
+    """Mock the call_ai_cli function."""
+    with patch("jenkins_job_insight.analyzer.call_ai_cli") as mock:
+        mock.return_value = """=== CLASSIFICATION ===
+CODE ISSUE
+
+=== TEST ===
+test_example
+
+=== ANALYSIS ===
+The test failed due to a missing configuration.
+
+=== FIX ===
+File: tests/test_example.py
+Line: 42
+Change: Add the missing import statement
+"""
+        yield mock

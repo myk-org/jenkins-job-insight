@@ -29,6 +29,8 @@ services:
       - ./data:/data
       # Optional: mount custom analysis prompt
       # - ./PROMPT.md:/app/PROMPT.md:ro
+      # Mount gcloud credentials for Vertex AI auth
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
 
     # Restart policy: container restarts unless explicitly stopped
     restart: unless-stopped
@@ -58,23 +60,22 @@ services:
       - JENKINS_PASSWORD=${JENKINS_PASSWORD:-your-api-token}
 
       # ===================
-      # AI Provider Configuration
-      # Configure ONE of the following options:
+      # AI CLI Configuration
       # ===================
+      - AI_PROVIDER=${AI_PROVIDER:-claude}
 
-      # Option A: Google Gemini API
+      # Claude CLI - Option 1: API Key
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+      # Claude CLI - Option 2: Vertex AI
+      - CLAUDE_CODE_USE_VERTEX=${CLAUDE_CODE_USE_VERTEX:-}
+      - CLOUD_ML_REGION=${CLOUD_ML_REGION:-us-east5}
+      - ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-5@20251101}
+      - ANTHROPIC_SMALL_FAST_MODEL=${ANTHROPIC_SMALL_FAST_MODEL:-claude-haiku-4-5@20251001}
+
+      # Gemini CLI - API Key
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-
-      # Option B: Claude via Vertex AI
-      # Requires Google Cloud credentials
-      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID:-}
-      - GOOGLE_REGION=${GOOGLE_REGION:-us-east5}
-      # For Vertex AI authentication, mount credentials or use environment variable
-      - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON:-}
-
-      # AI Model Configuration
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-pro}
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-5}
 
       # ===================
       # Optional Configuration
@@ -85,6 +86,9 @@ services:
 
       # Enable debug mode for verbose logging
       - DEBUG=${DEBUG:-false}
+
+      # Logging level (DEBUG, INFO, WARNING, ERROR)
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
       # ===================
       # Optional Defaults (can be overridden per-request)

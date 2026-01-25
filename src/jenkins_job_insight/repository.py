@@ -1,5 +1,6 @@
 """Git repository management for cloning and cleanup."""
 
+import os
 import shutil
 import tempfile
 import uuid
@@ -8,6 +9,9 @@ from typing import Self
 
 from git import Repo
 from pydantic import HttpUrl
+from simple_logger.logger import get_logger
+
+logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
 
 class RepositoryManager:
@@ -36,11 +40,13 @@ class RepositoryManager:
         clone_dir = self.base_path / f"{repo_name}-{clone_id}"
         clone_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dirs.append(clone_dir)
+        logger.info(f"Cloning repository to {clone_dir}")
         Repo.clone_from(str(repo_url), clone_dir, depth=depth)
         return clone_dir
 
     def cleanup(self) -> None:
         """Remove all cloned repositories."""
+        logger.debug("Cleaning up temporary directories")
         for temp_dir in self.temp_dirs:
             if temp_dir.exists():
                 shutil.rmtree(temp_dir)

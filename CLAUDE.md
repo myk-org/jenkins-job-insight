@@ -31,3 +31,38 @@
 
 - Explain data flow through the system, not just variable locations
 - Show how components connect and interact
+
+## Architecture
+
+### CLI-Based AI Integration
+
+This project uses AI CLI tools (Claude CLI, Gemini CLI) instead of direct SDK integrations:
+
+- **No SDK dependencies**: AI providers are called via subprocess
+- **Provider-agnostic**: Easy to add new AI CLIs (see README)
+- **Auth handled externally**: CLIs manage their own authentication
+- **Environment-driven**: `AI_PROVIDER` env var selects the provider
+
+### Key Components
+
+| Component | Purpose |
+|-----------|---------|
+| `call_ai_cli()` | Single function for all AI CLI calls |
+| `get_failure_signature()` | Deduplicates identical test failures |
+| `analyze_failure_group()` | Analyzes unique failures, applies to all matches |
+| `run_parallel_with_limit()` | Bounded parallel execution |
+
+### Failure Deduplication
+
+When multiple tests fail with the same error:
+1. Failures are grouped by error signature (MD5 hash of error + stack trace)
+2. Only one AI CLI call per unique error type
+3. Analysis is applied to all failures with matching signature
+4. Reduces redundant API calls and output
+
+### Logging
+
+Uses `python-simple-logger`:
+- INFO: Milestones (job started, AI calls, completed)
+- DEBUG: Detailed operations (response lengths, extracted data)
+- Configured via `LOG_LEVEL` environment variable

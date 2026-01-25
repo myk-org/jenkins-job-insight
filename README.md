@@ -15,7 +15,7 @@ For each failure, the service provides detailed explanations and either fix sugg
 
 - **Async and sync analysis modes**: Submit jobs for background processing or wait for immediate results
 - **AI-powered classification**: Distinguishes between test code issues and product bugs
-- **Multiple AI providers**: Supports Google Gemini API or Claude via Vertex AI
+- **Multiple AI providers**: Supports Claude CLI and Gemini CLI
 - **SQLite result storage**: Persists analysis results for later retrieval
 - **Callback webhooks**: Delivers results to your specified endpoint with custom headers
 - **Slack notifications**: Sends formatted analysis summaries to Slack channels
@@ -34,7 +34,7 @@ docker run -d \
   -e JENKINS_URL=https://jenkins.example.com \
   -e JENKINS_USER=your-username \
   -e JENKINS_PASSWORD=your-api-token \
-  -e GEMINI_API_KEY=your-gemini-key \
+  -e AI_PROVIDER=claude \
   jenkins-job-insight
 ```
 
@@ -52,12 +52,8 @@ Configure the service using environment variables. The service is tied to a sing
 | `JENKINS_PASSWORD` | Yes | - | Jenkins password or API token |
 | `JENKINS_SSL_VERIFY` | No | `true` | Enable SSL certificate verification (set to `false` for self-signed certs) |
 | **AI Provider** | | | |
-| `GEMINI_API_KEY` | No | - | Google Gemini API key |
-| `GEMINI_MODEL` | No | `gemini-2.5-pro` | Gemini model to use for analysis |
-| `GOOGLE_PROJECT_ID` | No | - | GCP project ID for Claude Vertex AI |
-| `GOOGLE_REGION` | No | `us-east5` | Vertex AI region |
-| `GOOGLE_CREDENTIALS_JSON` | No | - | GCP service account credentials JSON |
-| `CLAUDE_MODEL` | No | `claude-sonnet-4-5` | Claude model to use for analysis |
+| `AI_PROVIDER` | No | `claude` | AI provider to use (`claude` or `gemini`) |
+| `LOG_LEVEL` | No | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | **Notifications** | | | |
 | `SLACK_WEBHOOK_URL` | No | - | Default Slack incoming webhook URL |
 | `CALLBACK_URL` | No | - | Default callback URL for results (can be overridden per-request) |
@@ -71,27 +67,98 @@ Configure the service using environment variables. The service is tied to a sing
 
 The `JENKINS_URL` environment variable defines which Jenkins instance the service connects to. API requests specify only the job name and build number; the service constructs the full URL internally.
 
-### AI Provider Configuration
+### AI CLI Configuration
 
-You must configure either Gemini OR Claude Vertex AI. The service checks for Gemini first.
+The service uses AI CLI tools for analysis. Set `AI_PROVIDER` to choose your provider.
 
-**Option A: Google Gemini API**
+#### Claude CLI
+
+**Option 1: API Key (simplest)**
 
 ```bash
+AI_PROVIDER=claude
+ANTHROPIC_API_KEY=your-anthropic-api-key
+```
+
+**Option 2: Vertex AI**
+
+```bash
+AI_PROVIDER=claude
+CLAUDE_CODE_USE_VERTEX=1
+CLOUD_ML_REGION=us-east5
+ANTHROPIC_VERTEX_PROJECT_ID=your-project-id
+```
+
+#### Gemini CLI
+
+**Option 1: API Key**
+
+```bash
+AI_PROVIDER=gemini
 GEMINI_API_KEY=your-gemini-api-key
-GEMINI_MODEL=gemini-2.5-pro  # optional, this is the default
 ```
 
-**Option B: Claude via Vertex AI**
-
-Both `GOOGLE_PROJECT_ID` and `GOOGLE_CREDENTIALS_JSON` are required.
+**Option 2: OAuth**
 
 ```bash
-GOOGLE_PROJECT_ID=your-gcp-project
-GOOGLE_REGION=us-east5  # optional, this is the default
-GOOGLE_CREDENTIALS_JSON=/path/to/credentials.json
-CLAUDE_MODEL=claude-sonnet-4-5  # optional, this is the default
+AI_PROVIDER=gemini
+# Authenticate with: gemini auth login
 ```
+
+### Adding a New AI CLI Provider
+
+The CLI-based architecture makes it easy to add new AI providers. To add a new CLI:
+
+#### 1. Update `analyzer.py`
+
+Add a new branch in the `call_ai_cli()` function:
+
+```python
+elif AI_PROVIDER == "openai":
+    cmd = ["openai", "-p", prompt]
+elif AI_PROVIDER == "mistral":
+    cmd = ["mistral", "chat", prompt]
+```
+
+#### 2. Update Dockerfile
+
+Install the CLI tool in the Dockerfile (after `USER appuser`):
+
+```dockerfile
+# Example: Install via npm
+RUN npm install -g @openai/cli
+
+# Example: Install via pip
+RUN pip install --user mistral-cli
+
+# Example: Install via curl
+RUN curl -fsSL https://example.com/install.sh | bash
+```
+
+#### 3. Update Environment Variables
+
+Add the provider's auth environment variables to:
+- `.env.example`
+- `docker-compose.yaml`
+- `README.md` (AI CLI Configuration section)
+
+#### 4. That's It!
+
+All existing functionality works automatically:
+- Logging
+- Failure deduplication
+- Parallel execution
+- Output formatting
+- Error handling with timeouts
+
+### Logging
+
+Control log verbosity with `LOG_LEVEL`:
+
+- `DEBUG` - Detailed operation logs
+- `INFO` - Milestones and important events (default)
+- `WARNING` - Warnings only
+- `ERROR` - Errors only
 
 ### Request Override Priority
 
@@ -130,7 +197,7 @@ docker run -d \
   -e JENKINS_URL=https://jenkins.example.com \
   -e JENKINS_USER=your-username \
   -e JENKINS_PASSWORD=your-api-token \
-  -e GEMINI_API_KEY=your-gemini-key \
+  -e AI_PROVIDER=claude \
   jenkins-job-insight
 ```
 
@@ -318,7 +385,8 @@ Create a `.env` file for local development:
 JENKINS_URL=https://jenkins.example.com
 JENKINS_USER=your-username
 JENKINS_PASSWORD=your-api-token
-GEMINI_API_KEY=your-gemini-key
+AI_PROVIDER=claude
+LOG_LEVEL=INFO
 ```
 
 ## Docker Build
@@ -337,7 +405,7 @@ docker run -d \
   -e JENKINS_URL=https://jenkins.example.com \
   -e JENKINS_USER=your-username \
   -e JENKINS_PASSWORD=your-api-token \
-  -e GEMINI_API_KEY=your-gemini-key \
+  -e AI_PROVIDER=claude \
   jenkins-job-insight
 ```
 
