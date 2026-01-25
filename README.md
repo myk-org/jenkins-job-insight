@@ -15,7 +15,7 @@ For each failure, the service provides detailed explanations and either fix sugg
 
 - **Async and sync analysis modes**: Submit jobs for background processing or wait for immediate results
 - **AI-powered classification**: Distinguishes between test code issues and product bugs
-- **Multiple AI providers**: Supports Claude CLI and Gemini CLI
+- **Multiple AI providers**: Supports Claude CLI, Gemini CLI, and Cursor Agent CLI
 - **SQLite result storage**: Persists analysis results for later retrieval
 - **Callback webhooks**: Delivers results to your specified endpoint with custom headers
 - **Slack notifications**: Sends formatted analysis summaries to Slack channels
@@ -52,7 +52,8 @@ Configure the service using environment variables. The service is tied to a sing
 | `JENKINS_PASSWORD` | Yes | - | Jenkins password or API token |
 | `JENKINS_SSL_VERIFY` | No | `true` | Enable SSL certificate verification (set to `false` for self-signed certs) |
 | **AI Provider** | | | |
-| `AI_PROVIDER` | No | `claude` | AI provider to use (`claude` or `gemini`) |
+| `AI_PROVIDER` | No | `claude` | AI provider to use (`claude`, `gemini`, or `cursor`) |
+| `CURSOR_MODEL` | No | - | Model for Cursor Agent CLI (if not set, uses Cursor's default) |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | **Notifications** | | | |
 | `SLACK_WEBHOOK_URL` | No | - | Default Slack incoming webhook URL |
@@ -104,6 +105,39 @@ GEMINI_API_KEY=your-gemini-api-key
 AI_PROVIDER=gemini
 # Authenticate with: gemini auth login
 ```
+
+#### Cursor Agent CLI
+
+The CLI command is `agent`. Choose **one** of the following authentication methods:
+
+**Option 1: API Key (environment variable)**
+
+```bash
+AI_PROVIDER=cursor
+CURSOR_API_KEY=your-cursor-api-key
+
+# Optional: Specify the model (if not set, uses Cursor's default)
+CURSOR_MODEL=claude-3.5-sonnet
+```
+
+**Option 2: Auth File Mount (for users who authenticated via `agent login`)**
+
+```bash
+AI_PROVIDER=cursor
+# No API key needed - uses mounted auth file
+
+# Optional: Specify the model (if not set, uses Cursor's default)
+CURSOR_MODEL=claude-3.5-sonnet
+```
+
+Mount the Cursor auth file in Docker:
+
+```yaml
+volumes:
+  - ~/.config/cursor/auth.json:/home/appuser/.config/cursor/auth.json:ro
+```
+
+**Note:** You need only ONE of these methods, not both. Use the API key method for simplicity, or the auth file mount if you have already authenticated via `agent login` on your host machine.
 
 ### Adding a New AI CLI Provider
 

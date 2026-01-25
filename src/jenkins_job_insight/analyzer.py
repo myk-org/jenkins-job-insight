@@ -23,8 +23,9 @@ from jenkins_job_insight.models import (
 )
 from jenkins_job_insight.repository import RepositoryManager
 
-# AI CLI provider: "claude" or "gemini"
+# AI CLI provider: "claude", "gemini", or "cursor"
 AI_PROVIDER = os.getenv("AI_PROVIDER", "claude").lower()
+CURSOR_MODEL = os.getenv("CURSOR_MODEL", "")
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
@@ -94,6 +95,12 @@ async def call_ai_cli(prompt: str, cwd: Path | None = None) -> str:
     if AI_PROVIDER == "gemini":
         # Gemini CLI: gemini --yolo "prompt"
         cmd = ["gemini", "--yolo", prompt]
+    elif AI_PROVIDER == "cursor":
+        # Cursor Agent CLI: agent --force [--model MODEL] chat "prompt"
+        cmd = ["agent", "--force"]
+        if CURSOR_MODEL:
+            cmd.extend(["--model", CURSOR_MODEL])
+        cmd.extend(["chat", prompt])
     else:
         # Claude CLI: claude --dangerously-skip-permissions -p "prompt"
         cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]

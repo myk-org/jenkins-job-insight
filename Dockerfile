@@ -58,6 +58,9 @@ USER appuser
 # Install Claude Code CLI (installs to ~/.local/bin)
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
+# Install Cursor Agent CLI (installs to ~/.local/bin)
+RUN curl -fsSL https://cursor.com/install | bash
+
 # Configure npm for non-root global installs and install Gemini CLI
 RUN mkdir -p /home/appuser/.npm-global \
     && npm config set prefix '/home/appuser/.npm-global' \
