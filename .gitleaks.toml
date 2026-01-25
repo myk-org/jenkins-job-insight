@@ -1,0 +1,14 @@
+# Gitleaks configuration for jenkins-job-insight
+# https://github.com/gitleaks/gitleaks#configuration
+
+[extend]
+# Use the default gitleaks config as a base
+useDefault = true
+
+[allowlist]
+# Allowlist test files that contain fake/mock credentials for unit tests
+paths = [
+    '''tests/test_config\.py''',
+    '''tests/test_main\.py''',
+    '''tests/conftest\.py''',
+]

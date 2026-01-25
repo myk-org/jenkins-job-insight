@@ -1,0 +1,116 @@
+# Docker Compose configuration for Jenkins Job Insight
+# A FastAPI service that analyzes Jenkins job failures using AI
+#
+# Usage:
+#   1. Copy .env.example to .env and configure your values
+#   2. Run: docker compose up -d
+#
+# Configuration options:
+#   - Replace placeholder values directly in this file, OR
+#   - Use a .env file (recommended for sensitive values)
+
+services:
+  jenkins-job-insight:
+    # Build from local Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Container name for easier management
+    container_name: jenkins-job-insight
+
+    # Port mapping: host:container
+    ports:
+      - "8000:8000"
+
+    # Persist SQLite database across container restarts
+    # The ./data directory on host maps to /data in container
+    volumes:
+      - ./data:/data
+      # Optional: mount custom analysis prompt
+      # - ./PROMPT.md:/app/PROMPT.md:ro
+      # Optional: Mount gcloud credentials for Vertex AI authentication
+      # Uncomment if using CLAUDE_CODE_USE_VERTEX=1 with Application Default Credentials
+      # - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+      # Cursor Agent CLI: Mount auth file (alternative to CURSOR_API_KEY env var)
+      # Uncomment if using `agent login` authentication instead of API key
+      # - ~/.config/cursor/auth.json:/home/appuser/.config/cursor/auth.json:ro
+
+    # Restart policy: container restarts unless explicitly stopped
+    restart: unless-stopped
+
+    # Health check configuration
+    # Verifies the service is responding on /health endpoint
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Environment variables
+    # Option 1: Use .env file (recommended)
+    env_file:
+      - .env
+
+    # Option 2: Define variables directly (shown as examples/defaults)
+    # Uncomment and configure if not using .env file
+    environment:
+      # ===================
+      # Jenkins Configuration (Required)
+      # ===================
+      - JENKINS_URL=${JENKINS_URL:-https://jenkins.example.com}
+      - JENKINS_USER=${JENKINS_USER:-your-username}
+      - JENKINS_PASSWORD=${JENKINS_PASSWORD:-your-api-token}
+
+      # ===================
+      # AI CLI Configuration
+      # ===================
+      # AI_PROVIDER: claude, gemini, or cursor
+      - AI_PROVIDER=${AI_PROVIDER:-claude}
+
+      # Claude CLI - Option 1: API Key
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+      # Claude CLI - Option 2: Vertex AI
+      - CLAUDE_CODE_USE_VERTEX=${CLAUDE_CODE_USE_VERTEX:-}
+      - CLOUD_ML_REGION=${CLOUD_ML_REGION:-us-east5}
+      - ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-5@20251101}
+      - ANTHROPIC_SMALL_FAST_MODEL=${ANTHROPIC_SMALL_FAST_MODEL:-claude-haiku-4-5@20251001}
+
+      # Gemini CLI - API Key
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+
+      # Cursor Agent CLI - Choose ONE authentication method:
+      # Option 1: API key (uncomment and set CURSOR_API_KEY in .env)
+      # - CURSOR_API_KEY=${CURSOR_API_KEY:-}
+      # Option 2: Mount auth file (see volumes section above)
+      # Optional: Specify the model for Cursor Agent (if not set, uses default)
+      - CURSOR_MODEL=${CURSOR_MODEL:-}
+
+      # ===================
+      # Optional Configuration
+      # ===================
+
+      # Slack notifications webhook URL
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+
+      # Enable debug mode for verbose logging
+      - DEBUG=${DEBUG:-false}
+
+      # Logging level (DEBUG, INFO, WARNING, ERROR)
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # ===================
+      # Optional Defaults (can be overridden per-request)
+      # ===================
+      - TESTS_REPO_URL=${TESTS_REPO_URL:-}
+      - CALLBACK_URL=${CALLBACK_URL:-}
+      - CALLBACK_HEADERS=${CALLBACK_HEADERS:-}
+
+      # Custom prompt file (mount your own PROMPT.md)
+      - PROMPT_FILE=${PROMPT_FILE:-/app/PROMPT.md}
+
+      # SSL verification for Jenkins (set to false for self-signed certs)
+      - JENKINS_SSL_VERIFY=${JENKINS_SSL_VERIFY:-true}
