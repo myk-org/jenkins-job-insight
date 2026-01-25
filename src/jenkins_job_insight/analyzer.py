@@ -266,6 +266,8 @@ def extract_failed_child_jobs(build_info: dict) -> list[tuple[str, int]]:
 
     # Also check actions for triggered builds (older Jenkins plugins)
     for action in build_info.get("actions", []):
+        if action is None:
+            continue
         action_class = action.get("_class", "")
         triggered_builds = action.get("triggeredBuilds", [])
 

@@ -56,10 +56,10 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Install Claude Code CLI (installs to ~/.local/bin)
-RUN set -o pipefail && curl -fsSL https://claude.ai/install.sh | bash
+RUN /bin/bash -o pipefail -c "curl -fsSL https://claude.ai/install.sh | bash"
 
 # Install Cursor Agent CLI (installs to ~/.local/bin)
-RUN set -o pipefail && curl -fsSL https://cursor.com/install | bash
+RUN /bin/bash -o pipefail -c "curl -fsSL https://cursor.com/install | bash"
 
 # Configure npm for non-root global installs and install Gemini CLI
 RUN mkdir -p /home/appuser/.npm-global \
