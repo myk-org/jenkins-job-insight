@@ -23,8 +23,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install git (required at runtime for gitpython), curl (for Claude CLI), and nodejs/npm (for Gemini CLI)
+# Install bash (needed for CLI install scripts), git (required at runtime for gitpython), curl (for Claude CLI), and nodejs/npm (for Gemini CLI)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
     git \
     curl \
     nodejs \
