@@ -53,6 +53,10 @@ RUN mkdir -p /data && chown appuser:appuser /data
 # Fix ownership for appuser
 RUN chown -R appuser:appuser /app
 
+# Make /app and /data group-writable for OpenShift compatibility
+# OpenShift runs containers as a random UID in the root group (GID 0)
+RUN chmod -R g+w /app /data
+
 # Switch to non-root user
 USER appuser
 
@@ -67,10 +71,27 @@ RUN mkdir -p /home/appuser/.npm-global \
     && npm config set prefix '/home/appuser/.npm-global' \
     && npm install -g @google/gemini-cli@0.25.0
 
+# Switch back to root to fix permissions for OpenShift compatibility
+USER root
+
+# Make appuser home accessible by OpenShift arbitrary UID
+# OpenShift runs containers as arbitrary UID in root group (GID 0)
+# g=u means "group gets same permissions as user"
+RUN chown -R appuser:0 /home/appuser && \
+    chmod -R g=u /home/appuser
+
+# Switch back to non-root user for runtime
+USER appuser
+
 # Ensure CLIs are in PATH
 ENV PATH="/home/appuser/.local/bin:/home/appuser/.npm-global/bin:${PATH}"
+# Set HOME for OpenShift compatibility (random UID has no passwd entry)
+ENV HOME="/home/appuser"
 
 EXPOSE 8000
 
 # Use uv run for uvicorn
-ENTRYPOINT ["uv", "run", "uvicorn", "jenkins_job_insight.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --no-sync prevents uv from attempting to modify the venv at runtime.
+# This is required for OpenShift where containers run as an arbitrary UID
+# and may not have write access to the .venv directory.
+ENTRYPOINT ["uv", "run", "--no-sync", "uvicorn", "jenkins_job_insight.main:app", "--host", "0.0.0.0", "--port", "8000"]
