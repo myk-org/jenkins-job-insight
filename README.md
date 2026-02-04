@@ -15,7 +15,7 @@ For each failure, the service provides detailed explanations and either fix sugg
 
 - **Async and sync analysis modes**: Submit jobs for background processing or wait for immediate results
 - **AI-powered classification**: Distinguishes between test code issues and product bugs
-- **Multiple AI providers**: Supports Claude CLI, Gemini CLI, and Cursor Agent CLI
+- **Multiple AI providers**: Supports Claude CLI, Gemini CLI, Cursor Agent CLI, and Qodo CLI
 - **SQLite result storage**: Persists analysis results for later retrieval
 - **Callback webhooks**: Delivers results to your specified endpoint with custom headers
 - **Slack notifications**: Sends formatted analysis summaries to Slack channels
@@ -52,8 +52,10 @@ Configure the service using environment variables. The service is tied to a sing
 | `JENKINS_PASSWORD` | Yes | - | Jenkins password or API token |
 | `JENKINS_SSL_VERIFY` | No | `true` | Enable SSL certificate verification (set to `false` for self-signed certs) |
 | **AI Provider** | | | |
-| `AI_PROVIDER` | No | `claude` | AI provider to use (`claude`, `gemini`, or `cursor`) |
+| `AI_PROVIDER` | No | `claude` | AI provider to use (`claude`, `gemini`, `cursor`, or `qodo`) |
 | `CURSOR_MODEL` | No | - | Model for Cursor Agent CLI (if not set, uses Cursor's default) |
+| `QODO_API_KEY` | No | - | API key for Qodo CLI |
+| `QODO_MODEL` | No | - | Model for Qodo CLI (e.g., `claude-4.5-sonnet`, `gpt-5.2`) |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | **Notifications** | | | |
 | `SLACK_WEBHOOK_URL` | No | - | Default Slack incoming webhook URL |
@@ -138,6 +140,27 @@ volumes:
 ```
 
 **Note:** You need only ONE of these methods, not both. Use the API key method for simplicity, or the auth file mount if you have already authenticated via `agent login` on your host machine.
+
+#### Qodo CLI
+
+Qodo uses a custom agent configuration with MCP tool access for exploring test repositories.
+
+##### API Key Authentication
+
+```bash
+AI_PROVIDER=qodo
+QODO_API_KEY=your-qodo-api-key
+
+# Optional: Specify the model (if not set, uses Qodo's default)
+QODO_MODEL=claude-4.5-sonnet
+```
+
+**Available models:** `claude-4.5-sonnet`, `claude-4.5-opus`, `gemini-2.5-pro`, `gpt-5.2`, `grok-4`, and more.
+
+**Note:** Qodo uses a custom agent configuration (`qodo/agent.toml`) that enables:
+- Multi-step reasoning with `execution_strategy = "plan"`
+- MCP tool access (filesystem, git, shell) for exploring cloned test repositories
+- Consistent analysis behavior across runs
 
 ### Adding a New AI CLI Provider
 
@@ -476,7 +499,7 @@ The `/data` volume mount ensures SQLite database persistence across container re
 1. **Receive request**: Accept webhook or API request containing the job name and build number
 2. **Fetch Jenkins data**: Retrieve console output and build information from the configured Jenkins instance
 3. **Clone repository** (optional): Clone the source repository for additional context
-4. **AI analysis**: Send collected data to configured AI provider (Claude, Gemini, or Cursor)
+4. **AI analysis**: Send collected data to configured AI provider (Claude, Gemini, Cursor, or Qodo)
 5. **Classify failures**: AI determines if each failure is a code issue or product bug
 6. **Store result**: Save analysis to SQLite database for retrieval
 7. **Deliver result**: Send to callback URL and/or Slack webhook

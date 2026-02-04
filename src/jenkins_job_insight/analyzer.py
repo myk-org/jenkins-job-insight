@@ -28,13 +28,14 @@ from jenkins_job_insight.repository import RepositoryManager
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
-# AI CLI provider: "claude", "gemini", or "cursor"
-VALID_AI_PROVIDERS = {"claude", "gemini", "cursor"}
+# AI CLI provider: "claude", "gemini", "cursor", or "qodo"
+VALID_AI_PROVIDERS = {"claude", "gemini", "cursor", "qodo"}
 AI_PROVIDER = os.getenv("AI_PROVIDER", "claude").lower()
 if AI_PROVIDER not in VALID_AI_PROVIDERS:
     logger.warning(f"Invalid AI_PROVIDER '{AI_PROVIDER}', falling back to 'claude'")
     AI_PROVIDER = "claude"
 CURSOR_MODEL = os.getenv("CURSOR_MODEL", "")
+QODO_MODEL = os.getenv("QODO_MODEL", "")
 
 FALLBACK_TAIL_LINES = 200
 MAX_CONCURRENT_AI_CALLS = 10
@@ -90,7 +91,7 @@ async def run_parallel_with_limit(
 
 
 async def call_ai_cli(prompt: str, cwd: Path | None = None) -> str:
-    """Call AI CLI (Claude or Gemini) with given prompt.
+    """Call AI CLI (Claude, Gemini, Cursor, or Qodo) with given prompt.
 
     Args:
         prompt: The prompt to send to the AI CLI.
@@ -108,6 +109,15 @@ async def call_ai_cli(prompt: str, cwd: Path | None = None) -> str:
         if CURSOR_MODEL:
             cmd.extend(["--model", CURSOR_MODEL])
         cmd.extend(["chat", prompt])
+    elif AI_PROVIDER == "qodo":
+        # Qodo CLI with custom agent config
+        cmd = ["qodo", "-y", "-q"]
+        if QODO_MODEL:
+            cmd.extend(["-m", QODO_MODEL])
+        cmd.append("--agent-file=/app/qodo/agent.toml")
+        if cwd:  # Pass cloned test repo as working directory
+            cmd.extend(["--dir", str(cwd)])
+        cmd.append(prompt)
     else:
         # Claude CLI: claude --dangerously-skip-permissions -p "prompt"
         cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
@@ -115,10 +125,12 @@ async def call_ai_cli(prompt: str, cwd: Path | None = None) -> str:
     logger.info(f"Calling {AI_PROVIDER.upper()} CLI")
 
     try:
+        # For Qodo, working directory is passed via --dir flag, not subprocess cwd
+        subprocess_cwd = None if AI_PROVIDER == "qodo" else cwd
         result = await asyncio.to_thread(
             subprocess.run,
             cmd,
-            cwd=cwd,
+            cwd=subprocess_cwd,
             capture_output=True,
             text=True,
             timeout=600,  # 10 minute timeout
