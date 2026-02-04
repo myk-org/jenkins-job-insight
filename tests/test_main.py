@@ -18,6 +18,7 @@ def mock_settings():
         "JENKINS_USER": "testuser",
         "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
         "GEMINI_API_KEY": "test-key",  # pragma: allowlist secret
+        "SKIP_AI_VALIDATION": "1",
     }
     with patch.dict(os.environ, env, clear=True):
         # Clear the lru_cache to use fresh settings
