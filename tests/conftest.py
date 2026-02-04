@@ -8,6 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Skip AI provider validation during tests
+os.environ["SKIP_AI_VALIDATION"] = "1"
+
 from jenkins_job_insight.config import Settings
 from jenkins_job_insight.models import (
     AnalysisResult,

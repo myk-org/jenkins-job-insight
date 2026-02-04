@@ -7,7 +7,13 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from simple_logger.logger import get_logger
 
-from jenkins_job_insight.analyzer import analyze_job
+from jenkins_job_insight.analyzer import (
+    AI_PROVIDER,
+    CURSOR_MODEL,
+    QODO_MODEL,
+    analyze_job,
+    call_ai_cli,
+)
 from jenkins_job_insight.config import Settings, get_settings
 from jenkins_job_insight.models import AnalysisResult, AnalyzeRequest
 from jenkins_job_insight.output import format_result_as_text, send_callback, send_slack
@@ -64,9 +70,44 @@ def build_jenkins_url(base_url: str, job_name: str, build_number: int) -> str:
     return f"{base_url.rstrip('/')}/job/{job_path}/{build_number}/"
 
 
+async def validate_ai_provider() -> None:
+    """Validate AI provider is configured and working.
+
+    Sends a simple test prompt to verify the AI CLI is accessible.
+    Raises RuntimeError if validation fails, which will crash the container.
+
+    Set SKIP_AI_VALIDATION=1 to skip (for testing).
+    """
+    if os.getenv("SKIP_AI_VALIDATION", "").lower() in ("1", "true", "yes"):
+        logger.info("Skipping AI provider validation (SKIP_AI_VALIDATION is set)")
+        return
+
+    provider = AI_PROVIDER
+    model = ""
+    if provider == "qodo":
+        model = QODO_MODEL
+    elif provider == "cursor":
+        model = CURSOR_MODEL
+
+    provider_info = f"{provider.upper()}" + (f" ({model})" if model else "")
+
+    logger.info(f"Validating AI provider: {provider_info}")
+
+    try:
+        response = await call_ai_cli("Reply with only: OK")
+        if not response or "error" in response.lower()[:50]:
+            raise RuntimeError(f"AI provider validation failed: {response[:200]}")
+        logger.info(f"AI provider validation successful: {provider_info}")
+    except Exception as e:
+        error_msg = f"AI provider {provider_info} is not working: {e}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from e
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await validate_ai_provider()
     yield
 
 

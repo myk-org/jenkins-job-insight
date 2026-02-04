@@ -12,6 +12,34 @@ from jenkins_job_insight.models import AnalysisResult, ChildJobAnalysis, Failure
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
 
+def get_ai_provider_info() -> str:
+    """Get the AI provider and model info for display.
+
+    Returns:
+        String like "Claude", "Gemini", "Cursor (claude-3.5-sonnet)", or "Qodo (gpt-5.2)"
+    """
+    provider = os.getenv("AI_PROVIDER", "claude").lower()
+
+    # Get model info based on provider
+    if provider == "qodo":
+        model = os.getenv("QODO_MODEL", "")
+        if model:
+            return f"Qodo ({model})"
+        return "Qodo"
+    elif provider == "cursor":
+        model = os.getenv("CURSOR_MODEL", "")
+        if model:
+            return f"Cursor ({model})"
+        return "Cursor"
+    elif provider == "gemini":
+        return "Gemini"
+    else:  # claude
+        model = os.getenv("ANTHROPIC_MODEL", "")
+        if model:
+            return f"Claude ({model})"
+        return "Claude"
+
+
 async def send_callback(
     callback_url: str,
     result: AnalysisResult,
@@ -224,5 +252,9 @@ def format_result_as_text(result: AnalysisResult) -> str:
         lines.append("=" * 60)
         for child in result.child_job_analyses:
             lines.extend(format_child_analysis_as_text(child))
+
+    # Add AI provider info at the end
+    lines.append("")
+    lines.append(f"Analyzed using {get_ai_provider_info()}")
 
     return "\n".join(lines)
