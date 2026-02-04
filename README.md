@@ -56,6 +56,7 @@ Configure the service using environment variables. The service is tied to a sing
 | `CURSOR_MODEL` | No | - | Model for Cursor Agent CLI (if not set, uses Cursor's default) |
 | `QODO_API_KEY` | No | - | API key for Qodo CLI |
 | `QODO_MODEL` | No | - | Model for Qodo CLI (e.g., `claude-4.5-sonnet`, `gpt-5.2`) |
+| `AI_CLI_TIMEOUT` | No | `10` | Timeout for AI CLI calls in minutes (increase for slower models) |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | **Notifications** | | | |
 | `SLACK_WEBHOOK_URL` | No | - | Default Slack incoming webhook URL |
@@ -155,7 +156,9 @@ QODO_API_KEY=your-qodo-api-key
 QODO_MODEL=claude-4.5-sonnet
 ```
 
-**Available models:** `claude-4.5-sonnet`, `claude-4.5-opus`, `gemini-2.5-pro`, `gpt-5.2`, `grok-4`, and more.
+**Tip:** Run `qodo models` to see all available models for your account.
+
+**Available models:** Run `qodo models` to see available models in your environment. Model availability depends on your Qodo configuration.
 
 **Note:** Qodo uses a custom agent configuration (`qodo/agent.toml`) that enables:
 - Multi-step reasoning with `execution_strategy = "plan"`

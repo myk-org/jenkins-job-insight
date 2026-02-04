@@ -36,6 +36,7 @@ if AI_PROVIDER not in VALID_AI_PROVIDERS:
     AI_PROVIDER = "claude"
 CURSOR_MODEL = os.getenv("CURSOR_MODEL", "")
 QODO_MODEL = os.getenv("QODO_MODEL", "")
+AI_CLI_TIMEOUT = int(os.getenv("AI_CLI_TIMEOUT", "10"))  # Default 10 minutes
 
 FALLBACK_TAIL_LINES = 200
 MAX_CONCURRENT_AI_CALLS = 10
@@ -122,7 +123,14 @@ async def call_ai_cli(prompt: str, cwd: Path | None = None) -> str:
         # Claude CLI: claude --dangerously-skip-permissions -p "prompt"
         cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
 
-    logger.info(f"Calling {AI_PROVIDER.upper()} CLI")
+    # Build provider info string for logging
+    provider_info = AI_PROVIDER.upper()
+    if AI_PROVIDER == "qodo" and QODO_MODEL:
+        provider_info = f"{AI_PROVIDER.upper()} ({QODO_MODEL})"
+    elif AI_PROVIDER == "cursor" and CURSOR_MODEL:
+        provider_info = f"{AI_PROVIDER.upper()} ({CURSOR_MODEL})"
+
+    logger.info(f"Calling {provider_info} CLI")
 
     try:
         # For Qodo, working directory is passed via --dir flag, not subprocess cwd
@@ -133,10 +141,10 @@ async def call_ai_cli(prompt: str, cwd: Path | None = None) -> str:
             cwd=subprocess_cwd,
             capture_output=True,
             text=True,
-            timeout=600,  # 10 minute timeout
+            timeout=AI_CLI_TIMEOUT * 60,  # Convert minutes to seconds
         )
     except subprocess.TimeoutExpired:
-        return f"{AI_PROVIDER.upper()} CLI error: Analysis timed out after 10 minutes"
+        return f"{AI_PROVIDER.upper()} CLI error: Analysis timed out after {AI_CLI_TIMEOUT} minutes"
 
     if result.returncode != 0:
         return f"{AI_PROVIDER.upper()} CLI error: {result.stderr}"
