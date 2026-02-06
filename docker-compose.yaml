@@ -68,6 +68,7 @@ services:
       # ===================
       # AI_PROVIDER: claude, gemini, cursor, or qodo
       - AI_PROVIDER=${AI_PROVIDER:-claude}
+      - AI_MODEL=${AI_MODEL:-}
 
       # Claude CLI - Option 1: API Key
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -76,8 +77,6 @@ services:
       - CLAUDE_CODE_USE_VERTEX=${CLAUDE_CODE_USE_VERTEX:-}
       - CLOUD_ML_REGION=${CLOUD_ML_REGION:-us-east5}
       - ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID:-}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-5@20251101}
-      - ANTHROPIC_SMALL_FAST_MODEL=${ANTHROPIC_SMALL_FAST_MODEL:-claude-haiku-4-5@20251001}
 
       # Gemini CLI - API Key
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
@@ -86,12 +85,9 @@ services:
       # Option 1: API key (uncomment and set CURSOR_API_KEY in .env)
       # - CURSOR_API_KEY=${CURSOR_API_KEY:-}
       # Option 2: Mount auth file (see volumes section above)
-      # Optional: Specify the model for Cursor Agent (if not set, uses default)
-      - CURSOR_MODEL=${CURSOR_MODEL:-}
 
       # Qodo CLI
       - QODO_API_KEY=${QODO_API_KEY:-}
-      - QODO_MODEL=${QODO_MODEL:-}
 
       # AI CLI timeout in minutes (default: 10)
       - AI_CLI_TIMEOUT=${AI_CLI_TIMEOUT:-10}

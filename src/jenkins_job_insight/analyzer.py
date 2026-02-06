@@ -6,8 +6,9 @@ import re
 import subprocess
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import NoReturn
+from typing import Callable, NoReturn
 
 import jenkins
 from fastapi import HTTPException
@@ -27,15 +28,6 @@ from jenkins_job_insight.models import (
 from jenkins_job_insight.repository import RepositoryManager
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
-
-# AI CLI provider: "claude", "gemini", "cursor", or "qodo"
-VALID_AI_PROVIDERS = {"claude", "gemini", "cursor", "qodo"}
-AI_PROVIDER = os.getenv("AI_PROVIDER", "claude").lower()
-if AI_PROVIDER not in VALID_AI_PROVIDERS:
-    logger.warning(f"Invalid AI_PROVIDER '{AI_PROVIDER}', falling back to 'claude'")
-    AI_PROVIDER = "claude"
-CURSOR_MODEL = os.getenv("CURSOR_MODEL", "")
-QODO_MODEL = os.getenv("QODO_MODEL", "")
 
 
 def _get_ai_cli_timeout() -> int:
@@ -62,6 +54,59 @@ ERROR_PATTERN = re.compile(
     r"\b(error|fail(ed|ure)?|exception|traceback|assert(ion)?|warn(ing)?|critical|fatal)\b",
     re.IGNORECASE,
 )
+
+
+@dataclass(frozen=True)
+class ProviderConfig:
+    """Configuration for an AI CLI provider."""
+
+    binary: str
+    build_cmd: Callable[[str, str, str, Path | None], list[str]]
+    uses_own_cwd: bool = False
+
+
+def _build_claude_cmd(
+    binary: str, model: str, prompt: str, _cwd: Path | None
+) -> list[str]:
+    return [binary, "--model", model, "--dangerously-skip-permissions", "-p", prompt]
+
+
+def _build_gemini_cmd(
+    binary: str, model: str, prompt: str, _cwd: Path | None
+) -> list[str]:
+    return [binary, "--model", model, "--yolo", prompt]
+
+
+def _build_cursor_cmd(
+    binary: str, model: str, prompt: str, cwd: Path | None
+) -> list[str]:
+    cmd = [binary, "--force", "--model", model]
+    if cwd:
+        cmd.extend(["--workspace", str(cwd)])
+    cmd.extend(["chat", prompt])
+    return cmd
+
+
+def _build_qodo_cmd(
+    binary: str, model: str, prompt: str, cwd: Path | None
+) -> list[str]:
+    cmd = [binary, "-y", "-q", "-m", model, "--agent-file=/app/qodo/agent.toml"]
+    if cwd:
+        cmd.extend(["--dir", str(cwd)])
+    cmd.append(prompt)
+    return cmd
+
+
+PROVIDER_CONFIG: dict[str, ProviderConfig] = {
+    "claude": ProviderConfig(binary="claude", build_cmd=_build_claude_cmd),
+    "gemini": ProviderConfig(binary="gemini", build_cmd=_build_gemini_cmd),
+    "cursor": ProviderConfig(
+        binary="agent", uses_own_cwd=True, build_cmd=_build_cursor_cmd
+    ),
+    "qodo": ProviderConfig(binary="qodo", uses_own_cwd=True, build_cmd=_build_qodo_cmd),
+}
+
+VALID_AI_PROVIDERS = set(PROVIDER_CONFIG.keys())
 
 
 def get_failure_signature(failure: TestFailure) -> str:
@@ -107,50 +152,56 @@ async def run_parallel_with_limit(
     )
 
 
-async def call_ai_cli(prompt: str, cwd: Path | None = None) -> str:
+async def call_ai_cli(
+    prompt: str, cwd: Path | None = None, ai_provider: str = "", ai_model: str = ""
+) -> tuple[bool, str]:
     """Call AI CLI (Claude, Gemini, Cursor, or Qodo) with given prompt.
 
     Args:
         prompt: The prompt to send to the AI CLI.
         cwd: Working directory for AI to explore (typically repo path).
+        ai_provider: AI provider to use.
+        ai_model: AI model to use.
 
     Returns:
-        AI CLI output as string.
+        Tuple of (success, output). success is True with AI output, False with error message.
     """
-    if AI_PROVIDER == "gemini":
-        # Gemini CLI: gemini --yolo "prompt"
-        cmd = ["gemini", "--yolo", prompt]
-    elif AI_PROVIDER == "cursor":
-        # Cursor Agent CLI: agent --force [--model MODEL] chat "prompt"
-        cmd = ["agent", "--force"]
-        if CURSOR_MODEL:
-            cmd.extend(["--model", CURSOR_MODEL])
-        cmd.extend(["chat", prompt])
-    elif AI_PROVIDER == "qodo":
-        # Qodo CLI with custom agent config
-        cmd = ["qodo", "-y", "-q"]
-        if QODO_MODEL:
-            cmd.extend(["-m", QODO_MODEL])
-        cmd.append("--agent-file=/app/qodo/agent.toml")
-        if cwd:  # Pass cloned test repo as working directory
-            cmd.extend(["--dir", str(cwd)])
-        cmd.append(prompt)
-    else:
-        # Claude CLI: claude --dangerously-skip-permissions -p "prompt"
-        cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
+    config = PROVIDER_CONFIG.get(ai_provider)
+    if not config:
+        return (
+            False,
+            f"Unknown AI provider: '{ai_provider}'. Valid providers: {', '.join(sorted(VALID_AI_PROVIDERS))}",
+        )
 
-    # Build provider info string for logging
-    provider_info = AI_PROVIDER.upper()
-    if AI_PROVIDER == "qodo" and QODO_MODEL:
-        provider_info = f"{AI_PROVIDER.upper()} ({QODO_MODEL})"
-    elif AI_PROVIDER == "cursor" and CURSOR_MODEL:
-        provider_info = f"{AI_PROVIDER.upper()} ({CURSOR_MODEL})"
+    provider_info = f"{ai_provider.upper()} ({ai_model})"
+    cmd = config.build_cmd(config.binary, ai_model, prompt, cwd)
 
     logger.info(f"Calling {provider_info} CLI")
 
+    subprocess_cwd = None if config.uses_own_cwd else cwd
+
+    # Sanity check: run CLI with "Hi" to verify it works before the real call
+    sanity_cmd = config.build_cmd(config.binary, ai_model, "Hi", cwd)
     try:
-        # For Qodo, working directory is passed via --dir flag, not subprocess cwd
-        subprocess_cwd = None if AI_PROVIDER == "qodo" else cwd
+        sanity_result = await asyncio.to_thread(
+            subprocess.run,
+            sanity_cmd,
+            cwd=subprocess_cwd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if sanity_result.returncode != 0:
+            error_detail = (
+                sanity_result.stderr
+                or sanity_result.stdout
+                or "unknown error (no output)"
+            )
+            return False, f"{provider_info} sanity check failed: {error_detail}"
+    except subprocess.TimeoutExpired:
+        return False, f"{provider_info} sanity check timed out"
+
+    try:
         result = await asyncio.to_thread(
             subprocess.run,
             cmd,
@@ -160,15 +211,17 @@ async def call_ai_cli(prompt: str, cwd: Path | None = None) -> str:
             timeout=AI_CLI_TIMEOUT * 60,  # Convert minutes to seconds
         )
     except subprocess.TimeoutExpired:
-        return f"{AI_PROVIDER.upper()} CLI error: Analysis timed out after {AI_CLI_TIMEOUT} minutes"
+        return (
+            False,
+            f"{provider_info} CLI error: Analysis timed out after {AI_CLI_TIMEOUT} minutes",
+        )
 
     if result.returncode != 0:
-        return f"{AI_PROVIDER.upper()} CLI error: {result.stderr}"
+        error_detail = result.stderr or result.stdout or "unknown error (no output)"
+        return False, f"{provider_info} CLI error: {error_detail}"
 
-    logger.debug(
-        f"{AI_PROVIDER.upper()} CLI response length: {len(result.stdout)} chars"
-    )
-    return result.stdout
+    logger.debug(f"{provider_info} CLI response length: {len(result.stdout)} chars")
+    return True, result.stdout
 
 
 def extract_relevant_console_lines(console_output: str) -> str:
@@ -405,71 +458,12 @@ def extract_failures_from_test_report(test_report: dict) -> list[TestFailure]:
     return failures
 
 
-async def analyze_single_test_failure(
-    failure: TestFailure,
-    console_context: str,
-    repo_path: Path | None,
-) -> FailureAnalysis:
-    """Analyze a single test failure using Claude CLI.
-
-    Args:
-        failure: The test failure to analyze.
-        console_context: Relevant console lines for context.
-        repo_path: Path to cloned test repo (optional).
-
-    Returns:
-        FailureAnalysis with Claude's analysis.
-    """
-    prompt = f"""Analyze this test failure from a Jenkins CI job.
-
-TEST: {failure.test_name}
-ERROR: {failure.error_message}
-STACK TRACE:
-{failure.stack_trace}
-
-CONSOLE CONTEXT:
-{console_context}
-
-You have access to the test repository. Explore the code to understand the failure.
-
-Respond using this EXACT format:
-
-=== CLASSIFICATION ===
-[CODE ISSUE or PRODUCT BUG]
-
-=== TEST ===
-{failure.test_name}
-
-=== ANALYSIS ===
-[Your detailed analysis - what the test does, why it failed]
-
-=== FIX === (only if CODE ISSUE)
-File: [exact path]
-Line: [line number]
-Change: [specific code change]
-
-=== BUG REPORT === (only if PRODUCT BUG)
-Title: [concise bug title]
-Severity: [critical/high/medium/low]
-Component: [affected component]
-Description: [what product behavior is broken]
-Evidence: [relevant log snippets]
-"""
-
-    logger.info(f"Calling {AI_PROVIDER.upper()} CLI for test: {failure.test_name}")
-    analysis_output = await call_ai_cli(prompt, cwd=repo_path)
-
-    return FailureAnalysis(
-        test_name=failure.test_name,
-        error=failure.error_message,
-        analysis=analysis_output,
-    )
-
-
 async def analyze_failure_group(
     failures: list[TestFailure],
     console_context: str,
     repo_path: Path | None,
+    ai_provider: str = "",
+    ai_model: str = "",
 ) -> list[FailureAnalysis]:
     """Analyze a group of failures with the same error signature.
 
@@ -529,9 +523,11 @@ Evidence: [relevant log snippets]
 """
 
     logger.info(
-        f"Calling {AI_PROVIDER.upper()} CLI for failure group ({len(failures)} tests with same error)"
+        f"Calling {ai_provider.upper()} CLI for failure group ({len(failures)} tests with same error)"
     )
-    analysis_output = await call_ai_cli(prompt, cwd=repo_path)
+    success, analysis_output = await call_ai_cli(
+        prompt, cwd=repo_path, ai_provider=ai_provider, ai_model=ai_model
+    )
 
     # Apply the same analysis to all failures in the group
     return [
@@ -552,6 +548,8 @@ async def analyze_child_job(
     depth: int = 0,
     max_depth: int = 3,
     repo_path: Path | None = None,
+    ai_provider: str = "",
+    ai_model: str = "",
 ) -> ChildJobAnalysis:
     """Analyze a single child job, recursively analyzing its failed children.
 
@@ -626,6 +624,8 @@ async def analyze_child_job(
                 depth + 1,
                 max_depth,
                 repo_path,
+                ai_provider,
+                ai_model,
             )
             for child_name, child_num in failed_children
         ]
@@ -695,6 +695,8 @@ async def analyze_child_job(
                 failures=group,
                 console_context=console_context,
                 repo_path=repo_path,
+                ai_provider=ai_provider,
+                ai_model=ai_model,
             )
             for group in failure_groups.values()
         ]
@@ -753,7 +755,9 @@ Respond with:
 - Classification: CODE ISSUE or PRODUCT BUG
 - Recommended fix or bug report details
 """
-    analysis_output = await call_ai_cli(prompt, cwd=repo_path)
+    success, analysis_output = await call_ai_cli(
+        prompt, cwd=repo_path, ai_provider=ai_provider, ai_model=ai_model
+    )
 
     return ChildJobAnalysis(
         job_name=job_name,
@@ -771,7 +775,11 @@ Respond with:
 
 
 async def analyze_job(
-    request: AnalyzeRequest, settings: Settings, job_id: str | None = None
+    request: AnalyzeRequest,
+    settings: Settings,
+    ai_provider: str,
+    ai_model: str,
+    job_id: str | None = None,
 ) -> AnalysisResult:
     """Analyze a Jenkins job failure."""
     if job_id is None:
@@ -780,7 +788,6 @@ async def analyze_job(
     job_name = request.job_name
     build_number = request.build_number
     logger.info(f"Starting analysis for job {job_name} #{build_number}")
-
     # Get Jenkins data
     jenkins_client = JenkinsClient(
         url=settings.jenkins_url,
@@ -868,6 +875,8 @@ async def analyze_job(
                     depth=0,
                     max_depth=3,
                     repo_path=repo_path,
+                    ai_provider=ai_provider,
+                    ai_model=ai_model,
                 )
                 for child_name, child_num in failed_child_jobs
             ]
@@ -938,6 +947,8 @@ async def analyze_job(
                     failures=group,
                     console_context=console_context,
                     repo_path=repo_path,
+                    ai_provider=ai_provider,
+                    ai_model=ai_model,
                 )
                 for group in failure_groups.values()
             ]
@@ -976,7 +987,19 @@ Respond with:
 - Classification: CODE ISSUE or PRODUCT BUG
 - Recommended fix or bug report details
 """
-            analysis_output = await call_ai_cli(prompt, cwd=repo_path)
+            success, analysis_output = await call_ai_cli(
+                prompt, cwd=repo_path, ai_provider=ai_provider, ai_model=ai_model
+            )
+
+            if not success:
+                return AnalysisResult(
+                    job_id=job_id,
+                    jenkins_url=HttpUrl(jenkins_build_url),
+                    status="failed",
+                    summary=analysis_output,
+                    failures=[],
+                    child_job_analyses=child_job_analyses,
+                )
 
             failures = [
                 FailureAnalysis(

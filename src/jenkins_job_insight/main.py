@@ -8,11 +8,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from simple_logger.logger import get_logger
 
 from jenkins_job_insight.analyzer import (
-    AI_PROVIDER,
-    CURSOR_MODEL,
-    QODO_MODEL,
+    VALID_AI_PROVIDERS,
     analyze_job,
-    call_ai_cli,
 )
 from jenkins_job_insight.config import Settings, get_settings
 from jenkins_job_insight.models import AnalysisResult, AnalyzeRequest
@@ -21,11 +18,16 @@ from jenkins_job_insight.storage import get_result, init_db, list_results, save_
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
+AI_PROVIDER = os.getenv("AI_PROVIDER", "").lower()
+AI_MODEL = os.getenv("AI_MODEL", "")
+
 
 async def deliver_results(
     result: AnalysisResult,
     request: AnalyzeRequest,
     settings: Settings,
+    ai_provider: str = "",
+    ai_model: str = "",
 ) -> None:
     """Deliver analysis results to callback and Slack webhooks.
 
@@ -47,7 +49,9 @@ async def deliver_results(
     slack_url = request.slack_webhook_url or settings.slack_webhook_url
     if slack_url:
         try:
-            await send_slack(str(slack_url), result)
+            await send_slack(
+                str(slack_url), result, ai_provider=ai_provider, ai_model=ai_model
+            )
         except Exception:
             logger.exception("Failed to send Slack notification to %s", slack_url)
 
@@ -70,44 +74,9 @@ def build_jenkins_url(base_url: str, job_name: str, build_number: int) -> str:
     return f"{base_url.rstrip('/')}/job/{job_path}/{build_number}/"
 
 
-async def validate_ai_provider() -> None:
-    """Validate AI provider is configured and working.
-
-    Sends a simple test prompt to verify the AI CLI is accessible.
-    Raises RuntimeError if validation fails, which will crash the container.
-
-    Set SKIP_AI_VALIDATION=1 to skip (for testing).
-    """
-    if os.getenv("SKIP_AI_VALIDATION", "").lower() in ("1", "true", "yes"):
-        logger.info("Skipping AI provider validation (SKIP_AI_VALIDATION is set)")
-        return
-
-    provider = AI_PROVIDER
-    model = ""
-    if provider == "qodo":
-        model = QODO_MODEL
-    elif provider == "cursor":
-        model = CURSOR_MODEL
-
-    provider_info = f"{provider.upper()}" + (f" ({model})" if model else "")
-
-    logger.info(f"Validating AI provider: {provider_info}")
-
-    try:
-        response = await call_ai_cli("Reply with only: OK")
-        if not response or "error" in response.lower()[:50]:
-            raise RuntimeError(f"AI provider validation failed: {response[:200]}")
-        logger.info(f"AI provider validation successful: {provider_info}")
-    except Exception as e:
-        error_msg = f"AI provider {provider_info} is not working: {e}"
-        logger.error(error_msg)
-        raise RuntimeError(error_msg) from e
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    await validate_ai_provider()
     yield
 
 
@@ -117,6 +86,33 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+def _resolve_ai_config(request: AnalyzeRequest) -> tuple[str, str]:
+    """Resolve AI provider and model from request or env var defaults.
+
+    Args:
+        request: The analysis request with optional ai_provider/ai_model overrides.
+
+    Returns:
+        Tuple of (ai_provider, ai_model).
+
+    Raises:
+        HTTPException: If provider or model is not configured.
+    """
+    ai_provider = request.ai_provider or AI_PROVIDER
+    ai_model = request.ai_model or AI_MODEL
+    if not ai_provider:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No AI provider configured. Set AI_PROVIDER env var or pass ai_provider in request body. Valid providers: {', '.join(sorted(VALID_AI_PROVIDERS))}",
+        )
+    if not ai_model:
+        raise HTTPException(
+            status_code=400,
+            detail="No AI model configured. Set AI_MODEL env var or pass ai_model in request body.",
+        )
+    return ai_provider, ai_model
 
 
 async def process_analysis_with_id(
@@ -137,7 +133,11 @@ async def process_analysis_with_id(
         f"(job_id: {job_id})"
     )
     try:
-        result = await analyze_job(request, settings, job_id)
+        ai_provider, ai_model = _resolve_ai_config(request)
+
+        result = await analyze_job(
+            request, settings, ai_provider=ai_provider, ai_model=ai_model, job_id=job_id
+        )
 
         # Save to storage
         await save_result(
@@ -148,7 +148,9 @@ async def process_analysis_with_id(
             f"(job_id: {job_id})"
         )
 
-        await deliver_results(result, request, settings)
+        await deliver_results(
+            result, request, settings, ai_provider=ai_provider, ai_model=ai_model
+        )
 
     except Exception as e:
         logger.exception(f"Analysis failed for job {job_id}")
@@ -173,7 +175,12 @@ async def analyze(
         logger.info(
             f"Sync analysis request received for {request.job_name} #{request.build_number}"
         )
-        result = await analyze_job(request, settings)
+
+        ai_provider, ai_model = _resolve_ai_config(request)
+
+        result = await analyze_job(
+            request, settings, ai_provider=ai_provider, ai_model=ai_model
+        )
         jenkins_url = build_jenkins_url(
             settings.jenkins_url, request.job_name, request.build_number
         )
@@ -185,10 +192,17 @@ async def analyze(
             f"(job_id: {result.job_id})"
         )
 
-        await deliver_results(result, request, settings)
+        await deliver_results(
+            result, request, settings, ai_provider=ai_provider, ai_model=ai_model
+        )
 
         if output == "text":
-            return PlainTextResponse(format_result_as_text(result), status_code=200)
+            return PlainTextResponse(
+                format_result_as_text(
+                    result, ai_provider=ai_provider, ai_model=ai_model
+                ),
+                status_code=200,
+            )
         return JSONResponse(content=result.model_dump(mode="json"), status_code=200)
 
     # Async mode - queue background task

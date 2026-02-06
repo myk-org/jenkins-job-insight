@@ -29,6 +29,14 @@ class AnalyzeRequest(BaseModel):
         default=None,
         description="Optional Slack webhook URL for notifications (overrides env var default)",
     )
+    ai_provider: Literal["claude", "gemini", "cursor", "qodo"] | None = Field(
+        default=None,
+        description="AI provider to use: claude, gemini, cursor, or qodo (overrides env var default)",
+    )
+    ai_model: str | None = Field(
+        default=None,
+        description="AI model to use (overrides env var default)",
+    )
 
 
 class TestFailure(BaseModel):

@@ -99,6 +99,8 @@ class TestAnalyzeEndpoint:
                         "job_name": "test",
                         "build_number": 123,
                         "tests_repo_url": "https://github.com/example/repo",
+                        "ai_provider": "claude",
+                        "ai_model": "test-model",
                     },
                 )
                 # Sync mode returns 200 (completed), not 202 (accepted)
@@ -183,6 +185,8 @@ class TestAnalyzeEndpoint:
                             "build_number": 123,
                             "tests_repo_url": "https://github.com/example/repo",
                             "callback_url": "https://callback.example.com/webhook",
+                            "ai_provider": "claude",
+                            "ai_model": "test-model",
                         },
                     )
                     assert response.status_code == 200
@@ -214,6 +218,8 @@ class TestAnalyzeEndpoint:
                             "build_number": 123,
                             "tests_repo_url": "https://github.com/example/repo",
                             "slack_webhook_url": "https://hooks.slack.com/services/xxx",
+                            "ai_provider": "claude",
+                            "ai_model": "test-model",
                         },
                     )
                     assert response.status_code == 200

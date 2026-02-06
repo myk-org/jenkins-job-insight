@@ -19,8 +19,6 @@ class Settings(BaseSettings):
     # - CLAUDE_CODE_USE_VERTEX=1
     # - CLOUD_ML_REGION=<region>
     # - ANTHROPIC_VERTEX_PROJECT_ID=<project>
-    # - ANTHROPIC_MODEL=<model>
-    # - ANTHROPIC_SMALL_FAST_MODEL=<model>
 
     # Jenkins configuration
     jenkins_url: str

@@ -53,9 +53,8 @@ Configure the service using environment variables. The service is tied to a sing
 | `JENKINS_SSL_VERIFY` | No | `true` | Enable SSL certificate verification (set to `false` for self-signed certs) |
 | **AI Provider** | | | |
 | `AI_PROVIDER` | No | `claude` | AI provider to use (`claude`, `gemini`, `cursor`, or `qodo`) |
-| `CURSOR_MODEL` | No | - | Model for Cursor Agent CLI (if not set, uses Cursor's default) |
+| `AI_MODEL` | No | - | Model for the AI provider (if not set, uses the provider's default) |
 | `QODO_API_KEY` | No | - | API key for Qodo CLI |
-| `QODO_MODEL` | No | - | Model for Qodo CLI (e.g., `claude-4.5-sonnet`, `gpt-5.2`) |
 | `AI_CLI_TIMEOUT` | No | `10` | Timeout for AI CLI calls in minutes (increase for slower models) |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | **Notifications** | | | |
@@ -120,7 +119,7 @@ AI_PROVIDER=cursor
 CURSOR_API_KEY=your-cursor-api-key
 
 # Optional: Specify the model (if not set, uses Cursor's default)
-CURSOR_MODEL=claude-3.5-sonnet
+AI_MODEL=claude-3.5-sonnet
 ```
 
 ##### Option 2: Auth File Mount (for users who authenticated via `agent login`)
@@ -130,7 +129,7 @@ AI_PROVIDER=cursor
 # No API key needed - uses mounted auth file
 
 # Optional: Specify the model (if not set, uses Cursor's default)
-CURSOR_MODEL=claude-3.5-sonnet
+AI_MODEL=claude-3.5-sonnet
 ```
 
 Mount the Cursor auth file in Docker:
@@ -153,7 +152,7 @@ AI_PROVIDER=qodo
 QODO_API_KEY=your-qodo-api-key
 
 # Optional: Specify the model (if not set, uses Qodo's default)
-QODO_MODEL=claude-4.5-sonnet
+AI_MODEL=claude-4.5-sonnet
 ```
 
 **Available models:** Run `qodo models` to see available models for your account. Model availability depends on your Qodo configuration.
@@ -224,6 +223,8 @@ The following fields can be configured via environment variables as defaults, bu
 
 | Environment Variable | Request Field | Description |
 |----------------------|---------------|-------------|
+| `AI_PROVIDER` | `ai_provider` | AI provider to use (`claude`, `gemini`, `cursor`, or `qodo`) |
+| `AI_MODEL` | `ai_model` | Model for the AI provider |
 | `TESTS_REPO_URL` | `tests_repo_url` | Repository URL for test context |
 | `CALLBACK_URL` | `callback_url` | Callback webhook URL for results |
 | `CALLBACK_HEADERS` | `callback_headers` | Headers for callback requests |
@@ -500,7 +501,7 @@ The `/data` volume mount ensures SQLite database persistence across container re
 1. **Receive request**: Accept webhook or API request containing the job name and build number
 2. **Fetch Jenkins data**: Retrieve console output and build information from the configured Jenkins instance
 3. **Clone repository** (optional): Clone the source repository for additional context
-4. **AI analysis**: Send collected data to configured AI provider (Claude, Gemini, Cursor, or Qodo)
+4. **AI analysis**: Send collected data to the configured AI provider (Claude, Gemini, Cursor, or Qodo)
 5. **Classify failures**: AI determines if each failure is a code issue or product bug
 6. **Store result**: Save analysis to SQLite database for retrieval
 7. **Deliver result**: Send to callback URL and/or Slack webhook

@@ -12,32 +12,19 @@ from jenkins_job_insight.models import AnalysisResult, ChildJobAnalysis, Failure
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
 
-def get_ai_provider_info() -> str:
+def get_ai_provider_info(ai_provider: str = "", ai_model: str = "") -> str:
     """Get the AI provider and model info for display.
+
+    Args:
+        ai_provider: AI provider name.
+        ai_model: AI model name.
 
     Returns:
         String like "Claude", "Gemini", "Cursor (claude-3.5-sonnet)", or "Qodo (gpt-5.2)"
     """
-    provider = os.getenv("AI_PROVIDER", "claude").lower()
-
-    # Get model info based on provider
-    if provider == "qodo":
-        model = os.getenv("QODO_MODEL", "")
-        if model:
-            return f"Qodo ({model})"
-        return "Qodo"
-    elif provider == "cursor":
-        model = os.getenv("CURSOR_MODEL", "")
-        if model:
-            return f"Cursor ({model})"
-        return "Cursor"
-    elif provider == "gemini":
-        return "Gemini"
-    else:  # claude
-        model = os.getenv("ANTHROPIC_MODEL", "")
-        if model:
-            return f"Claude ({model})"
-        return "Claude"
+    if ai_model:
+        return f"{ai_provider.capitalize()} ({ai_model})"
+    return ai_provider.capitalize()
 
 
 async def send_callback(
@@ -62,7 +49,9 @@ async def send_callback(
         )
 
 
-def format_slack_message(result: AnalysisResult) -> dict:
+def format_slack_message(
+    result: AnalysisResult, ai_provider: str = "", ai_model: str = ""
+) -> dict:
     """Format analysis result as a Slack Block Kit message.
 
     Uses the same content as text output to ensure consistency.
@@ -74,7 +63,9 @@ def format_slack_message(result: AnalysisResult) -> dict:
         Slack Block Kit message payload.
     """
     # Use the same text formatting as output=text
-    text_content = format_result_as_text(result)
+    text_content = format_result_as_text(
+        result, ai_provider=ai_provider, ai_model=ai_model
+    )
 
     # Split into chunks if needed (Slack has 3000 char limit per block)
     max_block_size = 2900  # Leave room for formatting
@@ -111,7 +102,9 @@ def format_slack_message(result: AnalysisResult) -> dict:
     return {"blocks": blocks}
 
 
-async def send_slack(webhook_url: str, result: AnalysisResult) -> None:
+async def send_slack(
+    webhook_url: str, result: AnalysisResult, ai_provider: str = "", ai_model: str = ""
+) -> None:
     """Send analysis result to a Slack incoming webhook.
 
     Args:
@@ -119,7 +112,7 @@ async def send_slack(webhook_url: str, result: AnalysisResult) -> None:
         result: Analysis result to send.
     """
     logger.info("Sending Slack notification")
-    message = format_slack_message(result)
+    message = format_slack_message(result, ai_provider=ai_provider, ai_model=ai_model)
     async with httpx.AsyncClient() as client:
         await client.post(webhook_url, json=message, timeout=30.0)
 
@@ -181,7 +174,9 @@ def format_child_analysis_as_text(
     return lines
 
 
-def format_result_as_text(result: AnalysisResult) -> str:
+def format_result_as_text(
+    result: AnalysisResult, ai_provider: str = "", ai_model: str = ""
+) -> str:
     """Format analysis result as human-readable text.
 
     Args:
@@ -255,6 +250,8 @@ def format_result_as_text(result: AnalysisResult) -> str:
 
     # Add AI provider info at the end
     lines.append("")
-    lines.append(f"Analyzed using {get_ai_provider_info()}")
+    lines.append(
+        f"Analyzed using {get_ai_provider_info(ai_provider=ai_provider, ai_model=ai_model)}"
+    )
 
     return "\n".join(lines)
