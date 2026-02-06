@@ -8,7 +8,8 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, NoReturn
+from collections.abc import Callable
+from typing import NoReturn
 
 import jenkins
 from fastapi import HTTPException
@@ -152,6 +153,60 @@ async def run_parallel_with_limit(
     )
 
 
+async def check_ai_cli_available(ai_provider: str, ai_model: str) -> tuple[bool, str]:
+    """Run a lightweight sanity check to verify the AI CLI is reachable.
+
+    Sends a trivial prompt ("Hi") to the configured provider and returns
+    whether the CLI responded successfully.  This should be called once
+    before spawning parallel analysis tasks so that a misconfigured
+    provider is caught early without wasting API credits.
+
+    Args:
+        ai_provider: AI provider name (e.g. "claude", "gemini").
+        ai_model: AI model identifier to pass to the provider.
+
+    Returns:
+        Tuple of (ok, error_message).  ok is True when the CLI works;
+        on failure ok is False and error_message describes the problem.
+    """
+    config = PROVIDER_CONFIG.get(ai_provider)
+    if not config:
+        return (
+            False,
+            f"Unknown AI provider: '{ai_provider}'. Valid providers: {', '.join(sorted(VALID_AI_PROVIDERS))}",
+        )
+
+    if not ai_model:
+        return (
+            False,
+            "No AI model configured. Set AI_MODEL env var or pass ai_model in request body.",
+        )
+
+    provider_info = f"{ai_provider.upper()} ({ai_model})"
+    sanity_cmd = config.build_cmd(config.binary, ai_model, "Hi", None)
+
+    try:
+        sanity_result = await asyncio.to_thread(
+            subprocess.run,
+            sanity_cmd,
+            cwd=None,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if sanity_result.returncode != 0:
+            error_detail = (
+                sanity_result.stderr
+                or sanity_result.stdout
+                or "unknown error (no output)"
+            )
+            return False, f"{provider_info} sanity check failed: {error_detail}"
+    except subprocess.TimeoutExpired:
+        return False, f"{provider_info} sanity check timed out"
+
+    return True, ""
+
+
 async def call_ai_cli(
     prompt: str, cwd: Path | None = None, ai_provider: str = "", ai_model: str = ""
 ) -> tuple[bool, str]:
@@ -173,33 +228,18 @@ async def call_ai_cli(
             f"Unknown AI provider: '{ai_provider}'. Valid providers: {', '.join(sorted(VALID_AI_PROVIDERS))}",
         )
 
+    if not ai_model:
+        return (
+            False,
+            "No AI model configured. Set AI_MODEL env var or pass ai_model in request body.",
+        )
+
     provider_info = f"{ai_provider.upper()} ({ai_model})"
     cmd = config.build_cmd(config.binary, ai_model, prompt, cwd)
 
     logger.info(f"Calling {provider_info} CLI")
 
     subprocess_cwd = None if config.uses_own_cwd else cwd
-
-    # Sanity check: run CLI with "Hi" to verify it works before the real call
-    sanity_cmd = config.build_cmd(config.binary, ai_model, "Hi", cwd)
-    try:
-        sanity_result = await asyncio.to_thread(
-            subprocess.run,
-            sanity_cmd,
-            cwd=subprocess_cwd,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if sanity_result.returncode != 0:
-            error_detail = (
-                sanity_result.stderr
-                or sanity_result.stdout
-                or "unknown error (no output)"
-            )
-            return False, f"{provider_info} sanity check failed: {error_detail}"
-    except subprocess.TimeoutExpired:
-        return False, f"{provider_info} sanity check timed out"
 
     try:
         result = await asyncio.to_thread(
@@ -863,6 +903,17 @@ async def analyze_job(
             except Exception as e:
                 logger.warning(f"Failed to clone repository: {e}")
                 repo_context = f"\nFailed to clone repo: {e}"
+
+        # Pre-flight: verify AI CLI is reachable before spawning parallel tasks
+        ok, err = await check_ai_cli_available(ai_provider, ai_model)
+        if not ok:
+            return AnalysisResult(
+                job_id=job_id,
+                jenkins_url=HttpUrl(jenkins_build_url),
+                status="failed",
+                summary=err,
+                failures=[],
+            )
 
         # Analyze failed child jobs IN PARALLEL with bounded concurrency
         if failed_child_jobs:

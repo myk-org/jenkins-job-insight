@@ -52,8 +52,8 @@ Configure the service using environment variables. The service is tied to a sing
 | `JENKINS_PASSWORD` | Yes | - | Jenkins password or API token |
 | `JENKINS_SSL_VERIFY` | No | `true` | Enable SSL certificate verification (set to `false` for self-signed certs) |
 | **AI Provider** | | | |
-| `AI_PROVIDER` | No | `claude` | AI provider to use (`claude`, `gemini`, `cursor`, or `qodo`) |
-| `AI_MODEL` | No | - | Model for the AI provider (if not set, uses the provider's default) |
+| `AI_PROVIDER` | Yes | - | AI provider to use (`claude`, `gemini`, `cursor`, or `qodo`) |
+| `AI_MODEL` | Yes | - | Model for the AI provider |
 | `QODO_API_KEY` | No | - | API key for Qodo CLI |
 | `AI_CLI_TIMEOUT` | No | `10` | Timeout for AI CLI calls in minutes (increase for slower models) |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
@@ -118,7 +118,7 @@ The CLI command is `agent`. Choose **one** of the following authentication metho
 AI_PROVIDER=cursor
 CURSOR_API_KEY=your-cursor-api-key
 
-# Optional: Specify the model (if not set, uses Cursor's default)
+# Specify the model
 AI_MODEL=claude-3.5-sonnet
 ```
 
@@ -128,7 +128,7 @@ AI_MODEL=claude-3.5-sonnet
 AI_PROVIDER=cursor
 # No API key needed - uses mounted auth file
 
-# Optional: Specify the model (if not set, uses Cursor's default)
+# Specify the model
 AI_MODEL=claude-3.5-sonnet
 ```
 
@@ -151,7 +151,7 @@ Qodo uses a custom agent configuration with MCP tool access for exploring test r
 AI_PROVIDER=qodo
 QODO_API_KEY=your-qodo-api-key
 
-# Optional: Specify the model (if not set, uses Qodo's default)
+# Specify the model
 AI_MODEL=claude-4.5-sonnet
 ```
 

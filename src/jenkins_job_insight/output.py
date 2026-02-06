@@ -22,6 +22,8 @@ def get_ai_provider_info(ai_provider: str = "", ai_model: str = "") -> str:
     Returns:
         String like "Claude", "Gemini", "Cursor (claude-3.5-sonnet)", or "Qodo (gpt-5.2)"
     """
+    if not ai_provider:
+        return "Unknown provider"
     if ai_model:
         return f"{ai_provider.capitalize()} ({ai_model})"
     return ai_provider.capitalize()

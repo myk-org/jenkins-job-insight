@@ -67,8 +67,8 @@ services:
       # AI CLI Configuration
       # ===================
       # AI_PROVIDER: claude, gemini, cursor, or qodo
-      - AI_PROVIDER=${AI_PROVIDER:-claude}
-      - AI_MODEL=${AI_MODEL:-}
+      - AI_PROVIDER=${AI_PROVIDER:?AI_PROVIDER is required}
+      - AI_MODEL=${AI_MODEL:?AI_MODEL is required}
 
       # Claude CLI - Option 1: API Key
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

@@ -8,9 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Skip AI provider validation during tests
-os.environ["SKIP_AI_VALIDATION"] = "1"
-
 from jenkins_job_insight.config import Settings
 from jenkins_job_insight.models import (
     AnalysisResult,
@@ -128,7 +125,9 @@ def mock_jenkins_client() -> MagicMock:
 def mock_ai_cli() -> Generator[MagicMock, None, None]:
     """Mock the call_ai_cli function."""
     with patch("jenkins_job_insight.analyzer.call_ai_cli") as mock:
-        mock.return_value = """=== CLASSIFICATION ===
+        mock.return_value = (
+            True,
+            """=== CLASSIFICATION ===
 CODE ISSUE
 
 === TEST ===
@@ -141,5 +140,6 @@ The test failed due to a missing configuration.
 File: tests/test_example.py
 Line: 42
 Change: Add the missing import statement
-"""
+""",
+        )
         yield mock

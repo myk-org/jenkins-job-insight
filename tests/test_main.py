@@ -18,7 +18,6 @@ def mock_settings():
         "JENKINS_USER": "testuser",
         "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
         "GEMINI_API_KEY": "test-key",  # pragma: allowlist secret
-        "SKIP_AI_VALIDATION": "1",
     }
     with patch.dict(os.environ, env, clear=True):
         # Clear the lru_cache to use fresh settings
@@ -108,6 +107,34 @@ class TestAnalyzeEndpoint:
                 data = response.json()
                 assert data["status"] == "completed"
                 assert data["job_id"] == "test-123"
+
+    def test_analyze_sync_missing_ai_provider_returns_400(self, test_client) -> None:
+        """Test that sync analyze without AI provider returns 400."""
+        response = test_client.post(
+            "/analyze?sync=true",
+            json={
+                "job_name": "test",
+                "build_number": 123,
+                "tests_repo_url": "https://github.com/example/repo",
+                "ai_model": "test-model",
+            },
+        )
+        assert response.status_code == 400
+        assert "AI provider" in response.json()["detail"]
+
+    def test_analyze_sync_missing_ai_model_returns_400(self, test_client) -> None:
+        """Test that sync analyze without AI model returns 400."""
+        response = test_client.post(
+            "/analyze?sync=true",
+            json={
+                "job_name": "test",
+                "build_number": 123,
+                "tests_repo_url": "https://github.com/example/repo",
+                "ai_provider": "claude",
+            },
+        )
+        assert response.status_code == 400
+        assert "AI model" in response.json()["detail"]
 
     def test_analyze_invalid_build_number(self, test_client) -> None:
         """Test that invalid build number returns 422."""
