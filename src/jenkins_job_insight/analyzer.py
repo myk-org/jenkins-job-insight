@@ -246,6 +246,7 @@ async def call_ai_cli(
 
     subprocess_cwd = None if config.uses_own_cwd else cwd
     stdin_input = None
+    original_prompt_bytes = len(prompt.encode("utf-8"))
 
     if config.supports_stdin:
         # Pass prompt via stdin (no ARG_MAX limit)
@@ -259,14 +260,13 @@ async def call_ai_cli(
                 f"Prompt size ({prompt_bytes} bytes) exceeds safe CLI argument limit "
                 f"({MAX_CLI_ARG_BYTES} bytes). Truncating for {provider_info}."
             )
-            half = MAX_CLI_ARG_BYTES // 2
+            marker = "\n\n... [TRUNCATED: middle removed due to CLI argument size limit] ...\n\n"
+            marker_bytes = len(marker.encode("utf-8"))
+            budget = MAX_CLI_ARG_BYTES - marker_bytes
+            half = budget // 2
             head = prompt_encoded[:half].decode("utf-8", errors="ignore")
             tail = prompt_encoded[-half:].decode("utf-8", errors="ignore")
-            prompt = (
-                head
-                + f"\n\n... [TRUNCATED: {prompt_bytes - MAX_CLI_ARG_BYTES} bytes removed"
-                f" due to CLI argument size limit] ...\n\n" + tail
-            )
+            prompt = head + marker + tail
         cmd.append(prompt)
 
     logger.info(f"Calling {provider_info} CLI")
@@ -291,7 +291,7 @@ async def call_ai_cli(
             return (
                 False,
                 f"{provider_info} CLI error: Prompt too large for command-line argument "
-                f"({len(prompt)} chars). This provider does not support stdin input.",
+                f"({original_prompt_bytes} bytes). This provider does not support stdin input.",
             )
         raise
 
