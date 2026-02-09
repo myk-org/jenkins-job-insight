@@ -20,7 +20,7 @@ def get_ai_provider_info(ai_provider: str = "", ai_model: str = "") -> str:
         ai_model: AI model name.
 
     Returns:
-        String like "Claude", "Gemini", "Cursor (claude-3.5-sonnet)", or "Qodo (gpt-5.2)"
+        String like "Claude", "Gemini", or "Cursor (claude-3.5-sonnet)"
     """
     if not ai_provider:
         return "Unknown provider"

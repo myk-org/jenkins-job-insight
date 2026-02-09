@@ -44,9 +44,6 @@ COPY --from=builder /app/pyproject.toml /app/uv.lock ./
 # Copy source code
 COPY --from=builder /app/src /app/src
 
-# Copy Qodo agent configuration
-COPY qodo/ /app/qodo/
-
 # Copy uv for runtime
 COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /usr/local/bin/uv
 
@@ -73,9 +70,6 @@ RUN /bin/bash -o pipefail -c "curl -fsSL https://cursor.com/install | bash"
 RUN mkdir -p /home/appuser/.npm-global \
     && npm config set prefix '/home/appuser/.npm-global' \
     && npm install -g @google/gemini-cli@0.25.0
-
-# Install Qodo CLI
-RUN npm install -g @qodo/command
 
 # Switch back to root to fix permissions for OpenShift compatibility
 USER root

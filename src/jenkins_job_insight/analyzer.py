@@ -81,20 +81,12 @@ def _build_cursor_cmd(binary: str, model: str, cwd: Path | None) -> list[str]:
     return cmd
 
 
-def _build_qodo_cmd(binary: str, model: str, cwd: Path | None) -> list[str]:
-    cmd = [binary, "-y", "-q", "-m", model, "--agent-file=/app/qodo/agent.toml"]
-    if cwd:
-        cmd.extend(["--dir", str(cwd)])
-    return cmd
-
-
 PROVIDER_CONFIG: dict[str, ProviderConfig] = {
     "claude": ProviderConfig(binary="claude", build_cmd=_build_claude_cmd),
     "gemini": ProviderConfig(binary="gemini", build_cmd=_build_gemini_cmd),
     "cursor": ProviderConfig(
         binary="agent", uses_own_cwd=True, build_cmd=_build_cursor_cmd
     ),
-    "qodo": ProviderConfig(binary="qodo", uses_own_cwd=True, build_cmd=_build_qodo_cmd),
 }
 
 VALID_AI_PROVIDERS = set(PROVIDER_CONFIG.keys())
@@ -201,7 +193,7 @@ async def check_ai_cli_available(ai_provider: str, ai_model: str) -> tuple[bool,
 async def call_ai_cli(
     prompt: str, cwd: Path | None = None, ai_provider: str = "", ai_model: str = ""
 ) -> tuple[bool, str]:
-    """Call AI CLI (Claude, Gemini, Cursor, or Qodo) with given prompt.
+    """Call AI CLI (Claude, Gemini, or Cursor) with given prompt.
 
     Args:
         prompt: The prompt to send to the AI CLI.

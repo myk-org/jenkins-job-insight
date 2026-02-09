@@ -1,5 +1,0 @@
-version = "1.0"
-
-instructions = "You are a test failure analyst. Follow the instructions in the prompt exactly."
-tools = ["filesystem", "git", "shell"]
-execution_strategy = "plan"

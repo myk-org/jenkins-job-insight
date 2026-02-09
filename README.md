@@ -15,7 +15,7 @@ For each failure, the service provides detailed explanations and either fix sugg
 
 - **Async and sync analysis modes**: Submit jobs for background processing or wait for immediate results
 - **AI-powered classification**: Distinguishes between test code issues and product bugs
-- **Multiple AI providers**: Supports Claude CLI, Gemini CLI, Cursor Agent CLI, and Qodo CLI
+- **Multiple AI providers**: Supports Claude CLI, Gemini CLI, and Cursor Agent CLI
 - **SQLite result storage**: Persists analysis results for later retrieval
 - **Callback webhooks**: Delivers results to your specified endpoint with custom headers
 - **Slack notifications**: Sends formatted analysis summaries to Slack channels
@@ -53,9 +53,8 @@ Configure the service using environment variables. The service is tied to a sing
 | `JENKINS_PASSWORD` | Yes | - | Jenkins password or API token |
 | `JENKINS_SSL_VERIFY` | No | `true` | Enable SSL certificate verification (set to `false` for self-signed certs) |
 | **AI Provider** | | | |
-| `AI_PROVIDER` | Yes | - | AI provider to use (`claude`, `gemini`, `cursor`, or `qodo`) |
+| `AI_PROVIDER` | Yes | - | AI provider to use (`claude`, `gemini`, or `cursor`) |
 | `AI_MODEL` | Yes | - | Model for the AI provider |
-| `QODO_API_KEY` | No | - | API key for Qodo CLI |
 | `AI_CLI_TIMEOUT` | No | `10` | Timeout for AI CLI calls in minutes (increase for slower models) |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | **Notifications** | | | |
@@ -142,27 +141,6 @@ volumes:
 
 **Note:** You need only ONE of these methods, not both. Use the API key method for simplicity, or the auth file mount if you have already authenticated via `agent login` on your host machine.
 
-#### Qodo CLI
-
-Qodo uses a custom agent configuration with MCP tool access for exploring test repositories.
-
-##### API Key Authentication
-
-```bash
-AI_PROVIDER=qodo
-QODO_API_KEY=your-qodo-api-key
-
-# Specify the model
-AI_MODEL=claude-4.5-sonnet
-```
-
-**Available models:** Run `qodo models` to see available models for your account. Model availability depends on your Qodo configuration.
-
-**Note:** Qodo uses a custom agent configuration (`qodo/agent.toml`) that enables:
-- Multi-step reasoning with `execution_strategy = "plan"`
-- MCP tool access (filesystem, git, shell) for exploring cloned test repositories
-- Consistent analysis behavior across runs
-
 ### Adding a New AI CLI Provider
 
 The CLI-based architecture makes it easy to add new AI providers. To add a new CLI:
@@ -182,7 +160,7 @@ PROVIDER_CONFIG["openai"] = ProviderConfig(
 )
 ```
 
-If the CLI manages its own working directory (like Cursor or Qodo), set `uses_own_cwd=True`:
+If the CLI manages its own working directory (like Cursor), set `uses_own_cwd=True`:
 
 ```python
 PROVIDER_CONFIG["openai"] = ProviderConfig(
@@ -236,7 +214,7 @@ All configuration fields can be overridden per-request in the webhook payload. R
 
 | Environment Variable | Request Field | Required | Description |
 |----------------------|---------------|----------|-------------|
-| `AI_PROVIDER` | `ai_provider` | Yes | AI provider to use (`claude`, `gemini`, `cursor`, or `qodo`) |
+| `AI_PROVIDER` | `ai_provider` | Yes | AI provider to use (`claude`, `gemini`, or `cursor`) |
 | `AI_MODEL` | `ai_model` | Yes | Model for the AI provider |
 | `TESTS_REPO_URL` | `tests_repo_url` | No | Repository URL for test context |
 | `CALLBACK_URL` | `callback_url` | No | Callback webhook URL for results |
@@ -520,7 +498,7 @@ The `/data` volume mount ensures SQLite database persistence across container re
 1. **Receive request**: Accept webhook or API request containing the job name and build number
 2. **Fetch Jenkins data**: Retrieve console output and build information from the configured Jenkins instance
 3. **Clone repository** (optional): Clone the source repository for additional context
-4. **AI analysis**: Send collected data to the configured AI provider (Claude, Gemini, Cursor, or Qodo)
+4. **AI analysis**: Send collected data to the configured AI provider (Claude, Gemini, or Cursor)
 5. **Classify failures**: AI determines if each failure is a code issue or product bug
 6. **Store result**: Save analysis to SQLite database for retrieval
 7. **Deliver result**: Send to callback URL and/or Slack webhook
