@@ -257,8 +257,11 @@ async def call_ai_cli(
         prompt_bytes = len(prompt_encoded)
         if prompt_bytes > MAX_CLI_ARG_BYTES:
             logger.warning(
-                f"Prompt size ({prompt_bytes} bytes) exceeds safe CLI argument limit "
-                f"({MAX_CLI_ARG_BYTES} bytes). Truncating for {provider_info}."
+                "Prompt size (%d bytes) exceeds safe CLI argument limit "
+                "(%d bytes). Truncating for %s.",
+                prompt_bytes,
+                MAX_CLI_ARG_BYTES,
+                provider_info,
             )
             marker = "\n\n... [TRUNCATED: middle removed due to CLI argument size limit] ...\n\n"
             marker_bytes = len(marker.encode("utf-8"))
@@ -269,7 +272,7 @@ async def call_ai_cli(
             prompt = head + marker + tail
         cmd.append(prompt)
 
-    logger.info(f"Calling {provider_info} CLI")
+    logger.info("Calling %s CLI", provider_info)
 
     try:
         result = await asyncio.to_thread(
