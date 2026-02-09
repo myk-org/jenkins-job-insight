@@ -77,7 +77,7 @@ def _build_claude_cmd(binary: str, model: str, _cwd: Path | None) -> list[str]:
 
 
 def _build_gemini_cmd(binary: str, model: str, _cwd: Path | None) -> list[str]:
-    return [binary, "--model", model, "--yolo", "-p"]
+    return [binary, "--model", model, "--yolo", "-p", ""]
 
 
 def _build_cursor_cmd(binary: str, model: str, cwd: Path | None) -> list[str]:
