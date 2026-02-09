@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import errno
 import hashlib
 import os
 import re
@@ -65,11 +64,6 @@ class ProviderConfig:
     binary: str
     build_cmd: Callable[[str, str, Path | None], list[str]]
     uses_own_cwd: bool = False
-    supports_stdin: bool = False
-
-
-# Max safe size for CLI argument (leave room for env vars and other args)
-MAX_CLI_ARG_BYTES = 1_500_000  # 1.5 MB, well under 2 MB ARG_MAX
 
 
 def _build_claude_cmd(binary: str, model: str, _cwd: Path | None) -> list[str]:
@@ -95,12 +89,8 @@ def _build_qodo_cmd(binary: str, model: str, cwd: Path | None) -> list[str]:
 
 
 PROVIDER_CONFIG: dict[str, ProviderConfig] = {
-    "claude": ProviderConfig(
-        binary="claude", build_cmd=_build_claude_cmd, supports_stdin=True
-    ),
-    "gemini": ProviderConfig(
-        binary="gemini", build_cmd=_build_gemini_cmd, supports_stdin=True
-    ),
+    "claude": ProviderConfig(binary="claude", build_cmd=_build_claude_cmd),
+    "gemini": ProviderConfig(binary="gemini", build_cmd=_build_gemini_cmd),
     "cursor": ProviderConfig(
         binary="agent", uses_own_cwd=True, build_cmd=_build_cursor_cmd
     ),
@@ -185,12 +175,6 @@ async def check_ai_cli_available(ai_provider: str, ai_model: str) -> tuple[bool,
     provider_info = f"{ai_provider.upper()} ({ai_model})"
     sanity_cmd = config.build_cmd(config.binary, ai_model, None)
 
-    stdin_input = None
-    if config.supports_stdin:
-        stdin_input = "Hi"
-    else:
-        sanity_cmd.append("Hi")
-
     try:
         sanity_result = await asyncio.to_thread(
             subprocess.run,
@@ -199,7 +183,7 @@ async def check_ai_cli_available(ai_provider: str, ai_model: str) -> tuple[bool,
             capture_output=True,
             text=True,
             timeout=60,
-            input=stdin_input,
+            input="Hi",
         )
         if sanity_result.returncode != 0:
             error_detail = (
@@ -245,32 +229,6 @@ async def call_ai_cli(
     cmd = config.build_cmd(config.binary, ai_model, cwd)
 
     subprocess_cwd = None if config.uses_own_cwd else cwd
-    stdin_input = None
-    original_prompt_bytes = len(prompt.encode("utf-8"))
-
-    if config.supports_stdin:
-        # Pass prompt via stdin (no ARG_MAX limit)
-        stdin_input = prompt
-    else:
-        # Append prompt as positional arg with safety truncation
-        prompt_encoded = prompt.encode("utf-8")
-        prompt_bytes = len(prompt_encoded)
-        if prompt_bytes > MAX_CLI_ARG_BYTES:
-            logger.warning(
-                "Prompt size (%d bytes) exceeds safe CLI argument limit "
-                "(%d bytes). Truncating for %s.",
-                prompt_bytes,
-                MAX_CLI_ARG_BYTES,
-                provider_info,
-            )
-            marker = "\n\n... [TRUNCATED: middle removed due to CLI argument size limit] ...\n\n"
-            marker_bytes = len(marker.encode("utf-8"))
-            budget = MAX_CLI_ARG_BYTES - marker_bytes
-            half = budget // 2
-            head = prompt_encoded[:half].decode("utf-8", errors="ignore")
-            tail = prompt_encoded[-half:].decode("utf-8", errors="ignore")
-            prompt = head + marker + tail
-        cmd.append(prompt)
 
     logger.info("Calling %s CLI", provider_info)
 
@@ -282,21 +240,13 @@ async def call_ai_cli(
             capture_output=True,
             text=True,
             timeout=AI_CLI_TIMEOUT * 60,  # Convert minutes to seconds
-            input=stdin_input,
+            input=prompt,
         )
     except subprocess.TimeoutExpired:
         return (
             False,
             f"{provider_info} CLI error: Analysis timed out after {AI_CLI_TIMEOUT} minutes",
         )
-    except OSError as e:
-        if e.errno == errno.E2BIG:
-            return (
-                False,
-                f"{provider_info} CLI error: Prompt too large for command-line argument "
-                f"({original_prompt_bytes} bytes). This provider does not support stdin input.",
-            )
-        raise
 
     if result.returncode != 0:
         error_detail = result.stderr or result.stdout or "unknown error (no output)"
