@@ -5,128 +5,110 @@ from unittest.mock import AsyncMock, patch
 from jenkins_job_insight.models import (
     AnalysisResult,
     FailureAnalysis,
+    ResultMessage,
 )
 from jenkins_job_insight.output import (
+    _chunk_text,
+    build_result_messages,
     format_slack_message,
     send_callback,
     send_slack,
+    MAX_MESSAGE_TEXT,
 )
 
 
-class TestFormatSlackMessage:
-    """Tests for the format_slack_message function."""
+class TestChunkText:
+    """Tests for the _chunk_text helper function."""
 
-    def test_format_slack_message_basic_structure(
+    def test_short_text_returns_single_message(self) -> None:
+        """Test that text under max_size returns a single ResultMessage."""
+        result = _chunk_text("short text", "summary")
+        assert len(result) == 1
+        assert result[0].type == "summary"
+        assert result[0].text == "short text"
+
+    def test_long_text_splits_on_line_boundaries(self) -> None:
+        """Test that long text is split on line boundaries."""
+        lines = [f"Line {i}: " + "x" * 50 for i in range(100)]
+        text = "\n".join(lines)
+        result = _chunk_text(text, "failure_detail", max_size=500)
+
+        assert len(result) > 1
+        for msg in result:
+            assert msg.type == "failure_detail"
+            assert len(msg.text) <= 500
+
+    def test_preserves_message_type(self) -> None:
+        """Test that message type is preserved across all chunks."""
+        text = "\n".join(["x" * 100] * 50)
+        result = _chunk_text(text, "child_job", max_size=500)
+
+        for msg in result:
+            assert msg.type == "child_job"
+
+    def test_exact_boundary_text(self) -> None:
+        """Test text exactly at max_size returns single message."""
+        text = "x" * MAX_MESSAGE_TEXT
+        result = _chunk_text(text, "summary")
+        assert len(result) == 1
+
+    def test_single_line_exceeding_max_size(self) -> None:
+        """Test that a single line exceeding max_size produces one oversized chunk.
+
+        The _chunk_text function splits on line boundaries. When a single line
+        exceeds max_size, it cannot be split further and is emitted as-is.
+        The downstream format_slack_message handles block-level splitting.
+        """
+        text = "x" * 1000
+        result = _chunk_text(text, "summary", max_size=500)
+        # Single line cannot be split on line boundaries
+        assert len(result) == 1
+        assert result[0].text == text
+
+
+class TestBuildResultMessages:
+    """Tests for the build_result_messages function."""
+
+    def test_summary_always_present(
         self, sample_analysis_result: AnalysisResult
     ) -> None:
-        """Test that format_slack_message returns correct structure."""
-        message = format_slack_message(sample_analysis_result)
+        """Test that summary message is always included."""
+        messages = build_result_messages(sample_analysis_result)
+        summary_msgs = [m for m in messages if m.type == "summary"]
+        assert len(summary_msgs) >= 1
 
-        assert "blocks" in message
-        assert isinstance(message["blocks"], list)
-        assert len(message["blocks"]) > 0
-
-    def test_format_slack_message_header(
+    def test_summary_contains_key_elements(
         self, sample_analysis_result: AnalysisResult
     ) -> None:
-        """Test that message includes header block."""
-        message = format_slack_message(sample_analysis_result)
+        """Test that summary message contains key elements."""
+        messages = build_result_messages(sample_analysis_result)
+        summary_msgs = [m for m in messages if m.type == "summary"]
+        summary_text = "\n".join(m.text for m in summary_msgs)
 
-        header = message["blocks"][0]
-        assert header["type"] == "header"
-        assert header["text"]["type"] == "plain_text"
-        assert "Jenkins Analysis Complete" in header["text"]["text"]
+        assert str(sample_analysis_result.jenkins_url) in summary_text
+        assert sample_analysis_result.status in summary_text
+        assert sample_analysis_result.job_id in summary_text
+        assert sample_analysis_result.summary in summary_text
 
-    def test_format_slack_message_contains_key_elements(
+    def test_failure_detail_messages(
         self, sample_analysis_result: AnalysisResult
     ) -> None:
-        """Test that Slack message contains key elements from the analysis result."""
-        message = format_slack_message(sample_analysis_result)
+        """Test that failure detail messages are created."""
+        messages = build_result_messages(sample_analysis_result)
+        failure_msgs = [m for m in messages if m.type == "failure_detail"]
+        assert len(failure_msgs) >= 1
 
-        # Combine all section block text content
-        combined_text = ""
-        for block in message["blocks"]:
-            if block["type"] == "section":
-                # Remove code block markers
-                block_text = block["text"]["text"].strip("`")
-                combined_text += block_text
-
-        # The slack message should contain key elements from the result
-        assert str(sample_analysis_result.jenkins_url) in combined_text
-        assert sample_analysis_result.summary in combined_text
-        assert sample_analysis_result.status in combined_text
-        assert sample_analysis_result.job_id in combined_text
-
-    def test_format_slack_message_includes_job_url(
+    def test_failure_detail_contains_analysis(
         self, sample_analysis_result: AnalysisResult
     ) -> None:
-        """Test that message includes job URL."""
-        message = format_slack_message(sample_analysis_result)
+        """Test that failure detail contains PRODUCT BUG analysis."""
+        messages = build_result_messages(sample_analysis_result)
+        failure_msgs = [m for m in messages if m.type == "failure_detail"]
+        all_failure_text = "\n".join(m.text for m in failure_msgs)
+        assert "PRODUCT BUG" in all_failure_text
 
-        # Find section with job URL
-        section = message["blocks"][1]
-        assert section["type"] == "section"
-        assert str(sample_analysis_result.jenkins_url) in section["text"]["text"]
-
-    def test_format_slack_message_includes_summary(
-        self, sample_analysis_result: AnalysisResult
-    ) -> None:
-        """Test that message includes summary."""
-        message = format_slack_message(sample_analysis_result)
-
-        # Find section with summary - all text content is in section blocks
-        all_text = ""
-        for block in message["blocks"]:
-            if block["type"] == "section":
-                all_text += block["text"]["text"]
-
-        assert sample_analysis_result.summary in all_text
-
-    def test_format_slack_message_product_bug_label(
-        self, sample_analysis_result: AnalysisResult
-    ) -> None:
-        """Test that analysis with PRODUCT BUG is included in message."""
-        message = format_slack_message(sample_analysis_result)
-
-        # Find section with failure - all content is in code blocks
-        all_text = ""
-        for block in message["blocks"]:
-            if block["type"] == "section":
-                all_text += block["text"]["text"]
-
-        assert "PRODUCT BUG" in all_text
-
-    def test_format_slack_message_code_issue_label(self) -> None:
-        """Test that analysis with CODE ISSUE is included in message."""
-        failure = FailureAnalysis(
-            test_name="test_example",
-            error="AssertionError",
-            analysis="""=== CLASSIFICATION ===
-CODE ISSUE
-
-=== ANALYSIS ===
-Test issue
-""",
-        )
-        result = AnalysisResult(
-            job_id="test-123",
-            jenkins_url="https://jenkins.example.com/job/test/1/",
-            status="completed",
-            summary="1 code issue",
-            failures=[failure],
-        )
-
-        message = format_slack_message(result)
-
-        all_text = ""
-        for block in message["blocks"]:
-            if block["type"] == "section":
-                all_text += block["text"]["text"]
-
-        assert "CODE ISSUE" in all_text
-
-    def test_format_slack_message_no_failures(self) -> None:
-        """Test message formatting with no failures."""
+    def test_no_failures_no_failure_messages(self) -> None:
+        """Test that no failure messages when there are no failures."""
         result = AnalysisResult(
             job_id="test-123",
             jenkins_url="https://jenkins.example.com/job/test/1/",
@@ -134,25 +116,17 @@ Test issue
             summary="No failures",
             failures=[],
         )
+        messages = build_result_messages(result)
+        failure_msgs = [m for m in messages if m.type == "failure_detail"]
+        assert len(failure_msgs) == 0
 
-        message = format_slack_message(result)
-        # Should have header + at least one section block with the text content
-        assert len(message["blocks"]) >= 2
-        assert message["blocks"][0]["type"] == "header"
-        assert message["blocks"][1]["type"] == "section"
-
-    def test_format_slack_message_multiple_failures(self) -> None:
-        """Test message formatting with multiple failures."""
+    def test_multiple_failure_groups(self) -> None:
+        """Test that each unique failure group gets its own message."""
         failures = [
             FailureAnalysis(
                 test_name=f"test_{i}",
                 error=f"Error {i}",
-                analysis=f"""=== CLASSIFICATION ===
-{"CODE ISSUE" if i % 2 == 0 else "PRODUCT BUG"}
-
-=== ANALYSIS ===
-Explanation {i}
-""",
+                analysis=f"Analysis {i}",
             )
             for i in range(3)
         ]
@@ -163,37 +137,153 @@ Explanation {i}
             summary="3 failures",
             failures=failures,
         )
+        messages = build_result_messages(result)
+        failure_msgs = [m for m in messages if m.type == "failure_detail"]
+        # 3 unique analyses should produce 3 failure messages
+        assert len(failure_msgs) == 3
 
-        message = format_slack_message(result)
+    def test_deduplicated_failures_grouped(self) -> None:
+        """Test that failures with same analysis are grouped together."""
+        failures = [
+            FailureAnalysis(
+                test_name=f"test_{i}",
+                error="Same error",
+                analysis="Same analysis text",
+            )
+            for i in range(3)
+        ]
+        result = AnalysisResult(
+            job_id="test-123",
+            jenkins_url="https://jenkins.example.com/job/test/1/",
+            status="completed",
+            summary="3 failures, 1 group",
+            failures=failures,
+        )
+        messages = build_result_messages(result)
+        failure_msgs = [m for m in messages if m.type == "failure_detail"]
+        # All 3 share the same analysis, so 1 group
+        assert len(failure_msgs) == 1
+        assert "3 test(s) with same error" in failure_msgs[0].text
 
-        # Collect all text content
+    def test_ai_provider_info_in_summary(self) -> None:
+        """Test that AI provider info is included in summary."""
+        result = AnalysisResult(
+            job_id="test-123",
+            jenkins_url="https://jenkins.example.com/job/test/1/",
+            status="completed",
+            summary="No failures",
+            failures=[],
+        )
+        messages = build_result_messages(result, ai_provider="claude", ai_model="opus")
+        summary_msgs = [m for m in messages if m.type == "summary"]
+        summary_text = "\n".join(m.text for m in summary_msgs)
+        assert "Claude (opus)" in summary_text
+
+    def test_child_job_messages(self) -> None:
+        """Test that child job analyses produce child_job type messages."""
+        from jenkins_job_insight.models import ChildJobAnalysis
+
+        child = ChildJobAnalysis(
+            job_name="child-job",
+            build_number=42,
+            jenkins_url="https://jenkins.example.com/job/child-job/42/",
+            summary="2 failure(s) analyzed",
+            failures=[
+                FailureAnalysis(
+                    test_name="test_child_1",
+                    error="Some error",
+                    analysis="Analysis of child failure",
+                ),
+            ],
+        )
+        result = AnalysisResult(
+            job_id="test-123",
+            jenkins_url="https://jenkins.example.com/job/test/1/",
+            status="completed",
+            summary="Pipeline failed",
+            failures=[],
+            child_job_analyses=[child],
+        )
+        messages = build_result_messages(result)
+        child_msgs = [m for m in messages if m.type == "child_job"]
+        assert len(child_msgs) >= 1
+        child_text = "\n".join(m.text for m in child_msgs)
+        assert "child-job" in child_text
+        assert "Analysis of child failure" in child_text
+
+
+class TestFormatResultMessage:
+    """Tests for the format_slack_message function."""
+
+    def test_format_slack_message_basic_structure(self) -> None:
+        """Test that format_slack_message returns correct structure."""
+        slack_msg = ResultMessage(type="summary", text="Test content")
+        message = format_slack_message(slack_msg)
+
+        assert "blocks" in message
+        assert isinstance(message["blocks"], list)
+        assert len(message["blocks"]) > 0
+
+    def test_format_slack_message_summary_header(self) -> None:
+        """Test that summary message has correct header."""
+        slack_msg = ResultMessage(type="summary", text="Test content")
+        message = format_slack_message(slack_msg)
+
+        header = message["blocks"][0]
+        assert header["type"] == "header"
+        assert header["text"]["type"] == "plain_text"
+        assert "Jenkins Analysis Summary" in header["text"]["text"]
+
+    def test_format_slack_message_failure_detail_header(self) -> None:
+        """Test that failure_detail message has correct header."""
+        slack_msg = ResultMessage(type="failure_detail", text="Test content")
+        message = format_slack_message(slack_msg)
+
+        header = message["blocks"][0]
+        assert "Failure Details" in header["text"]["text"]
+
+    def test_format_slack_message_child_job_header(self) -> None:
+        """Test that child_job message has correct header."""
+        slack_msg = ResultMessage(type="child_job", text="Test content")
+        message = format_slack_message(slack_msg)
+
+        header = message["blocks"][0]
+        assert "Child Job Analysis" in header["text"]["text"]
+
+    def test_format_slack_message_contains_text(self) -> None:
+        """Test that Slack message contains the provided text."""
+        slack_msg = ResultMessage(
+            type="summary",
+            text="Job URL: https://jenkins.example.com/job/my-job/123/\nStatus: completed",
+        )
+        message = format_slack_message(slack_msg)
+
         all_text = ""
         for block in message["blocks"]:
             if block["type"] == "section":
                 all_text += block["text"]["text"]
 
-        # All failures should be present
-        for i in range(3):
-            assert f"test_{i}" in all_text
-            assert f"Error {i}" in all_text
+        assert "https://jenkins.example.com/job/my-job/123/" in all_text
+        assert "completed" in all_text
 
     def test_format_slack_message_uses_code_blocks(self) -> None:
         """Test that Slack message uses code blocks for content."""
-        result = AnalysisResult(
-            job_id="test-123",
-            jenkins_url="https://jenkins.example.com/job/test/1/",
-            status="completed",
-            summary="Test summary",
-            failures=[],
-        )
+        slack_msg = ResultMessage(type="summary", text="Test summary")
+        message = format_slack_message(slack_msg)
 
-        message = format_slack_message(result)
-
-        # Section blocks should contain code-formatted text
         for block in message["blocks"]:
             if block["type"] == "section":
                 assert block["text"]["text"].startswith("```")
                 assert block["text"]["text"].endswith("```")
+
+    def test_format_slack_message_header_and_section(self) -> None:
+        """Test message has header + at least one section block."""
+        slack_msg = ResultMessage(type="summary", text="No failures")
+        message = format_slack_message(slack_msg)
+
+        assert len(message["blocks"]) >= 2
+        assert message["blocks"][0]["type"] == "header"
+        assert message["blocks"][1]["type"] == "section"
 
 
 class TestSendCallback:
@@ -276,6 +366,7 @@ class TestSendSlack:
         self, sample_analysis_result: AnalysisResult
     ) -> None:
         """Test that send_slack posts formatted message."""
+        sample_analysis_result.messages = build_result_messages(sample_analysis_result)
         with patch("jenkins_job_insight.output.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -285,16 +376,17 @@ class TestSendSlack:
                 sample_analysis_result,
             )
 
-            mock_instance.post.assert_called_once()
-            call_args = mock_instance.post.call_args
-            assert call_args[0][0] == "https://hooks.slack.com/services/xxx"
-            # Should post formatted message with blocks
-            assert "blocks" in call_args[1]["json"]
+            assert mock_instance.post.call_count == len(sample_analysis_result.messages)
+            # Each call should post formatted message with blocks
+            for call in mock_instance.post.call_args_list:
+                assert call[0][0] == "https://hooks.slack.com/services/xxx"
+                assert "blocks" in call[1]["json"]
 
     async def test_send_slack_timeout(
         self, sample_analysis_result: AnalysisResult
     ) -> None:
         """Test that send_slack sets timeout."""
+        sample_analysis_result.messages = build_result_messages(sample_analysis_result)
         with patch("jenkins_job_insight.output.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -304,5 +396,55 @@ class TestSendSlack:
                 sample_analysis_result,
             )
 
-            call_args = mock_instance.post.call_args
-            assert call_args[1]["timeout"] == 30.0
+            for call in mock_instance.post.call_args_list:
+                assert call[1]["timeout"] == 30.0
+
+    async def test_send_slack_no_messages_warns(self) -> None:
+        """Test that send_slack warns when no messages are set."""
+        result = AnalysisResult(
+            job_id="test-123",
+            jenkins_url="https://jenkins.example.com/job/test/1/",
+            status="completed",
+            summary="No failures",
+            failures=[],
+        )
+        with patch("jenkins_job_insight.output.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            await send_slack(
+                "https://hooks.slack.com/services/xxx",
+                result,
+            )
+
+            mock_instance.post.assert_not_called()
+
+    async def test_send_slack_continues_on_individual_failure(self) -> None:
+        """Test that send_slack continues sending remaining messages when one fails."""
+        result = AnalysisResult(
+            job_id="test-123",
+            jenkins_url="https://jenkins.example.com/job/test/1/",
+            status="completed",
+            summary="Test",
+            failures=[],
+            messages=[
+                ResultMessage(type="summary", text="Message 1"),
+                ResultMessage(type="failure_detail", text="Message 2"),
+                ResultMessage(type="child_job", text="Message 3"),
+            ],
+        )
+        with patch("jenkins_job_insight.output.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_client.return_value.__aenter__.return_value = mock_instance
+
+            # Second call raises, first and third should still be attempted
+            mock_instance.post.side_effect = [
+                None,  # first succeeds
+                Exception("network error"),  # second fails
+                None,  # third succeeds
+            ]
+
+            await send_slack("https://hooks.slack.com/services/xxx", result)
+
+            # All 3 messages should have been attempted
+            assert mock_instance.post.call_count == 3

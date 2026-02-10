@@ -26,6 +26,7 @@ from jenkins_job_insight.models import (
     FailureAnalysis,
     TestFailure,
 )
+from jenkins_job_insight.output import build_result_messages
 from jenkins_job_insight.repository import RepositoryManager
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -62,39 +63,22 @@ class ProviderConfig:
     """Configuration for an AI CLI provider."""
 
     binary: str
-    build_cmd: Callable[[str, str, str, Path | None], list[str]]
+    build_cmd: Callable[[str, str, Path | None], list[str]]
     uses_own_cwd: bool = False
 
 
-def _build_claude_cmd(
-    binary: str, model: str, prompt: str, _cwd: Path | None
-) -> list[str]:
-    return [binary, "--model", model, "--dangerously-skip-permissions", "-p", prompt]
+def _build_claude_cmd(binary: str, model: str, _cwd: Path | None) -> list[str]:
+    return [binary, "--model", model, "--dangerously-skip-permissions", "-p"]
 
 
-def _build_gemini_cmd(
-    binary: str, model: str, prompt: str, _cwd: Path | None
-) -> list[str]:
-    return [binary, "--model", model, "--yolo", prompt]
+def _build_gemini_cmd(binary: str, model: str, _cwd: Path | None) -> list[str]:
+    return [binary, "--model", model, "--yolo"]
 
 
-def _build_cursor_cmd(
-    binary: str, model: str, prompt: str, cwd: Path | None
-) -> list[str]:
-    cmd = [binary, "--force", "--model", model]
+def _build_cursor_cmd(binary: str, model: str, cwd: Path | None) -> list[str]:
+    cmd = [binary, "--force", "--model", model, "--print"]
     if cwd:
         cmd.extend(["--workspace", str(cwd)])
-    cmd.extend(["chat", prompt])
-    return cmd
-
-
-def _build_qodo_cmd(
-    binary: str, model: str, prompt: str, cwd: Path | None
-) -> list[str]:
-    cmd = [binary, "-y", "-q", "-m", model, "--agent-file=/app/qodo/agent.toml"]
-    if cwd:
-        cmd.extend(["--dir", str(cwd)])
-    cmd.append(prompt)
     return cmd
 
 
@@ -104,7 +88,6 @@ PROVIDER_CONFIG: dict[str, ProviderConfig] = {
     "cursor": ProviderConfig(
         binary="agent", uses_own_cwd=True, build_cmd=_build_cursor_cmd
     ),
-    "qodo": ProviderConfig(binary="qodo", uses_own_cwd=True, build_cmd=_build_qodo_cmd),
 }
 
 VALID_AI_PROVIDERS = set(PROVIDER_CONFIG.keys())
@@ -183,7 +166,7 @@ async def check_ai_cli_available(ai_provider: str, ai_model: str) -> tuple[bool,
         )
 
     provider_info = f"{ai_provider.upper()} ({ai_model})"
-    sanity_cmd = config.build_cmd(config.binary, ai_model, "Hi", None)
+    sanity_cmd = config.build_cmd(config.binary, ai_model, None)
 
     try:
         sanity_result = await asyncio.to_thread(
@@ -193,6 +176,7 @@ async def check_ai_cli_available(ai_provider: str, ai_model: str) -> tuple[bool,
             capture_output=True,
             text=True,
             timeout=60,
+            input="Hi",
         )
         if sanity_result.returncode != 0:
             error_detail = (
@@ -210,7 +194,7 @@ async def check_ai_cli_available(ai_provider: str, ai_model: str) -> tuple[bool,
 async def call_ai_cli(
     prompt: str, cwd: Path | None = None, ai_provider: str = "", ai_model: str = ""
 ) -> tuple[bool, str]:
-    """Call AI CLI (Claude, Gemini, Cursor, or Qodo) with given prompt.
+    """Call AI CLI (Claude, Gemini, or Cursor) with given prompt.
 
     Args:
         prompt: The prompt to send to the AI CLI.
@@ -235,11 +219,11 @@ async def call_ai_cli(
         )
 
     provider_info = f"{ai_provider.upper()} ({ai_model})"
-    cmd = config.build_cmd(config.binary, ai_model, prompt, cwd)
-
-    logger.info(f"Calling {provider_info} CLI")
+    cmd = config.build_cmd(config.binary, ai_model, cwd)
 
     subprocess_cwd = None if config.uses_own_cwd else cwd
+
+    logger.info("Calling %s CLI", provider_info)
 
     try:
         result = await asyncio.to_thread(
@@ -249,6 +233,7 @@ async def call_ai_cli(
             capture_output=True,
             text=True,
             timeout=AI_CLI_TIMEOUT * 60,  # Convert minutes to seconds
+            input=prompt,
         )
     except subprocess.TimeoutExpired:
         return (
@@ -855,13 +840,17 @@ async def analyze_job(
     # Check if build passed - return early if yes
     build_result = build_info.get("result")
     if build_result == "SUCCESS":
-        return AnalysisResult(
+        _result = AnalysisResult(
             job_id=job_id,
             jenkins_url=HttpUrl(jenkins_build_url),
             status="completed",
             summary="Build passed successfully. No failures to analyze.",
             failures=[],
         )
+        _result.messages = build_result_messages(
+            _result, ai_provider=ai_provider, ai_model=ai_model
+        )
+        return _result
 
     # Only fetch console output if build failed
     console_output: str = ""
@@ -907,13 +896,17 @@ async def analyze_job(
         # Pre-flight: verify AI CLI is reachable before spawning parallel tasks
         ok, err = await check_ai_cli_available(ai_provider, ai_model)
         if not ok:
-            return AnalysisResult(
+            _result = AnalysisResult(
                 job_id=job_id,
                 jenkins_url=HttpUrl(jenkins_build_url),
                 status="failed",
                 summary=err,
                 failures=[],
             )
+            _result.messages = build_result_messages(
+                _result, ai_provider=ai_provider, ai_model=ai_model
+            )
+            return _result
 
         # Analyze failed child jobs IN PARALLEL with bounded concurrency
         if failed_child_jobs:
@@ -966,7 +959,7 @@ async def analyze_job(
             if total_failures > 0:
                 summary += f" Total: {total_failures} failure(s) analyzed. See child analyses below."
 
-            return AnalysisResult(
+            _result = AnalysisResult(
                 job_id=job_id,
                 jenkins_url=HttpUrl(jenkins_build_url),
                 status="completed",
@@ -974,6 +967,10 @@ async def analyze_job(
                 failures=[],  # Pipeline has no direct failures
                 child_job_analyses=child_job_analyses,
             )
+            _result.messages = build_result_messages(
+                _result, ai_provider=ai_provider, ai_model=ai_model
+            )
+            return _result
 
         # Extract relevant console lines for context
         console_context = extract_relevant_console_lines(console_output)
@@ -1043,7 +1040,7 @@ Respond with:
             )
 
             if not success:
-                return AnalysisResult(
+                _result = AnalysisResult(
                     job_id=job_id,
                     jenkins_url=HttpUrl(jenkins_build_url),
                     status="failed",
@@ -1051,6 +1048,10 @@ Respond with:
                     failures=[],
                     child_job_analyses=child_job_analyses,
                 )
+                _result.messages = build_result_messages(
+                    _result, ai_provider=ai_provider, ai_model=ai_model
+                )
+                return _result
 
             failures = [
                 FailureAnalysis(
@@ -1078,7 +1079,7 @@ Respond with:
             )
 
         logger.info(f"Analysis complete: {len(failures)} failures analyzed")
-        return AnalysisResult(
+        _result = AnalysisResult(
             job_id=job_id,
             jenkins_url=HttpUrl(jenkins_build_url),
             status="completed",
@@ -1086,3 +1087,7 @@ Respond with:
             failures=failures,
             child_job_analyses=child_job_analyses,
         )
+        _result.messages = build_result_messages(
+            _result, ai_provider=ai_provider, ai_model=ai_model
+        )
+        return _result

@@ -29,8 +29,6 @@ async def deliver_results(
     result: AnalysisResult,
     request: AnalyzeRequest,
     settings: Settings,
-    ai_provider: str = "",
-    ai_model: str = "",
 ) -> None:
     """Deliver analysis results to callback and Slack webhooks.
 
@@ -52,9 +50,7 @@ async def deliver_results(
     slack_url = request.slack_webhook_url or settings.slack_webhook_url
     if slack_url:
         try:
-            await send_slack(
-                str(slack_url), result, ai_provider=ai_provider, ai_model=ai_model
-            )
+            await send_slack(str(slack_url), result)
         except Exception:
             logger.exception("Failed to send Slack notification to %s", slack_url)
 
@@ -151,9 +147,7 @@ async def process_analysis_with_id(
             f"(job_id: {job_id})"
         )
 
-        await deliver_results(
-            result, request, settings, ai_provider=ai_provider, ai_model=ai_model
-        )
+        await deliver_results(result, request, settings)
 
     except Exception as e:
         logger.exception(f"Analysis failed for job {job_id}")
@@ -197,15 +191,11 @@ async def analyze(
             f"(job_id: {result.job_id})"
         )
 
-        await deliver_results(
-            result, request, settings, ai_provider=ai_provider, ai_model=ai_model
-        )
+        await deliver_results(result, request, settings)
 
         if output == "text":
             return PlainTextResponse(
-                format_result_as_text(
-                    result, ai_provider=ai_provider, ai_model=ai_model
-                ),
+                format_result_as_text(result),
                 status_code=200,
             )
         elif output == "html":
