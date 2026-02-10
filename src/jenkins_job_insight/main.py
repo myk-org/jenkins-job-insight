@@ -150,7 +150,7 @@ async def analyze(
     background_tasks: BackgroundTasks,
     sync: bool = Query(False, description="If true, wait for result and return it"),
     settings: Settings = Depends(get_settings),
-) -> dict | AnalysisResult | JSONResponse:
+) -> dict | JSONResponse:
     """Submit a Jenkins job for analysis.
 
     By default (async mode), returns immediately with a job_id.
