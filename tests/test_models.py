@@ -10,6 +10,7 @@ from jenkins_job_insight.models import (
     AnalyzeRequest,
     FailureAnalysis,
     JobStatus,
+    SlackMessage,
 )
 
 
@@ -121,6 +122,35 @@ Evidence: HTTP 500 response
             )
 
 
+class TestSlackMessage:
+    """Tests for the SlackMessage model."""
+
+    def test_slack_message_creation(self) -> None:
+        """Test creating a valid SlackMessage."""
+        msg = SlackMessage(type="summary", text="Test content")
+        assert msg.type == "summary"
+        assert msg.text == "Test content"
+
+    @pytest.mark.parametrize("msg_type", ["summary", "failure_detail", "child_job"])
+    def test_slack_message_valid_types(self, msg_type: str) -> None:
+        """Test that valid message types are accepted."""
+        msg = SlackMessage(type=msg_type, text="content")
+        assert msg.type == msg_type
+
+    def test_slack_message_invalid_type(self) -> None:
+        """Test that invalid message type raises ValidationError."""
+        with pytest.raises(ValidationError):
+            SlackMessage(type="invalid", text="content")
+
+    def test_slack_message_required_fields(self) -> None:
+        """Test that all required fields must be provided."""
+        with pytest.raises(ValidationError):
+            SlackMessage(type="summary")
+
+        with pytest.raises(ValidationError):
+            SlackMessage(text="content")
+
+
 class TestAnalysisResult:
     """Tests for the AnalysisResult model."""
 
@@ -183,6 +213,49 @@ class TestAnalysisResult:
             summary="Summary",
         )
         assert result.failures == []
+
+    def test_analysis_result_with_slack_messages(self) -> None:
+        """Test AnalysisResult with slack_messages."""
+        slack_msgs = [
+            SlackMessage(type="summary", text="Summary text"),
+            SlackMessage(type="failure_detail", text="Failure detail"),
+        ]
+        result = AnalysisResult(
+            job_id="job-123",
+            jenkins_url="https://jenkins.example.com/job/test/123/",
+            status="completed",
+            summary="Summary",
+            slack_messages=slack_msgs,
+        )
+        assert len(result.slack_messages) == 2
+        assert result.slack_messages[0].type == "summary"
+        assert result.slack_messages[1].type == "failure_detail"
+
+    def test_analysis_result_default_slack_messages(self) -> None:
+        """Test that slack_messages defaults to empty list."""
+        result = AnalysisResult(
+            job_id="job-123",
+            jenkins_url="https://jenkins.example.com/job/test/123/",
+            status="completed",
+            summary="Summary",
+        )
+        assert result.slack_messages == []
+
+    def test_analysis_result_slack_messages_in_json(self) -> None:
+        """Test that slack_messages are included in JSON serialization."""
+        slack_msgs = [SlackMessage(type="summary", text="Summary text")]
+        result = AnalysisResult(
+            job_id="job-123",
+            jenkins_url="https://jenkins.example.com/job/test/123/",
+            status="completed",
+            summary="Summary",
+            slack_messages=slack_msgs,
+        )
+        data = result.model_dump(mode="json")
+        assert "slack_messages" in data
+        assert len(data["slack_messages"]) == 1
+        assert data["slack_messages"][0]["type"] == "summary"
+        assert data["slack_messages"][0]["text"] == "Summary text"
 
 
 class TestJobStatus:

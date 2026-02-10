@@ -85,6 +85,17 @@ class ChildJobAnalysis(BaseModel):
     )
 
 
+class SlackMessage(BaseModel):
+    """A pre-built Slack message for hierarchical delivery."""
+
+    type: Literal["summary", "failure_detail", "child_job"] = Field(
+        description="Message type: summary overview, failure detail, or child job analysis"
+    )
+    text: str = Field(
+        description="Plain text content for this message (target under 3K chars)"
+    )
+
+
 class AnalysisResult(BaseModel):
     """Complete analysis result for a Jenkins job."""
 
@@ -100,6 +111,10 @@ class AnalysisResult(BaseModel):
     child_job_analyses: list[ChildJobAnalysis] = Field(
         default_factory=list,
         description="Analyses of failed child jobs in pipeline",
+    )
+    slack_messages: list[SlackMessage] = Field(
+        default_factory=list,
+        description="Pre-built Slack messages for hierarchical delivery",
     )
 
 
