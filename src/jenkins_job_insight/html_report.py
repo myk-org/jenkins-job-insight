@@ -47,7 +47,7 @@ def _extract_section(text: str, section_name: str) -> str:
         or an empty string if the section is not found.
     """
     pattern = re.compile(
-        rf"===\s*{re.escape(section_name)}\s*===\s*\n(.*?)(?====\s*\w+\s*===|\Z)",
+        rf"===\s*{re.escape(section_name)}\s*===\s*\n(.*?)(?====\s*[^=]+\s*===|\Z)",
         re.DOTALL | re.IGNORECASE,
     )
     match = pattern.search(text)
@@ -941,17 +941,17 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
       <circle cx="60" cy="60" r="47" fill="none" stroke="var(--bg-tertiary)" stroke-width="12"/>
       <circle cx="60" cy="60" r="47" fill="none"
               stroke="var(--accent-orange)" stroke-width="12"
-              stroke-dasharray="{setup_dash:.2f} {setup_gap:.2f}"
+              stroke-dasharray="0 {circumference:.2f}"
               stroke-dashoffset="0"
               stroke-linecap="round"
-              style="animation: fillSetup 1s ease-out forwards;"
+              style="animation: fillSetup 1s ease-out both;"
               transform="rotate(-90 60 60)"/>
       <circle cx="60" cy="60" r="47" fill="none"
               stroke="var(--accent-purple)" stroke-width="12"
-              stroke-dasharray="{exec_dash:.2f} {exec_gap:.2f}"
+              stroke-dasharray="0 {circumference:.2f}"
               stroke-dashoffset="{exec_offset:.2f}"
               stroke-linecap="round"
-              style="animation: fillExec 1s ease-out 0.3s forwards;"
+              style="animation: fillExec 1s ease-out 0.3s both;"
               transform="rotate(-90 60 60)"/>
       <text x="60" y="56" text-anchor="middle" fill="var(--text-primary)" font-size="22" font-weight="700" font-family="var(--font-mono)">{stats["total"]}</text>
       <text x="60" y="72" text-anchor="middle" fill="var(--text-muted)" font-size="10">failures</text>
@@ -1085,7 +1085,7 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
         parsed = analysis_to_parsed[f.analysis.strip()]
         parts_name = f.test_name.split(".")
         module = ".".join(parts_name[:2]) if len(parts_name) >= 2 else f.test_name
-        bug_ref = analysis_to_bug.get(f.analysis.strip(), "")
+        bug_ref = analysis_to_bug[f.analysis.strip()]
         stage_class = parsed["stage"]
         sev_class = parsed["severity"]
 
