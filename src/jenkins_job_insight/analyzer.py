@@ -26,7 +26,7 @@ from jenkins_job_insight.models import (
     FailureAnalysis,
     TestFailure,
 )
-from jenkins_job_insight.output import build_slack_messages
+from jenkins_job_insight.output import build_result_messages
 from jenkins_job_insight.repository import RepositoryManager
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -847,7 +847,7 @@ async def analyze_job(
             summary="Build passed successfully. No failures to analyze.",
             failures=[],
         )
-        _result.slack_messages = build_slack_messages(
+        _result.messages = build_result_messages(
             _result, ai_provider=ai_provider, ai_model=ai_model
         )
         return _result
@@ -903,7 +903,7 @@ async def analyze_job(
                 summary=err,
                 failures=[],
             )
-            _result.slack_messages = build_slack_messages(
+            _result.messages = build_result_messages(
                 _result, ai_provider=ai_provider, ai_model=ai_model
             )
             return _result
@@ -967,7 +967,7 @@ async def analyze_job(
                 failures=[],  # Pipeline has no direct failures
                 child_job_analyses=child_job_analyses,
             )
-            _result.slack_messages = build_slack_messages(
+            _result.messages = build_result_messages(
                 _result, ai_provider=ai_provider, ai_model=ai_model
             )
             return _result
@@ -1048,7 +1048,7 @@ Respond with:
                     failures=[],
                     child_job_analyses=child_job_analyses,
                 )
-                _result.slack_messages = build_slack_messages(
+                _result.messages = build_result_messages(
                     _result, ai_provider=ai_provider, ai_model=ai_model
                 )
                 return _result
@@ -1087,7 +1087,7 @@ Respond with:
             failures=failures,
             child_job_analyses=child_job_analyses,
         )
-        _result.slack_messages = build_slack_messages(
+        _result.messages = build_result_messages(
             _result, ai_provider=ai_provider, ai_model=ai_model
         )
         return _result

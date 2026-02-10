@@ -12,12 +12,12 @@ from jenkins_job_insight.models import (
     AnalysisResult,
     ChildJobAnalysis,
     FailureAnalysis,
-    SlackMessage,
+    ResultMessage,
 )
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
-SLACK_MAX_MESSAGE_TEXT = 2900
+MAX_MESSAGE_TEXT = 2900
 
 
 def get_ai_provider_info(ai_provider: str = "", ai_model: str = "") -> str:
@@ -62,42 +62,42 @@ async def send_callback(
 def _chunk_text(
     text: str,
     message_type: Literal["summary", "failure_detail", "child_job"],
-    max_size: int = SLACK_MAX_MESSAGE_TEXT,
-) -> list[SlackMessage]:
-    """Split text that exceeds max_size into multiple SlackMessage objects.
+    max_size: int = MAX_MESSAGE_TEXT,
+) -> list[ResultMessage]:
+    """Split text that exceeds max_size into multiple ResultMessage objects.
 
     Splits on line boundaries to preserve readability.
 
     Args:
         text: The text content to potentially split.
-        message_type: The type to assign to each resulting SlackMessage.
+        message_type: The type to assign to each resulting ResultMessage.
         max_size: Maximum characters per message.
 
     Returns:
-        List of SlackMessage objects, each under max_size.
+        List of ResultMessage objects, each under max_size.
     """
     if len(text) <= max_size:
-        return [SlackMessage(type=message_type, text=text)]
+        return [ResultMessage(type=message_type, text=text)]
 
-    messages: list[SlackMessage] = []
+    messages: list[ResultMessage] = []
     current_chunk = ""
     for line in text.split("\n"):
         # If adding this line would exceed the limit, flush the current chunk
         if current_chunk and len(current_chunk) + len(line) + 1 > max_size:
-            messages.append(SlackMessage(type=message_type, text=current_chunk))
+            messages.append(ResultMessage(type=message_type, text=current_chunk))
             current_chunk = line
         else:
             current_chunk = current_chunk + "\n" + line if current_chunk else line
 
     if current_chunk:
-        messages.append(SlackMessage(type=message_type, text=current_chunk))
+        messages.append(ResultMessage(type=message_type, text=current_chunk))
 
     return messages
 
 
-def build_slack_messages(
+def build_result_messages(
     result: AnalysisResult, ai_provider: str = "", ai_model: str = ""
-) -> list[SlackMessage]:
+) -> list[ResultMessage]:
     """Build hierarchical Slack messages from an analysis result.
 
     Creates separate messages for:
@@ -105,7 +105,7 @@ def build_slack_messages(
     2. One per failure group (grouped by analysis text, same dedup as format_result_as_text)
     3. One per child job analysis
 
-    Any individual message exceeding SLACK_MAX_MESSAGE_TEXT is chunked further.
+    Any individual message exceeding MAX_MESSAGE_TEXT is chunked further.
 
     Args:
         result: The analysis result to build messages from.
@@ -113,9 +113,9 @@ def build_slack_messages(
         ai_model: AI model name for display.
 
     Returns:
-        List of SlackMessage objects ready for Slack delivery.
+        List of ResultMessage objects ready for Slack delivery.
     """
-    messages: list[SlackMessage] = []
+    messages: list[ResultMessage] = []
 
     # 1. Summary message
     summary_lines = [
@@ -185,11 +185,11 @@ def build_slack_messages(
     return messages
 
 
-def format_slack_message(slack_message: SlackMessage) -> dict:
-    """Format a single SlackMessage as a Slack Block Kit message.
+def format_slack_message(slack_message: ResultMessage) -> dict:
+    """Format a single ResultMessage as a Slack Block Kit message.
 
     Args:
-        slack_message: Pre-built SlackMessage to format.
+        slack_message: Pre-built ResultMessage to format.
 
     Returns:
         Slack Block Kit message payload.
@@ -239,19 +239,19 @@ def format_slack_message(slack_message: SlackMessage) -> dict:
 async def send_slack(webhook_url: str, result: AnalysisResult) -> None:
     """Send analysis result to a Slack incoming webhook as multiple messages.
 
-    Iterates over result.slack_messages and POSTs each as a separate Slack message.
+    Iterates over result.messages and POSTs each as a separate Slack message.
 
     Args:
         webhook_url: Slack webhook URL.
         result: Analysis result with pre-built slack_messages.
     """
-    if not result.slack_messages:
-        logger.warning("No slack_messages to send")
+    if not result.messages:
+        logger.warning("No messages to send")
         return
 
-    logger.info(f"Sending {len(result.slack_messages)} Slack message(s)")
+    logger.info(f"Sending {len(result.messages)} Slack message(s)")
     async with httpx.AsyncClient() as client:
-        for slack_msg in result.slack_messages:
+        for slack_msg in result.messages:
             message = format_slack_message(slack_msg)
             try:
                 await client.post(webhook_url, json=message, timeout=30.0)

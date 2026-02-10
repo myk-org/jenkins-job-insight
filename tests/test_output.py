@@ -5,15 +5,15 @@ from unittest.mock import AsyncMock, patch
 from jenkins_job_insight.models import (
     AnalysisResult,
     FailureAnalysis,
-    SlackMessage,
+    ResultMessage,
 )
 from jenkins_job_insight.output import (
     _chunk_text,
-    build_slack_messages,
+    build_result_messages,
     format_slack_message,
     send_callback,
     send_slack,
-    SLACK_MAX_MESSAGE_TEXT,
+    MAX_MESSAGE_TEXT,
 )
 
 
@@ -21,7 +21,7 @@ class TestChunkText:
     """Tests for the _chunk_text helper function."""
 
     def test_short_text_returns_single_message(self) -> None:
-        """Test that text under max_size returns a single SlackMessage."""
+        """Test that text under max_size returns a single ResultMessage."""
         result = _chunk_text("short text", "summary")
         assert len(result) == 1
         assert result[0].type == "summary"
@@ -48,7 +48,7 @@ class TestChunkText:
 
     def test_exact_boundary_text(self) -> None:
         """Test text exactly at max_size returns single message."""
-        text = "x" * SLACK_MAX_MESSAGE_TEXT
+        text = "x" * MAX_MESSAGE_TEXT
         result = _chunk_text(text, "summary")
         assert len(result) == 1
 
@@ -66,14 +66,14 @@ class TestChunkText:
         assert result[0].text == text
 
 
-class TestBuildSlackMessages:
-    """Tests for the build_slack_messages function."""
+class TestBuildResultMessages:
+    """Tests for the build_result_messages function."""
 
     def test_summary_always_present(
         self, sample_analysis_result: AnalysisResult
     ) -> None:
         """Test that summary message is always included."""
-        messages = build_slack_messages(sample_analysis_result)
+        messages = build_result_messages(sample_analysis_result)
         summary_msgs = [m for m in messages if m.type == "summary"]
         assert len(summary_msgs) >= 1
 
@@ -81,7 +81,7 @@ class TestBuildSlackMessages:
         self, sample_analysis_result: AnalysisResult
     ) -> None:
         """Test that summary message contains key elements."""
-        messages = build_slack_messages(sample_analysis_result)
+        messages = build_result_messages(sample_analysis_result)
         summary_msgs = [m for m in messages if m.type == "summary"]
         summary_text = "\n".join(m.text for m in summary_msgs)
 
@@ -94,7 +94,7 @@ class TestBuildSlackMessages:
         self, sample_analysis_result: AnalysisResult
     ) -> None:
         """Test that failure detail messages are created."""
-        messages = build_slack_messages(sample_analysis_result)
+        messages = build_result_messages(sample_analysis_result)
         failure_msgs = [m for m in messages if m.type == "failure_detail"]
         assert len(failure_msgs) >= 1
 
@@ -102,7 +102,7 @@ class TestBuildSlackMessages:
         self, sample_analysis_result: AnalysisResult
     ) -> None:
         """Test that failure detail contains PRODUCT BUG analysis."""
-        messages = build_slack_messages(sample_analysis_result)
+        messages = build_result_messages(sample_analysis_result)
         failure_msgs = [m for m in messages if m.type == "failure_detail"]
         all_failure_text = "\n".join(m.text for m in failure_msgs)
         assert "PRODUCT BUG" in all_failure_text
@@ -116,7 +116,7 @@ class TestBuildSlackMessages:
             summary="No failures",
             failures=[],
         )
-        messages = build_slack_messages(result)
+        messages = build_result_messages(result)
         failure_msgs = [m for m in messages if m.type == "failure_detail"]
         assert len(failure_msgs) == 0
 
@@ -137,7 +137,7 @@ class TestBuildSlackMessages:
             summary="3 failures",
             failures=failures,
         )
-        messages = build_slack_messages(result)
+        messages = build_result_messages(result)
         failure_msgs = [m for m in messages if m.type == "failure_detail"]
         # 3 unique analyses should produce 3 failure messages
         assert len(failure_msgs) == 3
@@ -159,7 +159,7 @@ class TestBuildSlackMessages:
             summary="3 failures, 1 group",
             failures=failures,
         )
-        messages = build_slack_messages(result)
+        messages = build_result_messages(result)
         failure_msgs = [m for m in messages if m.type == "failure_detail"]
         # All 3 share the same analysis, so 1 group
         assert len(failure_msgs) == 1
@@ -174,7 +174,7 @@ class TestBuildSlackMessages:
             summary="No failures",
             failures=[],
         )
-        messages = build_slack_messages(result, ai_provider="claude", ai_model="opus")
+        messages = build_result_messages(result, ai_provider="claude", ai_model="opus")
         summary_msgs = [m for m in messages if m.type == "summary"]
         summary_text = "\n".join(m.text for m in summary_msgs)
         assert "Claude (opus)" in summary_text
@@ -204,7 +204,7 @@ class TestBuildSlackMessages:
             failures=[],
             child_job_analyses=[child],
         )
-        messages = build_slack_messages(result)
+        messages = build_result_messages(result)
         child_msgs = [m for m in messages if m.type == "child_job"]
         assert len(child_msgs) >= 1
         child_text = "\n".join(m.text for m in child_msgs)
@@ -212,12 +212,12 @@ class TestBuildSlackMessages:
         assert "Analysis of child failure" in child_text
 
 
-class TestFormatSlackMessage:
+class TestFormatResultMessage:
     """Tests for the format_slack_message function."""
 
     def test_format_slack_message_basic_structure(self) -> None:
         """Test that format_slack_message returns correct structure."""
-        slack_msg = SlackMessage(type="summary", text="Test content")
+        slack_msg = ResultMessage(type="summary", text="Test content")
         message = format_slack_message(slack_msg)
 
         assert "blocks" in message
@@ -226,7 +226,7 @@ class TestFormatSlackMessage:
 
     def test_format_slack_message_summary_header(self) -> None:
         """Test that summary message has correct header."""
-        slack_msg = SlackMessage(type="summary", text="Test content")
+        slack_msg = ResultMessage(type="summary", text="Test content")
         message = format_slack_message(slack_msg)
 
         header = message["blocks"][0]
@@ -236,7 +236,7 @@ class TestFormatSlackMessage:
 
     def test_format_slack_message_failure_detail_header(self) -> None:
         """Test that failure_detail message has correct header."""
-        slack_msg = SlackMessage(type="failure_detail", text="Test content")
+        slack_msg = ResultMessage(type="failure_detail", text="Test content")
         message = format_slack_message(slack_msg)
 
         header = message["blocks"][0]
@@ -244,7 +244,7 @@ class TestFormatSlackMessage:
 
     def test_format_slack_message_child_job_header(self) -> None:
         """Test that child_job message has correct header."""
-        slack_msg = SlackMessage(type="child_job", text="Test content")
+        slack_msg = ResultMessage(type="child_job", text="Test content")
         message = format_slack_message(slack_msg)
 
         header = message["blocks"][0]
@@ -252,7 +252,7 @@ class TestFormatSlackMessage:
 
     def test_format_slack_message_contains_text(self) -> None:
         """Test that Slack message contains the provided text."""
-        slack_msg = SlackMessage(
+        slack_msg = ResultMessage(
             type="summary",
             text="Job URL: https://jenkins.example.com/job/my-job/123/\nStatus: completed",
         )
@@ -268,7 +268,7 @@ class TestFormatSlackMessage:
 
     def test_format_slack_message_uses_code_blocks(self) -> None:
         """Test that Slack message uses code blocks for content."""
-        slack_msg = SlackMessage(type="summary", text="Test summary")
+        slack_msg = ResultMessage(type="summary", text="Test summary")
         message = format_slack_message(slack_msg)
 
         for block in message["blocks"]:
@@ -278,7 +278,7 @@ class TestFormatSlackMessage:
 
     def test_format_slack_message_header_and_section(self) -> None:
         """Test message has header + at least one section block."""
-        slack_msg = SlackMessage(type="summary", text="No failures")
+        slack_msg = ResultMessage(type="summary", text="No failures")
         message = format_slack_message(slack_msg)
 
         assert len(message["blocks"]) >= 2
@@ -366,9 +366,7 @@ class TestSendSlack:
         self, sample_analysis_result: AnalysisResult
     ) -> None:
         """Test that send_slack posts formatted message."""
-        sample_analysis_result.slack_messages = build_slack_messages(
-            sample_analysis_result
-        )
+        sample_analysis_result.messages = build_result_messages(sample_analysis_result)
         with patch("jenkins_job_insight.output.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -378,9 +376,7 @@ class TestSendSlack:
                 sample_analysis_result,
             )
 
-            assert mock_instance.post.call_count == len(
-                sample_analysis_result.slack_messages
-            )
+            assert mock_instance.post.call_count == len(sample_analysis_result.messages)
             # Each call should post formatted message with blocks
             for call in mock_instance.post.call_args_list:
                 assert call[0][0] == "https://hooks.slack.com/services/xxx"
@@ -390,9 +386,7 @@ class TestSendSlack:
         self, sample_analysis_result: AnalysisResult
     ) -> None:
         """Test that send_slack sets timeout."""
-        sample_analysis_result.slack_messages = build_slack_messages(
-            sample_analysis_result
-        )
+        sample_analysis_result.messages = build_result_messages(sample_analysis_result)
         with patch("jenkins_job_insight.output.httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_instance
@@ -406,7 +400,7 @@ class TestSendSlack:
                 assert call[1]["timeout"] == 30.0
 
     async def test_send_slack_no_messages_warns(self) -> None:
-        """Test that send_slack warns when no slack_messages are set."""
+        """Test that send_slack warns when no messages are set."""
         result = AnalysisResult(
             job_id="test-123",
             jenkins_url="https://jenkins.example.com/job/test/1/",
@@ -433,10 +427,10 @@ class TestSendSlack:
             status="completed",
             summary="Test",
             failures=[],
-            slack_messages=[
-                SlackMessage(type="summary", text="Message 1"),
-                SlackMessage(type="failure_detail", text="Message 2"),
-                SlackMessage(type="child_job", text="Message 3"),
+            messages=[
+                ResultMessage(type="summary", text="Message 1"),
+                ResultMessage(type="failure_detail", text="Message 2"),
+                ResultMessage(type="child_job", text="Message 3"),
             ],
         )
         with patch("jenkins_job_insight.output.httpx.AsyncClient") as mock_client:
