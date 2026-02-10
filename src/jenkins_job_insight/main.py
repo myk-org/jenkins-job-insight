@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from simple_logger.logger import get_logger
 
 from jenkins_job_insight.analyzer import (
@@ -16,7 +16,7 @@ from jenkins_job_insight.analyzer import (
 from jenkins_job_insight.config import Settings, get_settings
 from jenkins_job_insight.models import AnalysisResult, AnalyzeRequest
 from jenkins_job_insight.html_report import format_result_as_html
-from jenkins_job_insight.output import format_result_as_text, send_callback, send_slack
+from jenkins_job_insight.output import send_callback
 from jenkins_job_insight.storage import get_result, init_db, list_results, save_result
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -30,14 +30,14 @@ async def deliver_results(
     request: AnalyzeRequest,
     settings: Settings,
 ) -> None:
-    """Deliver analysis results to callback and Slack webhooks.
+    """Deliver analysis results to callback webhook.
 
     Uses request values if provided, otherwise falls back to settings.
 
     Args:
         result: The analysis result to deliver.
-        request: The original analyze request containing optional callback/slack URLs.
-        settings: Application settings with default callback/slack URLs.
+        request: The original analyze request containing optional callback URL.
+        settings: Application settings with default callback URL.
     """
     callback_url = request.callback_url or settings.callback_url
     callback_headers = request.callback_headers or settings.callback_headers
@@ -46,13 +46,6 @@ async def deliver_results(
             await send_callback(str(callback_url), result, callback_headers)
         except Exception:
             logger.exception("Failed to send callback to %s", callback_url)
-
-    slack_url = request.slack_webhook_url or settings.slack_webhook_url
-    if slack_url:
-        try:
-            await send_slack(str(slack_url), result)
-        except Exception:
-            logger.exception("Failed to send Slack notification to %s", slack_url)
 
 
 def build_jenkins_url(base_url: str, job_name: str, build_number: int) -> str:
@@ -159,16 +152,15 @@ async def analyze(
     request: AnalyzeRequest,
     background_tasks: BackgroundTasks,
     sync: bool = Query(False, description="If true, wait for result and return it"),
-    output: Literal["json", "text", "html"] = Query(
-        "json", description="Output format: json, text, or html"
+    output: Literal["json", "html"] = Query(
+        "json", description="Output format: json or html"
     ),
     settings: Settings = Depends(get_settings),
-) -> dict | AnalysisResult | Response:
+) -> dict | JSONResponse | Response:
     """Submit a Jenkins job for analysis.
 
     By default (async mode), returns immediately with a job_id.
     With ?sync=true, blocks until analysis is complete and returns the full result.
-    Use ?output=text for human-readable plain text format (only applies to sync mode).
     """
     if sync:
         logger.info(
@@ -193,12 +185,7 @@ async def analyze(
 
         await deliver_results(result, request, settings)
 
-        if output == "text":
-            return PlainTextResponse(
-                format_result_as_text(result),
-                status_code=200,
-            )
-        elif output == "html":
+        if output == "html":
             return HTMLResponse(
                 format_result_as_html(
                     result, ai_provider=ai_provider, ai_model=ai_model
@@ -216,9 +203,16 @@ async def analyze(
     # Save initial pending state before queueing background task
     await save_result(job_id, jenkins_url, "pending", None)
     background_tasks.add_task(process_analysis_with_id, job_id, request, settings)
+    callback_url = request.callback_url or settings.callback_url
+    message = "Analysis job queued."
+    if callback_url:
+        message += " Results will be delivered to callback."
+    else:
+        message += " Poll /results/{job_id} for status."
+
     return {
         "status": "queued",
-        "message": "Analysis job queued. Results will be delivered to callback/slack.",
+        "message": message,
         "job_id": job_id,
     }
 

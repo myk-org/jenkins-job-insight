@@ -26,7 +26,6 @@ from jenkins_job_insight.models import (
     FailureAnalysis,
     TestFailure,
 )
-from jenkins_job_insight.output import build_result_messages
 from jenkins_job_insight.repository import RepositoryManager
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -840,17 +839,13 @@ async def analyze_job(
     # Check if build passed - return early if yes
     build_result = build_info.get("result")
     if build_result == "SUCCESS":
-        _result = AnalysisResult(
+        return AnalysisResult(
             job_id=job_id,
             jenkins_url=HttpUrl(jenkins_build_url),
             status="completed",
             summary="Build passed successfully. No failures to analyze.",
             failures=[],
         )
-        _result.messages = build_result_messages(
-            _result, ai_provider=ai_provider, ai_model=ai_model
-        )
-        return _result
 
     # Only fetch console output if build failed
     console_output: str = ""
@@ -896,17 +891,13 @@ async def analyze_job(
         # Pre-flight: verify AI CLI is reachable before spawning parallel tasks
         ok, err = await check_ai_cli_available(ai_provider, ai_model)
         if not ok:
-            _result = AnalysisResult(
+            return AnalysisResult(
                 job_id=job_id,
                 jenkins_url=HttpUrl(jenkins_build_url),
                 status="failed",
                 summary=err,
                 failures=[],
             )
-            _result.messages = build_result_messages(
-                _result, ai_provider=ai_provider, ai_model=ai_model
-            )
-            return _result
 
         # Analyze failed child jobs IN PARALLEL with bounded concurrency
         if failed_child_jobs:
@@ -959,7 +950,7 @@ async def analyze_job(
             if total_failures > 0:
                 summary += f" Total: {total_failures} failure(s) analyzed. See child analyses below."
 
-            _result = AnalysisResult(
+            return AnalysisResult(
                 job_id=job_id,
                 jenkins_url=HttpUrl(jenkins_build_url),
                 status="completed",
@@ -967,10 +958,6 @@ async def analyze_job(
                 failures=[],  # Pipeline has no direct failures
                 child_job_analyses=child_job_analyses,
             )
-            _result.messages = build_result_messages(
-                _result, ai_provider=ai_provider, ai_model=ai_model
-            )
-            return _result
 
         # Extract relevant console lines for context
         console_context = extract_relevant_console_lines(console_output)
@@ -1040,7 +1027,7 @@ Respond with:
             )
 
             if not success:
-                _result = AnalysisResult(
+                return AnalysisResult(
                     job_id=job_id,
                     jenkins_url=HttpUrl(jenkins_build_url),
                     status="failed",
@@ -1048,10 +1035,6 @@ Respond with:
                     failures=[],
                     child_job_analyses=child_job_analyses,
                 )
-                _result.messages = build_result_messages(
-                    _result, ai_provider=ai_provider, ai_model=ai_model
-                )
-                return _result
 
             failures = [
                 FailureAnalysis(
@@ -1079,7 +1062,7 @@ Respond with:
             )
 
         logger.info(f"Analysis complete: {len(failures)} failures analyzed")
-        _result = AnalysisResult(
+        return AnalysisResult(
             job_id=job_id,
             jenkins_url=HttpUrl(jenkins_build_url),
             status="completed",
@@ -1087,7 +1070,3 @@ Respond with:
             failures=failures,
             child_job_analyses=child_job_analyses,
         )
-        _result.messages = build_result_messages(
-            _result, ai_provider=ai_provider, ai_model=ai_model
-        )
-        return _result

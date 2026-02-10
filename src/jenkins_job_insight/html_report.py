@@ -13,7 +13,23 @@ from collections.abc import Callable
 from urllib.parse import urlparse
 
 from jenkins_job_insight.models import AnalysisResult, ChildJobAnalysis, FailureAnalysis
-from jenkins_job_insight.output import get_ai_provider_info
+
+
+def _get_ai_provider_info(ai_provider: str = "", ai_model: str = "") -> str:
+    """Get the AI provider and model info for display.
+
+    Args:
+        ai_provider: AI provider name.
+        ai_model: AI model name.
+
+    Returns:
+        Display string like "Claude (claude-sonnet-4-20250514)".
+    """
+    if not ai_provider:
+        return "Unknown provider"
+    if ai_model:
+        return f"{ai_provider.capitalize()} ({ai_model})"
+    return ai_provider.capitalize()
 
 
 def _extract_section(text: str, section_name: str) -> str:
@@ -344,7 +360,7 @@ def format_result_as_html(
     stats = _compute_stats(all_failures, groups)
 
     job_name, build_number = _extract_job_info_from_url(str(result.jenkins_url))
-    provider_info = get_ai_provider_info(ai_provider=ai_provider, ai_model=ai_model)
+    provider_info = _get_ai_provider_info(ai_provider=ai_provider, ai_model=ai_model)
     jenkins_url_str = str(result.jenkins_url)
 
     # Donut chart calculations

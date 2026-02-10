@@ -1,6 +1,6 @@
 # Jenkins Job Insight
 
-A containerized webhook service that analyzes Jenkins job failures, classifies them as code issues or product bugs, and provides actionable suggestions. This service operates without a UI, receiving requests via webhooks and delivering results through callbacks or Slack notifications.
+A containerized webhook service that analyzes Jenkins job failures, classifies them as code issues or product bugs, and provides actionable suggestions. This service operates without a UI, receiving requests via webhooks and delivering results through callbacks.
 
 ## Overview
 
@@ -19,8 +19,6 @@ For each failure, the service provides detailed explanations and either fix sugg
 - **SQLite result storage**: Persists analysis results for later retrieval
 - **Callback webhooks**: Delivers results to your specified endpoint with custom headers
 - **HTML report output**: Generate self-contained, dark-themed HTML failure reports viewable in any browser
-- **Slack notifications**: Sends formatted analysis summaries to Slack channels
-- **Hierarchical result messages**: Pre-split analysis output into structured messages (summary, failure details, child jobs) for any consumer
 
 ## Quick Start
 
@@ -59,8 +57,6 @@ Configure the service using environment variables. The service is tied to a sing
 | `AI_MODEL` | Yes | - | Model for the AI provider |
 | `AI_CLI_TIMEOUT` | No | `10` | Timeout for AI CLI calls in minutes (increase for slower models) |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-| **Notifications** | | | |
-| `SLACK_WEBHOOK_URL` | No | - | Default Slack incoming webhook URL |
 | `CALLBACK_URL` | No | - | Default callback URL for results (can be overridden per-request) |
 | `CALLBACK_HEADERS` | No | - | Default callback headers as JSON (can be overridden per-request) |
 | **Other** | | | |
@@ -200,7 +196,6 @@ All configuration fields can be overridden per-request in the webhook payload. R
 | `TESTS_REPO_URL` | `tests_repo_url` | No | Repository URL for test context |
 | `CALLBACK_URL` | `callback_url` | No | Callback webhook URL for results |
 | `CALLBACK_HEADERS` | `callback_headers` | No | Headers for callback requests |
-| `SLACK_WEBHOOK_URL` | `slack_webhook_url` | No | Slack notification URL |
 
 **Priority**: Request values take precedence over environment variable defaults. Required fields must be configured in at least one place (environment variable or request body).
 
@@ -280,8 +275,7 @@ curl -X POST http://localhost:8000/analyze \
     "ai_model": "sonnet",
     "tests_repo_url": "https://github.com/org/my-project",
     "callback_url": "https://my-service.example.com/webhook",
-    "callback_headers": {"Authorization": "Bearer my-token"},
-    "slack_webhook_url": "https://hooks.slack.com/services/xxx/yyy/zzz"
+    "callback_headers": {"Authorization": "Bearer my-token"}
   }'
   -o outputfile.json
 ```
@@ -293,7 +287,8 @@ For jobs inside folders, use the folder path: `"job_name": "folder/subfolder/my-
 ```json
 {
   "status": "queued",
-  "message": "Analysis job queued. Results will be delivered to callback/slack."
+  "message": "Analysis job queued. Poll /results/{job_id} for status.",
+  "job_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -333,21 +328,7 @@ curl -X POST "http://localhost:8000/analyze?sync=true" \
       "analysis": "=== CLASSIFICATION ===\nCODE ISSUE\n\n=== ANALYSIS ===\nThe test timeout is too short..."
     }
   ],
-  "child_job_analyses": [],
-  "messages": [
-    {
-      "type": "summary",
-      "text": "Job URL: https://jenkins.example.com/job/my-project/123/\nStatus: completed\n..."
-    },
-    {
-      "type": "failure_detail",
-      "text": "[1] (1 test(s) with same error)\nTest: test_user_login\nError: AssertionError..."
-    },
-    {
-      "type": "failure_detail",
-      "text": "[2] (1 test(s) with same error)\nTest: test_timeout_handling\nError: TimeoutError..."
-    }
-  ]
+  "child_job_analyses": []
 }
 ```
 
@@ -371,7 +352,6 @@ curl http://localhost:8000/results/550e8400-e29b-41d4-a716-446655440000
   "created_at": "2024-01-15T10:30:00"
 }
 ```
-
 
 ### List Recent Jobs
 
@@ -405,19 +385,6 @@ curl "http://localhost:8000/results?limit=10"
 | `summary` | string | Summary of the analysis findings |
 | `failures` | array | List of analyzed failures with `test_name`, `error`, and `analysis` |
 | `child_job_analyses` | array | Analyses of failed child jobs in pipelines (recursive) |
-| `messages` | array | Pre-built result messages for hierarchical output |
-
-#### Hierarchical Messages
-
-The `messages` field contains pre-split, structured text sections that any consumer can use. Each message has a `type` and `text`:
-
-| Message Type | Description |
-|-------------|-------------|
-| `summary` | Job overview: URL, status, AI provider info, failure/child job counts |
-| `failure_detail` | One per unique failure group (deduplicated by analysis text) |
-| `child_job` | One per child job analysis |
-
-Messages target under 3K characters each, with automatic line-boundary splitting for oversized content. Slack delivery uses these messages directly; other consumers (callbacks, UIs, CLI tools) can use them for structured display.
 
 ## Output Formats
 
@@ -546,28 +513,27 @@ The `/data` volume mount ensures SQLite database persistence across container re
                         │  3. Optionally clone repo for context        │
                         │  4. Send to AI for classification            │
                         │  5. Store result in SQLite                   │
-                        │  6. Deliver via callback webhook / Slack     │
+                        │  6. Deliver via callback webhook             │
                         └──────────────────────────────────────────────┘
                                          │
                                          ▼
-                        ┌────────────────┴────────────────┐
-                        │                                 │
-                        ▼                                 ▼
-                ┌───────────────┐                 ┌───────────────┐
-                │  Callback     │                 │  Slack        │
-                │  Webhook      │                 │  Notification │
-                └───────────────┘                 └───────────────┘
+                                 ┌───────────────┐
+                                 │  Callback     │
+                                 │  Webhook      │
+                                 └───────────────┘
 ```
 
 ### Analysis Flow
 
-1. **Receive request**: Accept webhook or API request containing the job name and build number
+1. **Receive request**: Acc- **Slack notifications**: Sends formatted analysis summaries to Slack channels
+- **Hierarchical result messages**: Pre-split analysis output into structured messages (summary, failure details, child jobs) for any consumer
+ept webhook or API request containing the job name and build number
 2. **Fetch Jenkins data**: Retrieve console output and build information from the configured Jenkins instance
 3. **Clone repository** (optional): Clone the source repository for additional context
 4. **AI analysis**: Send collected data to the configured AI provider (Claude, Gemini, or Cursor)
 5. **Classify failures**: AI determines if each failure is a code issue or product bug
 6. **Store result**: Save analysis to SQLite database for retrieval
-7. **Deliver result**: Send to callback URL and/or Slack webhook
+7. **Deliver result**: Send to callback URL
 
 ## License
 
