@@ -60,13 +60,13 @@ RUN mkdir -p /home/appuser/.npm-global \
 USER root
 
 # Copy the virtual environment from builder
-COPY --chown=appuser:appuser --from=builder /app/.venv /app/.venv
+COPY --chown=appuser:0 --from=builder /app/.venv /app/.venv
 
 # Copy project files needed by uv
-COPY --chown=appuser:appuser --from=builder /app/pyproject.toml /app/uv.lock ./
+COPY --chown=appuser:0 --from=builder /app/pyproject.toml /app/uv.lock ./
 
 # Copy source code
-COPY --chown=appuser:appuser --from=builder /app/src /app/src
+COPY --chown=appuser:0 --from=builder /app/src /app/src
 
 # Make /app group-writable for OpenShift compatibility
 RUN chmod -R g+w /app
