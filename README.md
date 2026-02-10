@@ -250,7 +250,6 @@ The custom prompt should include instructions for the AI on how to analyze Jenki
 |----------|--------|-------------|
 | `/analyze` | POST | Submit analysis job (async, returns 202) |
 | `/analyze?sync=true` | POST | Submit and wait for result (default: JSON) |
-| `/analyze?sync=true&output=text` | POST | Submit and wait for plain text result |
 | `/analyze?sync=true&output=html` | POST | Submit and wait for HTML report |
 | `/results/{job_id}` | GET | Retrieve stored result (JSON) |
 | `/results/{job_id}?format=html` | GET | Retrieve stored result as HTML report |
@@ -394,14 +393,6 @@ The service supports three output formats for analysis results.
 
 ```bash
 curl -X POST "http://localhost:8000/analyze?sync=true" \
-  -H "Content-Type: application/json" \
-  -d '{"job_name": "my-project", "build_number": 123, "ai_provider": "claude", "ai_model": "sonnet"}'
-```
-
-### Plain Text
-
-```bash
-curl -X POST "http://localhost:8000/analyze?sync=true&output=text" \
   -H "Content-Type: application/json" \
   -d '{"job_name": "my-project", "build_number": 123, "ai_provider": "claude", "ai_model": "sonnet"}'
 ```
