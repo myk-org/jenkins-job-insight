@@ -237,7 +237,9 @@ def _compute_stats(failures: list[FailureAnalysis], groups: list[dict]) -> dict:
     }
 
 
-def _collect_all_failures(result: AnalysisResult) -> list[FailureAnalysis]:
+def _collect_all_failures(
+    result: AnalysisResult, max_depth: int = 10
+) -> list[FailureAnalysis]:
     """Recursively collect all failures from the result and its children.
 
     Walks ``result.failures`` and all nested ``child_job_analyses`` to
@@ -245,16 +247,18 @@ def _collect_all_failures(result: AnalysisResult) -> list[FailureAnalysis]:
 
     Args:
         result: The top-level analysis result.
+        max_depth: Maximum recursion depth for nested children.
 
     Returns:
         A flat list of all ``FailureAnalysis`` instances.
     """
     all_failures: list[FailureAnalysis] = list(result.failures)
 
-    def _collect_from_child(child: ChildJobAnalysis) -> None:
+    def _collect_from_child(child: ChildJobAnalysis, depth: int = 0) -> None:
         all_failures.extend(child.failures)
-        for nested in child.failed_children:
-            _collect_from_child(nested)
+        if depth < max_depth:
+            for nested in child.failed_children:
+                _collect_from_child(nested, depth + 1)
 
     for child in result.child_job_analyses:
         _collect_from_child(child)
@@ -1078,7 +1082,7 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
         analysis_to_parsed[group["analysis_text"]] = group["parsed"]
 
     for idx, f in enumerate(all_failures, start=1):
-        parsed = analysis_to_parsed.get(f.analysis.strip(), _parse_failure_analysis(f))
+        parsed = analysis_to_parsed[f.analysis.strip()]
         parts_name = f.test_name.split(".")
         module = ".".join(parts_name[:2]) if len(parts_name) >= 2 else f.test_name
         bug_ref = analysis_to_bug.get(f.analysis.strip(), "")
@@ -1174,6 +1178,8 @@ def _render_child_jobs(
     parts: list[str],
     children: list[ChildJobAnalysis],
     e: Callable[[str], str],
+    depth: int = 0,
+    max_depth: int = 10,
 ) -> None:
     """Render child job analysis sections recursively.
 
@@ -1181,6 +1187,8 @@ def _render_child_jobs(
         parts: List of HTML string parts to append to.
         children: Child job analyses to render.
         e: HTML escape function reference.
+        depth: Current recursion depth.
+        max_depth: Maximum recursion depth for nested children.
     """
     for child in children:
         child_failures_count = len(child.failures)
@@ -1216,8 +1224,10 @@ def _render_child_jobs(
                 )
 
         # Recurse into nested children
-        if child.failed_children:
-            _render_child_jobs(parts, child.failed_children, e)
+        if child.failed_children and depth < max_depth:
+            _render_child_jobs(
+                parts, child.failed_children, e, depth=depth + 1, max_depth=max_depth
+            )
 
         parts.append("  </div>\n</details>\n")
 
