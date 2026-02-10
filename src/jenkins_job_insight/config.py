@@ -26,9 +26,6 @@ class Settings(BaseSettings):
     jenkins_password: str
     jenkins_ssl_verify: bool = True
 
-    # Slack notification configuration
-    slack_webhook_url: str | None = None
-
     # Custom prompt file path
     prompt_file: str = "/app/PROMPT.md"
 
