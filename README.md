@@ -282,7 +282,7 @@ For jobs inside folders, use the folder path: `"job_name": "folder/subfolder/my-
 ```json
 {
   "status": "queued",
-  "message": "Analysis job queued. Results will be delivered to callback.",
+  "message": "Analysis job queued. Poll /results/{job_id} for status.",
   "job_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```

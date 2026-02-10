@@ -190,9 +190,16 @@ async def analyze(
     # Save initial pending state before queueing background task
     await save_result(job_id, jenkins_url, "pending", None)
     background_tasks.add_task(process_analysis_with_id, job_id, request, settings)
+    callback_url = request.callback_url or settings.callback_url
+    message = "Analysis job queued."
+    if callback_url:
+        message += " Results will be delivered to callback."
+    else:
+        message += " Poll /results/{job_id} for status."
+
     return {
         "status": "queued",
-        "message": "Analysis job queued. Results will be delivered to callback.",
+        "message": message,
         "job_id": job_id,
     }
 
