@@ -318,84 +318,30 @@ def format_child_analysis_as_text(
     return lines
 
 
-def format_result_as_text(
-    result: AnalysisResult, ai_provider: str = "", ai_model: str = ""
-) -> str:
-    """Format analysis result as human-readable text.
+def format_result_as_text(result: AnalysisResult) -> str:
+    """Format analysis result as human-readable text from pre-built messages.
+
+    Iterates over result.messages and joins them with section headers.
 
     Args:
-        result: Analysis result to format.
+        result: Analysis result with pre-built messages.
 
     Returns:
         Human-readable text representation.
     """
-    lines = [
-        "=" * 60,
-        "JENKINS JOB ANALYSIS",
-        "=" * 60,
-        f"Job URL: {result.jenkins_url}",
-        f"Status: {result.status}",
-        f"Job ID: {result.job_id}",
-        "",
-        "SUMMARY:",
-        result.summary,
-        "",
-    ]
+    if not result.messages:
+        return f"Job URL: {result.jenkins_url}\nStatus: {result.status}\nSummary: {result.summary}"
 
-    if result.failures:
-        lines.append("=" * 60)
-        lines.append("FAILURES:")
-        lines.append("=" * 60)
+    header_map = {
+        "summary": "JENKINS JOB ANALYSIS",
+        "failure_detail": "FAILURE DETAILS",
+        "child_job": "CHILD JOB ANALYSIS",
+    }
 
-        # Group failures by analysis content to avoid duplicates
-        analysis_groups: dict[str, list[FailureAnalysis]] = defaultdict(list)
-        for f in result.failures:
-            analysis_groups[f.analysis].append(f)
+    sections: list[str] = []
+    for msg in result.messages:
+        header = header_map.get(msg.type, "DETAILS")
+        section = f"{'=' * 60}\n{header}\n{'=' * 60}\n{msg.text}"
+        sections.append(section)
 
-        group_num = 0
-        for analysis_text, failures_in_group in analysis_groups.items():
-            group_num += 1
-            test_names = [f.test_name for f in failures_in_group]
-            representative = failures_in_group[0]
-
-            lines.extend(
-                [
-                    "",
-                    f"[{group_num}] ({len(failures_in_group)} test(s) with same error)",
-                ]
-            )
-
-            # List affected tests
-            if len(failures_in_group) > 1:
-                lines.append("Affected tests:")
-                for name in test_names:
-                    lines.append(f"  - {name}")
-            else:
-                lines.append(f"Test: {test_names[0]}")
-
-            lines.extend(
-                [
-                    f"Error: {representative.error}",
-                    "",
-                    "Analysis:",
-                ]
-            )
-            # Add the full analysis output (already formatted by AI)
-            lines.append(analysis_text)
-            lines.append("-" * 40)
-
-    if result.child_job_analyses:
-        lines.append("")
-        lines.append("=" * 60)
-        lines.append("CHILD JOB ANALYSES:")
-        lines.append("=" * 60)
-        for child in result.child_job_analyses:
-            lines.extend(format_child_analysis_as_text(child))
-
-    # Add AI provider info at the end
-    lines.append("")
-    lines.append(
-        f"Analyzed using {get_ai_provider_info(ai_provider=ai_provider, ai_model=ai_model)}"
-    )
-
-    return "\n".join(lines)
+    return "\n\n".join(sections)

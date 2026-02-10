@@ -190,9 +190,7 @@ async def analyze(
 
         if output == "text":
             return PlainTextResponse(
-                format_result_as_text(
-                    result, ai_provider=ai_provider, ai_model=ai_model
-                ),
+                format_result_as_text(result),
                 status_code=200,
             )
         return JSONResponse(content=result.model_dump(mode="json"), status_code=200)
