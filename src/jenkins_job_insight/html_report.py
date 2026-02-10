@@ -938,7 +938,7 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
       <circle cx="60" cy="60" r="47" fill="none"
               stroke="var(--accent-orange)" stroke-width="12"
               stroke-dasharray="{setup_dash:.2f} {setup_gap:.2f}"
-              stroke-dashoffset="{circumference * 0.25:.2f}"
+              stroke-dashoffset="0"
               stroke-linecap="round"
               style="animation: fillSetup 1s ease-out forwards;"
               transform="rotate(-90 60 60)"/>

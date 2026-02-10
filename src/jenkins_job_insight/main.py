@@ -220,8 +220,8 @@ async def analyze(
 @app.get("/results/{job_id}", response_model=None)
 async def get_job_result(
     job_id: str,
-    format: Literal["json", "html"] = Query(
-        "json", description="Response format: json or html"
+    output_format: Literal["json", "html"] = Query(
+        "json", alias="format", description="Response format: json or html"
     ),
     ai_provider: str = Query("", description="AI provider name for HTML report footer"),
     ai_model: str = Query("", description="AI model name for HTML report footer"),
@@ -230,7 +230,7 @@ async def get_job_result(
     result = await get_result(job_id)
     if not result:
         raise HTTPException(status_code=404, detail="Job not found")
-    if format == "html":
+    if output_format == "html":
         if not result.get("result"):
             raise HTTPException(
                 status_code=400,
@@ -241,11 +241,11 @@ async def get_job_result(
             if isinstance(result_data, str):
                 result_data = json.loads(result_data)
             analysis_result = AnalysisResult(**result_data)
-        except (json.JSONDecodeError, Exception) as exc:
+        except Exception as exc:
             raise HTTPException(
                 status_code=422,
                 detail=f"Cannot render HTML: stored result data is malformed for job '{job_id}': {exc}",
-            )
+            ) from exc
         # Use query params as overrides, fall back to stored values
         resolved_provider = ai_provider or analysis_result.ai_provider
         resolved_model = ai_model or analysis_result.ai_model

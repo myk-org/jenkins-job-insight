@@ -275,7 +275,7 @@ curl -X POST http://localhost:8000/analyze \
     "tests_repo_url": "https://github.com/org/my-project",
     "callback_url": "https://my-service.example.com/webhook",
     "callback_headers": {"Authorization": "Bearer my-token"}
-  }'
+  }' \
   -o outputfile.json
 ```
 
