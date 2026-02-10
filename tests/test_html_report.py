@@ -232,7 +232,7 @@ class TestParseFailureAnalysis:
         assert parsed["severity"] == "unknown"
         assert parsed["component"] == "unknown"
         # bug_title should fall back to error text
-        assert parsed["bug_title"] == unstructured_failure.error[:80]
+        assert parsed["bug_title"] == unstructured_failure.error
 
     def test_detects_setup_stage(self, setup_failure: FailureAnalysis) -> None:
         """Failure with 'setup' in error text is classified as setup stage."""

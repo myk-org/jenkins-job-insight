@@ -976,8 +976,7 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
     </div>
     <div class="stat-card">
       <div class="stat-label">Job ID</div>
-      <div class="stat-value" style="font-size:14px;color:var(--accent-purple)">{e(result.job_id[:8])}</div>
-      <div class="stat-detail">{e(result.job_id)}</div>
+      <div class="stat-value" style="font-size:12px;color:var(--accent-purple);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px" title="{e(result.job_id)}">{e(result.job_id)}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Affected Modules</div>

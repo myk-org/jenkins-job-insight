@@ -223,6 +223,8 @@ async def get_job_result(
     format: Literal["json", "html"] = Query(
         "json", description="Response format: json or html"
     ),
+    ai_provider: str = Query("", description="AI provider name for HTML report footer"),
+    ai_model: str = Query("", description="AI model name for HTML report footer"),
 ) -> dict | Response:
     """Retrieve stored result by job_id."""
     result = await get_result(job_id)
@@ -234,12 +236,20 @@ async def get_job_result(
                 status_code=400,
                 detail=f"HTML format is not available: job '{job_id}' has no result data (status: {result.get('status', 'unknown')})",
             )
-        result_data = result["result"]
-        if isinstance(result_data, str):
-            result_data = json.loads(result_data)
-        analysis_result = AnalysisResult(**result_data)
+        try:
+            result_data = result["result"]
+            if isinstance(result_data, str):
+                result_data = json.loads(result_data)
+            analysis_result = AnalysisResult(**result_data)
+        except (json.JSONDecodeError, Exception) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Cannot render HTML: stored result data is malformed for job '{job_id}': {exc}",
+            )
         return HTMLResponse(
-            format_result_as_html(analysis_result),
+            format_result_as_html(
+                analysis_result, ai_provider=ai_provider, ai_model=ai_model
+            ),
             status_code=200,
         )
     return result

@@ -387,7 +387,7 @@ curl "http://localhost:8000/results?limit=10"
 
 ## Output Formats
 
-The service supports three output formats for analysis results.
+The service supports two output formats for analysis results.
 
 ### JSON (default)
 
@@ -516,9 +516,7 @@ The `/data` volume mount ensures SQLite database persistence across container re
 
 ### Analysis Flow
 
-1. **Receive request**: Acc- **Slack notifications**: Sends formatted analysis summaries to Slack channels
-- **Hierarchical result messages**: Pre-split analysis output into structured messages (summary, failure details, child jobs) for any consumer
-ept webhook or API request containing the job name and build number
+1. **Receive request**: Accept webhook or API request containing the job name and build number
 2. **Fetch Jenkins data**: Retrieve console output and build information from the configured Jenkins instance
 3. **Clone repository** (optional): Clone the source repository for additional context
 4. **AI analysis**: Send collected data to the configured AI provider (Claude, Gemini, or Cursor)
