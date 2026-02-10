@@ -19,6 +19,7 @@ For each failure, the service provides detailed explanations and either fix sugg
 - **SQLite result storage**: Persists analysis results for later retrieval
 - **Callback webhooks**: Delivers results to your specified endpoint with custom headers
 - **Slack notifications**: Sends formatted analysis summaries to Slack channels
+- **Hierarchical result messages**: Pre-split analysis output into structured messages (summary, failure details, child jobs) for any consumer
 
 ## Quick Start
 
@@ -312,32 +313,34 @@ curl -X POST "http://localhost:8000/analyze?sync=true" \
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "job_name": "my-project",
-  "build_number": 123,
+  "jenkins_url": "https://jenkins.example.com/job/my-project/123/",
   "status": "completed",
-  "summary": "Found 2 failures: 1 code issue and 1 product bug",
+  "summary": "2 failure(s) analyzed (2 unique error type(s))",
   "failures": [
     {
       "test_name": "test_user_login",
       "error": "AssertionError: expected 200 but got 401",
-      "classification": "product_bug",
-      "explanation": "The authentication endpoint returns 401 for valid credentials",
-      "fix_suggestion": null,
-      "bug_report": {
-        "title": "Login endpoint returns 401 for valid credentials",
-        "description": "The /api/login endpoint rejects valid username/password combinations...",
-        "severity": "critical",
-        "component": "Authentication",
-        "evidence": "Console log shows: POST /api/login 401 Unauthorized"
-      }
+      "analysis": "=== CLASSIFICATION ===\nPRODUCT BUG\n\n=== ANALYSIS ===\nThe authentication endpoint returns 401..."
     },
     {
       "test_name": "test_timeout_handling",
       "error": "TimeoutError: operation timed out after 5s",
-      "classification": "code_issue",
-      "explanation": "The test timeout is too short for CI environments",
-      "fix_suggestion": "Increase timeout in tests/test_api.py:45 from 5s to 30s",
-      "bug_report": null
+      "analysis": "=== CLASSIFICATION ===\nCODE ISSUE\n\n=== ANALYSIS ===\nThe test timeout is too short..."
+    }
+  ],
+  "child_job_analyses": [],
+  "messages": [
+    {
+      "type": "summary",
+      "text": "Job URL: https://jenkins.example.com/job/my-project/123/\nStatus: completed\n..."
+    },
+    {
+      "type": "failure_detail",
+      "text": "[1] (1 test(s) with same error)\nTest: test_user_login\nError: AssertionError..."
+    },
+    {
+      "type": "failure_detail",
+      "text": "[2] (1 test(s) with same error)\nTest: test_timeout_handling\nError: TimeoutError..."
     }
   ]
 }
@@ -385,6 +388,30 @@ curl "http://localhost:8000/results?limit=10"
   }
 ]
 ```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `job_id` | string | Unique identifier for the analysis job |
+| `jenkins_url` | string | URL of the analyzed Jenkins build |
+| `status` | string | Analysis status: `pending`, `running`, `completed`, or `failed` |
+| `summary` | string | Summary of the analysis findings |
+| `failures` | array | List of analyzed failures with `test_name`, `error`, and `analysis` |
+| `child_job_analyses` | array | Analyses of failed child jobs in pipelines (recursive) |
+| `messages` | array | Pre-built result messages for hierarchical output |
+
+#### Hierarchical Messages
+
+The `messages` field contains pre-split, structured text sections that any consumer can use. Each message has a `type` and `text`:
+
+| Message Type | Description |
+|-------------|-------------|
+| `summary` | Job overview: URL, status, AI provider info, failure/child job counts |
+| `failure_detail` | One per unique failure group (deduplicated by analysis text) |
+| `child_job` | One per child job analysis |
+
+Messages target under 3K characters each, with automatic line-boundary splitting for oversized content. Slack delivery uses these messages directly; other consumers (callbacks, UIs, CLI tools) can use them for structured display.
 
 ## Development
 

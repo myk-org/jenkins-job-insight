@@ -51,6 +51,7 @@ This project uses AI CLI tools (Claude CLI, Gemini CLI, Cursor Agent CLI) instea
 | `get_failure_signature()` | Deduplicates identical test failures |
 | `analyze_failure_group()` | Analyzes unique failures, applies to all matches |
 | `run_parallel_with_limit()` | Bounded parallel execution |
+| `build_result_messages()` | Builds hierarchical result messages from analysis output |
 
 ### Failure Deduplication
 
@@ -59,6 +60,15 @@ When multiple tests fail with the same error:
 2. Only one AI CLI call per unique error type
 3. Analysis is applied to all failures with matching signature
 4. Reduces redundant API calls and output
+
+### Hierarchical Messages
+
+Analysis results include pre-split `messages` for structured output:
+1. Results are split into typed messages: `summary`, `failure_detail`, `child_job`
+2. Each message targets under 3K characters with line-boundary splitting
+3. `messages` are populated in `analyzer.py` at construction time
+4. All consumers (JSON API, callbacks, Slack, text output) use the same messages
+5. Slack delivery iterates messages with per-message error handling
 
 ### Logging
 
