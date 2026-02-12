@@ -83,6 +83,41 @@ class TestAnalyzeEndpoint:
             "jenkins_job_insight.main.analyze_job", new_callable=AsyncMock
         ) as mock_analyze:
             with patch("jenkins_job_insight.main.save_result", new_callable=AsyncMock):
+                with patch(
+                    "jenkins_job_insight.main.save_html_report", new_callable=AsyncMock
+                ):
+                    mock_result = AnalysisResult(
+                        job_id="test-123",
+                        jenkins_url="https://jenkins.example.com/job/test/123/",
+                        status="completed",
+                        summary="Analysis complete",
+                        failures=[],
+                    )
+                    mock_analyze.return_value = mock_result
+
+                    response = test_client.post(
+                        "/analyze?sync=true",
+                        json={
+                            "job_name": "test",
+                            "build_number": 123,
+                            "tests_repo_url": "https://github.com/example/repo",
+                            "ai_provider": "claude",
+                            "ai_model": "test-model",
+                        },
+                    )
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert data["status"] == "completed"
+                    assert data["job_id"] == "test-123"
+                    # html_report defaults to True via env
+                    assert data["html_report_url"] == "/results/test-123.html"
+
+    def test_analyze_sync_no_html_report(self, test_client) -> None:
+        """Test that html_report=false omits html_report_url from response."""
+        with patch(
+            "jenkins_job_insight.main.analyze_job", new_callable=AsyncMock
+        ) as mock_analyze:
+            with patch("jenkins_job_insight.main.save_result", new_callable=AsyncMock):
                 mock_result = AnalysisResult(
                     job_id="test-123",
                     jenkins_url="https://jenkins.example.com/job/test/123/",
@@ -91,22 +126,19 @@ class TestAnalyzeEndpoint:
                     failures=[],
                 )
                 mock_analyze.return_value = mock_result
-
                 response = test_client.post(
                     "/analyze?sync=true",
                     json={
                         "job_name": "test",
                         "build_number": 123,
-                        "tests_repo_url": "https://github.com/example/repo",
                         "ai_provider": "claude",
                         "ai_model": "test-model",
+                        "html_report": False,
                     },
                 )
-                # Sync mode returns 200 (completed), not 202 (accepted)
                 assert response.status_code == 200
                 data = response.json()
-                assert data["status"] == "completed"
-                assert data["job_id"] == "test-123"
+                assert "html_report_url" not in data
 
     def test_analyze_sync_missing_ai_provider_returns_400(self, test_client) -> None:
         """Test that sync analyze without AI provider returns 400."""
@@ -200,23 +232,26 @@ class TestAnalyzeEndpoint:
         ) as mock_analyze:
             with patch("jenkins_job_insight.main.save_result", new_callable=AsyncMock):
                 with patch(
-                    "jenkins_job_insight.main.send_callback", new_callable=AsyncMock
-                ) as mock_callback:
-                    mock_analyze.return_value = mock_result
+                    "jenkins_job_insight.main.save_html_report", new_callable=AsyncMock
+                ):
+                    with patch(
+                        "jenkins_job_insight.main.send_callback", new_callable=AsyncMock
+                    ) as mock_callback:
+                        mock_analyze.return_value = mock_result
 
-                    response = test_client.post(
-                        "/analyze?sync=true",
-                        json={
-                            "job_name": "test",
-                            "build_number": 123,
-                            "tests_repo_url": "https://github.com/example/repo",
-                            "callback_url": "https://callback.example.com/webhook",
-                            "ai_provider": "claude",
-                            "ai_model": "test-model",
-                        },
-                    )
-                    assert response.status_code == 200
-                    mock_callback.assert_called_once()
+                        response = test_client.post(
+                            "/analyze?sync=true",
+                            json={
+                                "job_name": "test",
+                                "build_number": 123,
+                                "tests_repo_url": "https://github.com/example/repo",
+                                "callback_url": "https://callback.example.com/webhook",
+                                "ai_provider": "claude",
+                                "ai_model": "test-model",
+                            },
+                        )
+                        assert response.status_code == 200
+                        mock_callback.assert_called_once()
 
 
 class TestResultsEndpoints:
@@ -288,6 +323,43 @@ class TestResultsEndpoints:
         response = test_client.get("/results")
         assert response.status_code == 200
         assert response.json() == []
+
+    def test_get_report_html(self, test_client) -> None:
+        """Test retrieving a saved HTML report."""
+        with patch(
+            "jenkins_job_insight.main.get_html_report", new_callable=AsyncMock
+        ) as mock_get:
+            mock_get.return_value = "<!DOCTYPE html><html><body>Report</body></html>"
+            response = test_client.get("/results/html-job-123.html")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        assert "<!DOCTYPE html>" in response.text
+
+    def test_get_report_not_found(self, test_client) -> None:
+        """Test that missing HTML report returns 404."""
+        with patch(
+            "jenkins_job_insight.main.get_html_report", new_callable=AsyncMock
+        ) as mock_get:
+            mock_get.return_value = None
+            response = test_client.get("/results/non-existent.html")
+        assert response.status_code == 404
+
+    async def test_get_result_json_format_default(
+        self, test_client, temp_db_path: Path
+    ) -> None:
+        """Test that default format returns JSON."""
+        with patch.object(storage, "DB_PATH", temp_db_path):
+            await storage.init_db()
+            await storage.save_result(
+                job_id="json-job-456",
+                jenkins_url="https://jenkins.example.com/job/test/2/",
+                status="completed",
+                result={"summary": "Done"},
+            )
+            response = test_client.get("/results/json-job-456")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["job_id"] == "json-job-456"
 
 
 class TestAppLifespan:
