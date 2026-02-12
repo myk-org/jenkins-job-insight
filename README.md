@@ -1,6 +1,6 @@
 # Jenkins Job Insight
 
-A containerized webhook service that analyzes Jenkins job failures, classifies them as code issues or product bugs, and provides actionable suggestions. This service operates without a UI, receiving requests via webhooks and delivering results through callbacks or Slack notifications.
+A containerized webhook service that analyzes Jenkins job failures, classifies them as code issues or product bugs, and provides actionable suggestions. This service operates without a UI, receiving requests via webhooks and delivering results through callbacks.
 
 ## Overview
 
@@ -15,10 +15,9 @@ For each failure, the service provides detailed explanations and either fix sugg
 
 - **Async and sync analysis modes**: Submit jobs for background processing or wait for immediate results
 - **AI-powered classification**: Distinguishes between test code issues and product bugs
-- **Multiple AI providers**: Supports Claude CLI, Gemini CLI, Cursor Agent CLI, and Qodo CLI
+- **Multiple AI providers**: Supports Claude CLI, Gemini CLI, and Cursor Agent CLI
 - **SQLite result storage**: Persists analysis results for later retrieval
 - **Callback webhooks**: Delivers results to your specified endpoint with custom headers
-- **Slack notifications**: Sends formatted analysis summaries to Slack channels
 
 ## Quick Start
 
@@ -53,13 +52,10 @@ Configure the service using environment variables. The service is tied to a sing
 | `JENKINS_PASSWORD` | Yes | - | Jenkins password or API token |
 | `JENKINS_SSL_VERIFY` | No | `true` | Enable SSL certificate verification (set to `false` for self-signed certs) |
 | **AI Provider** | | | |
-| `AI_PROVIDER` | Yes | - | AI provider to use (`claude`, `gemini`, `cursor`, or `qodo`) |
+| `AI_PROVIDER` | Yes | - | AI provider to use (`claude`, `gemini`, or `cursor`) |
 | `AI_MODEL` | Yes | - | Model for the AI provider |
-| `QODO_API_KEY` | No | - | API key for Qodo CLI |
 | `AI_CLI_TIMEOUT` | No | `10` | Timeout for AI CLI calls in minutes (increase for slower models) |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-| **Notifications** | | | |
-| `SLACK_WEBHOOK_URL` | No | - | Default Slack incoming webhook URL |
 | `CALLBACK_URL` | No | - | Default callback URL for results (can be overridden per-request) |
 | `CALLBACK_HEADERS` | No | - | Default callback headers as JSON (can be overridden per-request) |
 | **Other** | | | |
@@ -111,9 +107,7 @@ AI_PROVIDER=gemini
 
 #### Cursor Agent CLI
 
-The CLI command is `agent`. Choose **one** of the following authentication methods:
-
-##### Option 1: API Key (environment variable)
+The CLI command is `agent`.
 
 ```bash
 AI_PROVIDER=cursor
@@ -122,46 +116,6 @@ CURSOR_API_KEY=your-cursor-api-key
 # Specify the model
 AI_MODEL=claude-3.5-sonnet
 ```
-
-##### Option 2: Auth File Mount (for users who authenticated via `agent login`)
-
-```bash
-AI_PROVIDER=cursor
-# No API key needed - uses mounted auth file
-
-# Specify the model
-AI_MODEL=claude-3.5-sonnet
-```
-
-Mount the Cursor auth file in Docker:
-
-```yaml
-volumes:
-  - ~/.config/cursor/auth.json:/home/appuser/.config/cursor/auth.json:ro
-```
-
-**Note:** You need only ONE of these methods, not both. Use the API key method for simplicity, or the auth file mount if you have already authenticated via `agent login` on your host machine.
-
-#### Qodo CLI
-
-Qodo uses a custom agent configuration with MCP tool access for exploring test repositories.
-
-##### API Key Authentication
-
-```bash
-AI_PROVIDER=qodo
-QODO_API_KEY=your-qodo-api-key
-
-# Specify the model
-AI_MODEL=claude-4.5-sonnet
-```
-
-**Available models:** Run `qodo models` to see available models for your account. Model availability depends on your Qodo configuration.
-
-**Note:** Qodo uses a custom agent configuration (`qodo/agent.toml`) that enables:
-- Multi-step reasoning with `execution_strategy = "plan"`
-- MCP tool access (filesystem, git, shell) for exploring cloned test repositories
-- Consistent analysis behavior across runs
 
 ### Adding a New AI CLI Provider
 
@@ -182,7 +136,7 @@ PROVIDER_CONFIG["openai"] = ProviderConfig(
 )
 ```
 
-If the CLI manages its own working directory (like Cursor or Qodo), set `uses_own_cwd=True`:
+If the CLI manages its own working directory (like Cursor), set `uses_own_cwd=True`:
 
 ```python
 PROVIDER_CONFIG["openai"] = ProviderConfig(
@@ -236,12 +190,11 @@ All configuration fields can be overridden per-request in the webhook payload. R
 
 | Environment Variable | Request Field | Required | Description |
 |----------------------|---------------|----------|-------------|
-| `AI_PROVIDER` | `ai_provider` | Yes | AI provider to use (`claude`, `gemini`, `cursor`, or `qodo`) |
+| `AI_PROVIDER` | `ai_provider` | Yes | AI provider to use (`claude`, `gemini`, or `cursor`) |
 | `AI_MODEL` | `ai_model` | Yes | Model for the AI provider |
 | `TESTS_REPO_URL` | `tests_repo_url` | No | Repository URL for test context |
 | `CALLBACK_URL` | `callback_url` | No | Callback webhook URL for results |
 | `CALLBACK_HEADERS` | `callback_headers` | No | Headers for callback requests |
-| `SLACK_WEBHOOK_URL` | `slack_webhook_url` | No | Slack notification URL |
 
 **Priority**: Request values take precedence over environment variable defaults. Required fields must be configured in at least one place (environment variable or request body).
 
@@ -318,8 +271,7 @@ curl -X POST http://localhost:8000/analyze \
     "ai_model": "sonnet",
     "tests_repo_url": "https://github.com/org/my-project",
     "callback_url": "https://my-service.example.com/webhook",
-    "callback_headers": {"Authorization": "Bearer my-token"},
-    "slack_webhook_url": "https://hooks.slack.com/services/xxx/yyy/zzz"
+    "callback_headers": {"Authorization": "Bearer my-token"}
   }'
 ```
 
@@ -330,7 +282,8 @@ For jobs inside folders, use the folder path: `"job_name": "folder/subfolder/my-
 ```json
 {
   "status": "queued",
-  "message": "Analysis job queued. Results will be delivered to callback/slack."
+  "message": "Analysis job queued. Poll /results/{job_id} for status.",
+  "job_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -355,34 +308,22 @@ curl -X POST "http://localhost:8000/analyze?sync=true" \
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "job_name": "my-project",
-  "build_number": 123,
+  "jenkins_url": "https://jenkins.example.com/job/my-project/123/",
   "status": "completed",
-  "summary": "Found 2 failures: 1 code issue and 1 product bug",
+  "summary": "2 failure(s) analyzed (2 unique error type(s))",
   "failures": [
     {
       "test_name": "test_user_login",
       "error": "AssertionError: expected 200 but got 401",
-      "classification": "product_bug",
-      "explanation": "The authentication endpoint returns 401 for valid credentials",
-      "fix_suggestion": null,
-      "bug_report": {
-        "title": "Login endpoint returns 401 for valid credentials",
-        "description": "The /api/login endpoint rejects valid username/password combinations...",
-        "severity": "critical",
-        "component": "Authentication",
-        "evidence": "Console log shows: POST /api/login 401 Unauthorized"
-      }
+      "analysis": "=== CLASSIFICATION ===\nPRODUCT BUG\n\n=== ANALYSIS ===\nThe authentication endpoint returns 401..."
     },
     {
       "test_name": "test_timeout_handling",
       "error": "TimeoutError: operation timed out after 5s",
-      "classification": "code_issue",
-      "explanation": "The test timeout is too short for CI environments",
-      "fix_suggestion": "Increase timeout in tests/test_api.py:45 from 5s to 30s",
-      "bug_report": null
+      "analysis": "=== CLASSIFICATION ===\nCODE ISSUE\n\n=== ANALYSIS ===\nThe test timeout is too short..."
     }
-  ]
+  ],
+  "child_job_analyses": []
 }
 ```
 
@@ -428,6 +369,17 @@ curl "http://localhost:8000/results?limit=10"
   }
 ]
 ```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `job_id` | string | Unique identifier for the analysis job |
+| `jenkins_url` | string | URL of the analyzed Jenkins build |
+| `status` | string | Analysis status: `pending`, `running`, `completed`, or `failed` |
+| `summary` | string | Summary of the analysis findings |
+| `failures` | array | List of analyzed failures with `test_name`, `error`, and `analysis` |
+| `child_job_analyses` | array | Analyses of failed child jobs in pipelines (recursive) |
 
 ## Development
 
@@ -502,17 +454,14 @@ The `/data` volume mount ensures SQLite database persistence across container re
                         │  3. Optionally clone repo for context        │
                         │  4. Send to AI for classification            │
                         │  5. Store result in SQLite                   │
-                        │  6. Deliver via callback webhook / Slack     │
+                        │  6. Deliver via callback webhook             │
                         └──────────────────────────────────────────────┘
                                          │
                                          ▼
-                        ┌────────────────┴────────────────┐
-                        │                                 │
-                        ▼                                 ▼
-                ┌───────────────┐                 ┌───────────────┐
-                │  Callback     │                 │  Slack        │
-                │  Webhook      │                 │  Notification │
-                └───────────────┘                 └───────────────┘
+                                 ┌───────────────┐
+                                 │  Callback     │
+                                 │  Webhook      │
+                                 └───────────────┘
 ```
 
 ### Analysis Flow
@@ -520,10 +469,10 @@ The `/data` volume mount ensures SQLite database persistence across container re
 1. **Receive request**: Accept webhook or API request containing the job name and build number
 2. **Fetch Jenkins data**: Retrieve console output and build information from the configured Jenkins instance
 3. **Clone repository** (optional): Clone the source repository for additional context
-4. **AI analysis**: Send collected data to the configured AI provider (Claude, Gemini, Cursor, or Qodo)
+4. **AI analysis**: Send collected data to the configured AI provider (Claude, Gemini, or Cursor)
 5. **Classify failures**: AI determines if each failure is a code issue or product bug
 6. **Store result**: Save analysis to SQLite database for retrieval
-7. **Deliver result**: Send to callback URL and/or Slack webhook
+7. **Deliver result**: Send to callback URL
 
 ## License
 

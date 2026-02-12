@@ -32,35 +32,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash appuser
-
-# Copy the virtual environment from builder
-COPY --from=builder /app/.venv /app/.venv
-
-# Copy project files needed by uv
-COPY --from=builder /app/pyproject.toml /app/uv.lock ./
-
-# Copy source code
-COPY --from=builder /app/src /app/src
-
-# Copy Qodo agent configuration
-COPY qodo/ /app/qodo/
+# Create non-root user, data directory, and set permissions
+# OpenShift runs containers as a random UID in the root group (GID 0)
+RUN useradd --create-home --shell /bin/bash -g 0 appuser \
+    && mkdir -p /data \
+    && chown appuser:0 /data \
+    && chmod -R g+w /data
 
 # Copy uv for runtime
 COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /usr/local/bin/uv
 
-# Create data directory for SQLite persistence
-RUN mkdir -p /data && chown appuser:appuser /data
-
-# Fix ownership for appuser
-RUN chown -R appuser:appuser /app
-
-# Make /app and /data group-writable for OpenShift compatibility
-# OpenShift runs containers as a random UID in the root group (GID 0)
-RUN chmod -R g+w /app /data
-
-# Switch to non-root user
+# Switch to non-root user for CLI installs
 USER appuser
 
 # Install Claude Code CLI (installs to ~/.local/bin)
@@ -72,19 +54,30 @@ RUN /bin/bash -o pipefail -c "curl -fsSL https://cursor.com/install | bash"
 # Configure npm for non-root global installs and install Gemini CLI
 RUN mkdir -p /home/appuser/.npm-global \
     && npm config set prefix '/home/appuser/.npm-global' \
-    && npm install -g @google/gemini-cli@0.25.0
+    && npm install -g @google/gemini-cli
 
-# Install Qodo CLI
-RUN npm install -g @qodo/command
-
-# Switch back to root to fix permissions for OpenShift compatibility
+# Switch to root for file copies and permission fixes
 USER root
 
+# Copy the virtual environment from builder
+COPY --chown=appuser:0 --from=builder /app/.venv /app/.venv
+
+# Copy project files needed by uv
+COPY --chown=appuser:0 --from=builder /app/pyproject.toml /app/uv.lock ./
+
+# Copy source code
+COPY --chown=appuser:0 --from=builder /app/src /app/src
+
+# Make /app group-writable for OpenShift compatibility
+RUN chmod -R g+w /app
+
 # Make appuser home accessible by OpenShift arbitrary UID
-# OpenShift runs containers as arbitrary UID in root group (GID 0)
-# g=u means "group gets same permissions as user"
-RUN chown -R appuser:0 /home/appuser && \
-    chmod -R g=u /home/appuser
+# Only chmod directories (not files) — files are already group-readable by default.
+# Directories need group write+execute for OpenShift's arbitrary UID (in GID 0)
+# to create config/cache files at runtime.
+RUN find /home/appuser -type d -exec chmod g=u {} + \
+    && npm cache clean --force 2>/dev/null; \
+    rm -rf /home/appuser/.npm/_cacache
 
 # Switch back to non-root user for runtime
 USER appuser

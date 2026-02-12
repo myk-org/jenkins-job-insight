@@ -171,7 +171,7 @@ class TestAnalyzeEndpoint:
         assert response.status_code == 422
 
     def test_analyze_with_optional_fields(self, test_client) -> None:
-        """Test analyze with optional callback and Slack fields."""
+        """Test analyze with optional callback fields."""
         with patch("jenkins_job_insight.main.process_analysis_with_id"):
             response = test_client.post(
                 "/analyze",
@@ -181,7 +181,6 @@ class TestAnalyzeEndpoint:
                     "tests_repo_url": "https://github.com/example/repo",
                     "callback_url": "https://callback.example.com/webhook",
                     "callback_headers": {"Authorization": "Bearer token"},
-                    "slack_webhook_url": "https://hooks.slack.com/services/xxx",
                 },
             )
             assert response.status_code == 202
@@ -218,39 +217,6 @@ class TestAnalyzeEndpoint:
                     )
                     assert response.status_code == 200
                     mock_callback.assert_called_once()
-
-    def test_analyze_sync_sends_slack(self, test_client) -> None:
-        """Test that sync analyze sends Slack notification when URL provided."""
-        mock_result = AnalysisResult(
-            job_id="test-123",
-            jenkins_url="https://jenkins.example.com/job/test/123/",
-            status="completed",
-            summary="Analysis complete",
-            failures=[],
-        )
-
-        with patch(
-            "jenkins_job_insight.main.analyze_job", new_callable=AsyncMock
-        ) as mock_analyze:
-            with patch("jenkins_job_insight.main.save_result", new_callable=AsyncMock):
-                with patch(
-                    "jenkins_job_insight.main.send_slack", new_callable=AsyncMock
-                ) as mock_slack:
-                    mock_analyze.return_value = mock_result
-
-                    response = test_client.post(
-                        "/analyze?sync=true",
-                        json={
-                            "job_name": "test",
-                            "build_number": 123,
-                            "tests_repo_url": "https://github.com/example/repo",
-                            "slack_webhook_url": "https://hooks.slack.com/services/xxx",
-                            "ai_provider": "claude",
-                            "ai_model": "test-model",
-                        },
-                    )
-                    assert response.status_code == 200
-                    mock_slack.assert_called_once()
 
 
 class TestResultsEndpoints:

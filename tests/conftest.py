@@ -35,7 +35,6 @@ def full_env_vars() -> Generator[dict[str, str], None, None]:
         "JENKINS_URL": "https://jenkins.example.com",
         "JENKINS_USER": "testuser",
         "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
-        "SLACK_WEBHOOK_URL": "https://hooks.slack.com/test",
     }
     with patch.dict(os.environ, env, clear=False):
         yield env

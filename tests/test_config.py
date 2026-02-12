@@ -29,7 +29,6 @@ class TestSettings:
         }
         with patch.dict(os.environ, env, clear=True):
             settings = Settings()
-            assert settings.slack_webhook_url is None
             assert settings.tests_repo_url is None
             assert settings.callback_url is None
             assert settings.callback_headers is None
@@ -50,13 +49,6 @@ class TestSettings:
         with patch.dict(os.environ, env, clear=True):
             settings = Settings()
             assert settings.prompt_file == "/custom/path/PROMPT.md"
-
-    def test_settings_loads_optional_fields(
-        self, full_env_vars: dict[str, str]
-    ) -> None:
-        """Test that optional fields are loaded when provided."""
-        settings = Settings()
-        assert settings.slack_webhook_url == full_env_vars["SLACK_WEBHOOK_URL"]
 
     def test_settings_validation_error_missing_jenkins_url(self) -> None:
         """Test that ValidationError is raised when JENKINS_URL is missing."""

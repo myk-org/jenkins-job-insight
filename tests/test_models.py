@@ -28,7 +28,6 @@ class TestAnalyzeRequest:
         assert str(request.tests_repo_url) == "https://github.com/example/repo"
         assert request.callback_url is None
         assert request.callback_headers is None
-        assert request.slack_webhook_url is None
 
     def test_analyze_request_with_optional_fields(self) -> None:
         """Test creating AnalyzeRequest with all optional fields."""
@@ -38,11 +37,9 @@ class TestAnalyzeRequest:
             tests_repo_url="https://github.com/example/repo",
             callback_url="https://callback.example.com/webhook",
             callback_headers={"Authorization": "Bearer token"},
-            slack_webhook_url="https://hooks.slack.com/services/xxx",
         )
         assert request.callback_url is not None
         assert request.callback_headers == {"Authorization": "Bearer token"}
-        assert request.slack_webhook_url is not None
 
     def test_analyze_request_without_tests_repo_url(self) -> None:
         """Test creating AnalyzeRequest without tests_repo_url (now optional)."""
