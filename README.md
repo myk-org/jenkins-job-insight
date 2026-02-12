@@ -109,12 +109,22 @@ AI_PROVIDER=gemini
 
 The CLI command is `agent`.
 
+##### Option 1: API Key
+
 ```bash
 AI_PROVIDER=cursor
 CURSOR_API_KEY=your-cursor-api-key
 
 # Specify the model
 AI_MODEL=claude-3.5-sonnet
+```
+
+##### Option 2: Web Login (Docker)
+
+For web-based authentication inside a container, run:
+
+```bash
+docker exec <container-name> agent login
 ```
 
 ### Adding a New AI CLI Provider
