@@ -62,6 +62,7 @@ Configure the service using environment variables. The service is tied to a sing
 | **Other** | | | |
 | `TESTS_REPO_URL` | No | - | Default tests repository URL (can be overridden per-request) |
 | `PROMPT_FILE` | No | `/app/PROMPT.md` | Path to custom analysis prompt file |
+| `HTML_REPORT` | No | `true` | Generate HTML reports (set to `false` to disable) |
 | `DEBUG` | No | `false` | Enable debug mode with hot reload for development |
 
 ### Jenkins Configuration
@@ -189,13 +190,14 @@ Control log verbosity with `LOG_LEVEL`:
 
 All configuration fields can be overridden per-request in the webhook payload. Required fields (`AI_PROVIDER`, `AI_MODEL`) must be set via environment variable or per-request:
 
-| Environment Variable | Request Field | Required | Description |
-|----------------------|---------------|----------|-------------|
-| `AI_PROVIDER` | `ai_provider` | Yes | AI provider to use (`claude`, `gemini`, or `cursor`) |
-| `AI_MODEL` | `ai_model` | Yes | Model for the AI provider |
-| `TESTS_REPO_URL` | `tests_repo_url` | No | Repository URL for test context |
-| `CALLBACK_URL` | `callback_url` | No | Callback webhook URL for results |
-| `CALLBACK_HEADERS` | `callback_headers` | No | Headers for callback requests |
+| Environment Variable | Request Field      | Required | Description                                                                |
+|----------------------|--------------------|----------|----------------------------------------------------------------------------|
+| `AI_PROVIDER`        | `ai_provider`      | Yes      | AI provider to use (`claude`, `gemini`, or `cursor`)                       |
+| `AI_MODEL`           | `ai_model`         | Yes      | Model for the AI provider                                                  |
+| `TESTS_REPO_URL`     | `tests_repo_url`   | No       | Repository URL for test context                                            |
+| `CALLBACK_URL`       | `callback_url`     | No       | Callback webhook URL for results                                           |
+| `CALLBACK_HEADERS`   | `callback_headers` | No       | Headers for callback requests                                              |
+| `HTML_REPORT`        | `html_report`      | No       | Generate HTML report (default: true)                                       |
 
 **Priority**: Request values take precedence over environment variable defaults. Required fields must be configured in at least one place (environment variable or request body).
 
@@ -246,15 +248,14 @@ The custom prompt should include instructions for the AI on how to analyze Jenki
 
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/analyze` | POST | Submit analysis job (async, returns 202) |
-| `/analyze?sync=true` | POST | Submit and wait for result (default: JSON) |
-| `/analyze?sync=true&output=html` | POST | Submit and wait for HTML report |
-| `/results/{job_id}` | GET | Retrieve stored result (JSON) |
-| `/results/{job_id}?format=html` | GET | Retrieve stored result as HTML report |
-| `/results` | GET | List recent analysis jobs (default: 50, max: 100) |
-| `/health` | GET | Health check endpoint |
+| Endpoint                 | Method | Description                                       |
+|--------------------------|--------|---------------------------------------------------|
+| `/analyze`               | POST   | Submit analysis job (async, returns 202)          |
+| `/analyze?sync=true`     | POST   | Submit and wait for result (returns JSON)         |
+| `/results/{job_id}`      | GET    | Retrieve stored result (JSON)                     |
+| `/results/{job_id}.html` | GET    | Retrieve stored result as an HTML report          |
+| `/results`               | GET    | List recent analysis jobs (default: 50, max: 100) |
+| `/health`                | GET    | Health check endpoint                             |
 
 The service connects to the Jenkins instance configured via the `JENKINS_URL` environment variable. All analysis requests specify only the job name and build number.
 
@@ -275,8 +276,7 @@ curl -X POST http://localhost:8000/analyze \
     "tests_repo_url": "https://github.com/org/my-project",
     "callback_url": "https://my-service.example.com/webhook",
     "callback_headers": {"Authorization": "Bearer my-token"}
-  }' \
-  -o outputfile.json
+  }'
 ```
 
 For jobs inside folders, use the folder path: `"job_name": "folder/subfolder/my-project"`
@@ -312,22 +312,33 @@ curl -X POST "http://localhost:8000/analyze?sync=true" \
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "job_name": "my-project",
+  "build_number": 123,
   "jenkins_url": "https://jenkins.example.com/job/my-project/123/",
   "status": "completed",
-  "summary": "2 failure(s) analyzed (2 unique error type(s))",
+  "summary": "2 failure(s) analyzed",
+  "ai_provider": "claude",
+  "ai_model": "sonnet",
   "failures": [
-    {
-      "test_name": "test_user_login",
-      "error": "AssertionError: expected 200 but got 401",
-      "analysis": "=== CLASSIFICATION ===\nPRODUCT BUG\n\n=== ANALYSIS ===\nThe authentication endpoint returns 401..."
-    },
-    {
-      "test_name": "test_timeout_handling",
-      "error": "TimeoutError: operation timed out after 5s",
-      "analysis": "=== CLASSIFICATION ===\nCODE ISSUE\n\n=== ANALYSIS ===\nThe test timeout is too short..."
-    }
-  ],
-  "child_job_analyses": []
+      {
+        "test_name": "test_user_login",
+        "error": "AssertionError: expected 200 but got 401",
+        "analysis": {
+          "classification": "PRODUCT BUG",
+          "affected_tests": ["test_user_login"],
+          "details": "The authentication endpoint returns 401...",
+          "product_bug_report": {
+            "title": "Authentication endpoint rejects valid credentials",
+            "severity": "high",
+            "component": "auth-service",
+            "description": "...",
+            "evidence": "..."
+          }
+        }
+      }
+    ],
+  "child_job_analyses": [],
+  "html_report_url": "/results/550e8400-e29b-41d4-a716-446655440000.html"
 }
 ```
 
@@ -344,10 +355,37 @@ curl http://localhost:8000/results/550e8400-e29b-41d4-a716-446655440000
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "job_name": "my-project",
-  "build_number": 123,
+  "jenkins_url": "https://jenkins.example.com/job/my-project/123/",
   "status": "completed",
-  "result": { ... },
+  "result": {
+    "job_id": "550e8400-e29b-41d4-a716-446655440000",
+    "job_name": "my-project",
+    "build_number": 123,
+    "jenkins_url": "https://jenkins.example.com/job/my-project/123/",
+    "status": "completed",
+    "summary": "2 failure(s) analyzed",
+    "ai_provider": "claude",
+    "ai_model": "sonnet",
+    "failures": [
+      {
+        "test_name": "test_user_login",
+        "error": "AssertionError: expected 200 but got 401",
+        "analysis": {
+          "classification": "PRODUCT BUG",
+          "affected_tests": ["test_user_login"],
+          "details": "The authentication endpoint returns 401...",
+          "product_bug_report": {
+            "title": "Authentication endpoint rejects valid credentials",
+            "severity": "high",
+            "component": "auth-service",
+            "description": "...",
+            "evidence": "..."
+          }
+        }
+      }
+    ],
+    "child_job_analyses": []
+  },
   "created_at": "2024-01-15T10:30:00"
 }
 ```
@@ -382,16 +420,27 @@ curl "http://localhost:8000/results?limit=10"
 | `jenkins_url` | string | URL of the analyzed Jenkins build |
 | `status` | string | Analysis status: `pending`, `running`, `completed`, or `failed` |
 | `summary` | string | Summary of the analysis findings |
-| `failures` | array | List of analyzed failures with `test_name`, `error`, and `analysis` |
-| `child_job_analyses` | array | Analyses of failed child jobs in pipelines (recursive) |
+| `html_report_url` | string | URL to view the HTML report (only present when `html_report` is enabled) |
+
+For the full result (via `/results/{job_id}`), each failure contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `test_name` | string | Name of the failed test |
+| `error` | string | Error message or exception |
+| `analysis.classification` | string | `CODE ISSUE` or `PRODUCT BUG` |
+| `analysis.details` | string | Detailed AI analysis text |
+| `analysis.code_fix` | object | Code fix suggestion (file, line, change) — present only for CODE ISSUE |
+| `analysis.product_bug_report` | object | Bug report (title, severity, component, description, evidence) — present only for PRODUCT BUG |
 
 ## Output Formats
 
-The service supports two output formats for analysis results.
+By default, HTML reports are automatically generated and saved alongside JSON results. The sync response includes an `html_report_url` field with the link. Set `html_report` to `false` to disable HTML generation.
 
-### JSON (default)
+### JSON
 
 ```bash
+# Sync analysis — returns JSON
 curl -X POST "http://localhost:8000/analyze?sync=true" \
   -H "Content-Type: application/json" \
   -d '{"job_name": "my-project", "build_number": 123, "ai_provider": "claude", "ai_model": "sonnet"}'
@@ -399,34 +448,22 @@ curl -X POST "http://localhost:8000/analyze?sync=true" \
 
 ### HTML Report
 
-Generate a self-contained HTML report with a dark theme, interactive charts, and collapsible failure details:
+Retrieve a completed analysis as a self-contained HTML report with a dark theme and collapsible failure details:
 
 ```bash
-# Sync mode — get HTML report directly
-curl -X POST "http://localhost:8000/analyze?sync=true&output=html" \
-  -H "Content-Type: application/json" \
-  -d '{"job_name": "my-project", "build_number": 123, "ai_provider": "claude", "ai_model": "sonnet"}' \
-  -o report.html
+curl http://localhost:8000/results/550e8400-e29b-41d4-a716-446655440000.html -o report.html
 
 # Open in browser
 open report.html  # macOS
 xdg-open report.html  # Linux
 ```
 
-You can also retrieve a previously stored result as HTML:
-
-```bash
-curl "http://localhost:8000/results/550e8400-e29b-41d4-a716-446655440000?format=html" -o report.html
-```
-
 The HTML report includes:
 
 - **Sticky header** with job name, build number, and failure count badge
-- **Stats overview** with animated SVG donut chart (setup vs execution failures)
-- **Root cause banner** when the majority of failures share the same root cause
-- **Severity assessment** badge and module distribution bar chart
-- **Collapsible bug cards** with full AI analysis, affected tests, and error details
-- **Detail table** listing all failures with test name, module, stage, and severity
+- **Root cause analysis cards** grouped by bug, with BUG-ID, classification, and severity badges
+- **Collapsible bug cards** with AI analysis, code fix or product bug report details, affected tests list, and error details
+- **All failures table** listing every failure with test name, error, classification, and bug reference
 - **Key takeaway** callout summarizing the analysis
 
 The report is fully self-contained (no external CSS/JS) and can be shared as a single file.
@@ -522,7 +559,8 @@ The `/data` volume mount ensures SQLite database persistence across container re
 4. **AI analysis**: Send collected data to the configured AI provider (Claude, Gemini, or Cursor)
 5. **Classify failures**: AI determines if each failure is a code issue or product bug
 6. **Store result**: Save analysis to SQLite database for retrieval
-7. **Deliver result**: Send to callback URL
+7. **Generate HTML report**: Save self-contained HTML report to disk (if enabled)
+8. **Deliver result**: Send to callback URL
 
 ## License
 

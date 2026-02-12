@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -20,6 +21,7 @@ from jenkins_job_insight.jenkins import JenkinsClient
 from pydantic import HttpUrl
 
 from jenkins_job_insight.models import (
+    AnalysisDetail,
     AnalysisResult,
     AnalyzeRequest,
     ChildJobAnalysis,
@@ -55,6 +57,34 @@ ERROR_PATTERN = re.compile(
     r"\b(error|fail(ed|ure)?|exception|traceback|assert(ion)?|warn(ing)?|critical|fatal)\b",
     re.IGNORECASE,
 )
+
+_JSON_RESPONSE_SCHEMA = """Respond with a JSON object using this EXACT schema (no markdown, no extra text, just the JSON):
+
+If CODE ISSUE:
+{
+  "classification": "CODE ISSUE",
+  "affected_tests": ["test_name_1", "test_name_2"],
+  "details": "Your detailed analysis of what caused this failure",
+  "code_fix": {
+    "file": "exact/file/path.py",
+    "line": "line number",
+    "change": "specific code change that fixes all affected tests"
+  }
+}
+
+If PRODUCT BUG:
+{
+  "classification": "PRODUCT BUG",
+  "affected_tests": ["test_name_1", "test_name_2"],
+  "details": "Your detailed analysis of what caused this failure",
+  "product_bug_report": {
+    "title": "concise bug title",
+    "severity": "critical/high/medium/low",
+    "component": "affected component",
+    "description": "what product behavior is broken",
+    "evidence": "relevant log snippets"
+  }
+}"""
 
 
 @dataclass(frozen=True)
@@ -133,6 +163,48 @@ async def run_parallel_with_limit(
         *[bounded(c) for c in coroutines],
         return_exceptions=True,
     )
+
+
+def _parse_json_response(raw_text: str) -> AnalysisDetail:
+    """Parse AI CLI JSON response into an AnalysisDetail.
+
+    Attempts to extract a JSON object from the AI response text.
+    The AI may wrap the JSON in markdown code blocks or add
+    surrounding text.
+
+    Args:
+        raw_text: The raw text output from the AI CLI.
+
+    Returns:
+        An AnalysisDetail instance parsed from the JSON, or a
+        fallback instance with the raw text stored in details.
+    """
+    # Try to find JSON in the response
+    text = raw_text.strip()
+
+    # Strip markdown code block wrapper if present
+    if "```json" in text:
+        start = text.index("```json") + len("```json")
+        end = text.index("```", start)
+        text = text[start:end].strip()
+    elif "```" in text:
+        start = text.index("```") + len("```")
+        end = text.index("```", start)
+        text = text[start:end].strip()
+
+    # Try to find a JSON object in the text
+    json_start = text.find("{")
+    json_end = text.rfind("}")
+    if json_start != -1 and json_end != -1 and json_end > json_start:
+        json_str = text[json_start : json_end + 1]
+        try:
+            data = json.loads(json_str)
+            return AnalysisDetail(**data)
+        except Exception:
+            pass
+
+    # Fallback: store raw text in details
+    return AnalysisDetail(details=raw_text)
 
 
 async def check_ai_cli_available(ai_provider: str, ai_model: str) -> tuple[bool, str]:
@@ -522,28 +594,7 @@ You have access to the test repository. Explore the code to understand the failu
 
 Note: Multiple tests failed with the same error. Provide ONE analysis that applies to all of them.
 
-Respond using this EXACT format:
-
-=== CLASSIFICATION ===
-[CODE ISSUE or PRODUCT BUG]
-
-=== AFFECTED TESTS ===
-{chr(10).join(test_names)}
-
-=== ANALYSIS ===
-[Your detailed analysis - what caused this common failure]
-
-=== FIX === (only if CODE ISSUE)
-File: [exact path]
-Line: [line number]
-Change: [specific code change that fixes all affected tests]
-
-=== BUG REPORT === (only if PRODUCT BUG)
-Title: [concise bug title]
-Severity: [critical/high/medium/low]
-Component: [affected component]
-Description: [what product behavior is broken]
-Evidence: [relevant log snippets]
+{_JSON_RESPONSE_SCHEMA}
 """
 
     logger.info(
@@ -553,12 +604,18 @@ Evidence: [relevant log snippets]
         prompt, cwd=repo_path, ai_provider=ai_provider, ai_model=ai_model
     )
 
+    # Parse the AI response into structured data
+    if success:
+        parsed = _parse_json_response(analysis_output)
+    else:
+        parsed = AnalysisDetail(details=analysis_output)
+
     # Apply the same analysis to all failures in the group
     return [
         FailureAnalysis(
             test_name=f.test_name,
             error=f.error_message,
-            analysis=analysis_output,
+            analysis=parsed,
         )
         for f in failures
     ]
@@ -737,7 +794,9 @@ async def analyze_child_job(
                         FailureAnalysis(
                             test_name=tf.test_name,
                             error=tf.error_message,
-                            analysis=f"Analysis failed: {result}",
+                            analysis=AnalysisDetail(
+                                details=f"Analysis failed: {result}"
+                            ),
                         )
                     )
             else:
@@ -774,14 +833,16 @@ CONSOLE OUTPUT (errors/failures/warnings extracted):
 
 You have access to the repository if one was cloned. Explore to understand the failure.
 
-Respond with:
-- What failed and why
-- Classification: CODE ISSUE or PRODUCT BUG
-- Recommended fix or bug report details
+{_JSON_RESPONSE_SCHEMA}
 """
     success, analysis_output = await call_ai_cli(
         prompt, cwd=repo_path, ai_provider=ai_provider, ai_model=ai_model
     )
+
+    if success:
+        parsed_analysis = _parse_json_response(analysis_output)
+    else:
+        parsed_analysis = AnalysisDetail(details=analysis_output)
 
     return ChildJobAnalysis(
         job_name=job_name,
@@ -792,7 +853,7 @@ Respond with:
             FailureAnalysis(
                 test_name=f"{job_name}#{build_number}",
                 error="Console-only analysis",
-                analysis=analysis_output,
+                analysis=parsed_analysis,
             )
         ],
     )
@@ -841,6 +902,8 @@ async def analyze_job(
     if build_result == "SUCCESS":
         return AnalysisResult(
             job_id=job_id,
+            job_name=request.job_name,
+            build_number=request.build_number,
             jenkins_url=HttpUrl(jenkins_build_url),
             status="completed",
             summary="Build passed successfully. No failures to analyze.",
@@ -895,6 +958,8 @@ async def analyze_job(
         if not ok:
             return AnalysisResult(
                 job_id=job_id,
+                job_name=request.job_name,
+                build_number=request.build_number,
                 jenkins_url=HttpUrl(jenkins_build_url),
                 status="failed",
                 summary=err,
@@ -956,6 +1021,8 @@ async def analyze_job(
 
             return AnalysisResult(
                 job_id=job_id,
+                job_name=request.job_name,
+                build_number=request.build_number,
                 jenkins_url=HttpUrl(jenkins_build_url),
                 status="completed",
                 summary=summary,
@@ -1006,7 +1073,9 @@ async def analyze_job(
                             FailureAnalysis(
                                 test_name=tf.test_name,
                                 error=tf.error_message,
-                                analysis=f"Analysis failed: {result}",
+                                analysis=AnalysisDetail(
+                                    details=f"Analysis failed: {result}"
+                                ),
                             )
                         )
                 else:
@@ -1023,10 +1092,7 @@ CONSOLE OUTPUT (errors/failures/warnings extracted):
 
 You have access to the repository if one was cloned. Explore to understand the failure.
 
-Respond with:
-- What failed and why
-- Classification: CODE ISSUE or PRODUCT BUG
-- Recommended fix or bug report details
+{_JSON_RESPONSE_SCHEMA}
 """
             success, analysis_output = await call_ai_cli(
                 prompt, cwd=repo_path, ai_provider=ai_provider, ai_model=ai_model
@@ -1035,6 +1101,8 @@ Respond with:
             if not success:
                 return AnalysisResult(
                     job_id=job_id,
+                    job_name=request.job_name,
+                    build_number=request.build_number,
                     jenkins_url=HttpUrl(jenkins_build_url),
                     status="failed",
                     summary=analysis_output,
@@ -1048,7 +1116,7 @@ Respond with:
                 FailureAnalysis(
                     test_name=f"{job_name}#{build_number}",
                     error="Console-only analysis",
-                    analysis=analysis_output,
+                    analysis=_parse_json_response(analysis_output),
                 )
             ]
 
@@ -1072,6 +1140,8 @@ Respond with:
         logger.info(f"Analysis complete: {len(failures)} failures analyzed")
         return AnalysisResult(
             job_id=job_id,
+            job_name=request.job_name,
+            build_number=request.build_number,
             jenkins_url=HttpUrl(jenkins_build_url),
             status="completed",
             summary=summary,

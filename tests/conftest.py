@@ -10,9 +10,11 @@ import pytest
 
 from jenkins_job_insight.config import Settings
 from jenkins_job_insight.models import (
+    AnalysisDetail,
     AnalysisResult,
     AnalyzeRequest,
     FailureAnalysis,
+    ProductBugReport,
 )
 
 
@@ -72,22 +74,18 @@ def sample_failure_analysis() -> FailureAnalysis:
     return FailureAnalysis(
         test_name="test_login_success",
         error="AssertionError: Expected 200, got 500",
-        analysis="""=== CLASSIFICATION ===
-PRODUCT BUG
-
-=== TEST ===
-test_login_success
-
-=== ANALYSIS ===
-The authentication service is returning an error.
-
-=== BUG REPORT ===
-Title: Login fails with valid credentials
-Severity: high
-Component: auth
-Description: Users cannot log in even with correct username and password
-Evidence: Error: Authentication service returned 500
-""",
+        analysis=AnalysisDetail(
+            classification="PRODUCT BUG",
+            affected_tests=["test_login_success"],
+            details="The authentication service is returning an error.",
+            product_bug_report=ProductBugReport(
+                title="Login fails with valid credentials",
+                severity="high",
+                component="auth",
+                description="Users cannot log in even with correct username and password",
+                evidence="Error: Authentication service returned 500",
+            ),
+        ),
     )
 
 
@@ -98,9 +96,13 @@ def sample_analysis_result(
     """Create a sample analysis result for testing."""
     return AnalysisResult(
         job_id="test-job-123",
+        job_name="my-job",
+        build_number=123,
         jenkins_url="https://jenkins.example.com/job/my-job/123/",
         status="completed",
         summary="1 failure analyzed: 1 product bug found",
+        ai_provider="claude",
+        ai_model="test-model",
         failures=[sample_failure_analysis],
     )
 
@@ -126,19 +128,6 @@ def mock_ai_cli() -> Generator[MagicMock, None, None]:
     with patch("jenkins_job_insight.analyzer.call_ai_cli") as mock:
         mock.return_value = (
             True,
-            """=== CLASSIFICATION ===
-CODE ISSUE
-
-=== TEST ===
-test_example
-
-=== ANALYSIS ===
-The test failed due to a missing configuration.
-
-=== FIX ===
-File: tests/test_example.py
-Line: 42
-Change: Add the missing import statement
-""",
+            '{"classification": "CODE ISSUE", "affected_tests": ["test_example"], "details": "The test failed due to a missing configuration.", "code_fix": {"file": "tests/test_example.py", "line": "42", "change": "Add the missing import statement"}}',
         )
         yield mock

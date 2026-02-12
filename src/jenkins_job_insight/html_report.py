@@ -6,393 +6,39 @@ without external dependencies.
 """
 
 import html
-import math
-import re
-from collections import Counter
 from collections.abc import Callable
-from urllib.parse import urlparse
 
-from jenkins_job_insight.models import AnalysisResult, ChildJobAnalysis, FailureAnalysis
+from jenkins_job_insight.models import (
+    AnalysisDetail,
+    AnalysisResult,
+    ChildJobAnalysis,
+    CodeFix,
+    FailureAnalysis,
+    ProductBugReport,
+)
 
 
-def _get_ai_provider_info(ai_provider: str = "", ai_model: str = "") -> str:
-    """Get the AI provider and model info for display.
-
-    Args:
-        ai_provider: AI provider name.
-        ai_model: AI model name.
-
-    Returns:
-        Display string like "Claude (claude-sonnet-4-20250514)".
-    """
-    if not ai_provider:
-        return "Unknown provider"
-    if ai_model:
-        return f"{ai_provider.capitalize()} ({ai_model})"
-    return ai_provider.capitalize()
-
-
-def _extract_section(text: str, section_name: str) -> str:
-    """Extract content between ``=== SECTION_NAME ===`` markers.
-
-    Looks for a line matching ``=== <section_name> ===`` (case-insensitive)
-    and returns all text until the next ``=== ... ===`` marker or end of string.
-
-    Args:
-        text: The full analysis text to search.
-        section_name: Section header to look for (e.g. ``"CLASSIFICATION"``).
-
-    Returns:
-        Extracted section content with leading/trailing whitespace stripped,
-        or an empty string if the section is not found.
-    """
-    pattern = re.compile(
-        rf"===\s*{re.escape(section_name)}\s*===\s*\n(.*?)(?====\s*[^=]+\s*===|\Z)",
-        re.DOTALL | re.IGNORECASE,
-    )
-    match = pattern.search(text)
-    if match:
-        return match.group(1).strip()
-    return ""
-
-
-def _extract_field(text: str, field_name: str) -> str:
-    """Extract a field value like ``"Title: some value"`` from text.
-
-    Args:
-        text: Text block to search within.
-        field_name: Field name prefix (e.g. ``"Title"``, ``"Severity"``).
-
-    Returns:
-        The field value with whitespace stripped, or an empty string
-        if not found.
-    """
-    pattern = re.compile(
-        rf"^\s*{re.escape(field_name)}\s*:\s*(.+)$", re.MULTILINE | re.IGNORECASE
-    )
-    match = pattern.search(text)
-    if match:
-        return match.group(1).strip()
-    return ""
-
-
-def _parse_failure_analysis(failure: FailureAnalysis) -> dict:
-    """Parse an individual failure's analysis text into structured fields.
-
-    Extracts classification, severity, component, bug title, and stage
-    from the free-form AI-generated analysis text.  Falls back to sensible
-    defaults when structured sections are absent.
-
-    Args:
-        failure: A ``FailureAnalysis`` instance whose ``analysis`` field
-            will be parsed.
-
-    Returns:
-        A dict with keys ``classification``, ``severity``, ``component``,
-        ``bug_title``, and ``stage``.
-    """
-    analysis = failure.analysis
-
-    # Classification
-    classification_section = _extract_section(analysis, "CLASSIFICATION")
-    classification = (
-        classification_section.split("\n")[0].strip() if classification_section else ""
-    )
-    if not classification:
-        classification = "Unknown"
-
-    # Bug report section for structured fields
-    bug_section = _extract_section(analysis, "BUG REPORT")
-
-    # Severity
-    severity = _extract_field(bug_section, "Severity") if bug_section else ""
-    if not severity:
-        severity = _extract_field(analysis, "Severity")
-    severity = severity.lower() if severity else "unknown"
-    if severity not in ("critical", "high", "medium", "low"):
-        severity = "unknown"
-
-    # Component
-    component = _extract_field(bug_section, "Component") if bug_section else ""
-    if not component:
-        component = _extract_field(analysis, "Component")
-    if not component:
-        component = "unknown"
-
-    # Bug title
-    bug_title = _extract_field(bug_section, "Title") if bug_section else ""
-    if not bug_title:
-        bug_title = _extract_field(analysis, "Title")
-    if not bug_title:
-        bug_title = failure.error if failure.error else failure.test_name
-
-    # Stage detection
-    combined_lower = (failure.error + " " + failure.test_name).lower()
-    stage = "setup" if "setup" in combined_lower else "execution"
-
-    return {
-        "classification": classification,
-        "severity": severity,
-        "component": component,
-        "bug_title": bug_title,
-        "stage": stage,
-    }
-
-
-def _group_failures_by_root_cause(failures: list[FailureAnalysis]) -> list[dict]:
-    """Group failures that share identical analysis text.
-
-    Failures produced by the same root cause typically receive identical
-    AI analysis output.  This function groups them and assigns a short
-    bug identifier to each group.
-
-    Args:
-        failures: List of ``FailureAnalysis`` instances to group.
-
-    Returns:
-        A list of dicts, each containing:
-        - ``analysis_text``: the shared analysis string
-        - ``failures``: list of ``FailureAnalysis`` in this group
-        - ``parsed``: parsed fields from ``_parse_failure_analysis``
-        - ``bug_id``: a short identifier like ``"BUG-1"``
-    """
-    groups_map: dict[str, list[FailureAnalysis]] = {}
-    order: list[str] = []
-    for f in failures:
-        key = f.analysis.strip()
-        if key not in groups_map:
-            groups_map[key] = []
-            order.append(key)
-        groups_map[key].append(f)
-
-    groups: list[dict] = []
-    for idx, key in enumerate(order, start=1):
-        group_failures = groups_map[key]
-        groups.append(
-            {
-                "analysis_text": key,
-                "failures": group_failures,
-                "parsed": _parse_failure_analysis(group_failures[0]),
-                "bug_id": f"BUG-{idx}",
-            }
-        )
-    return groups
-
-
-def _compute_stats(failures: list[FailureAnalysis], groups: list[dict]) -> dict:
-    """Compute summary statistics from failures and their groups.
-
-    Args:
-        failures: All failure instances.
-        groups: Root-cause groups as returned by ``_group_failures_by_root_cause``.
-
-    Returns:
-        A dict with keys ``total``, ``unique_errors``, ``setup_count``,
-        ``exec_count``, ``classifications``, ``severities``, ``modules``,
-        ``dominant_classification``, and ``dominant_severity``.
-    """
-    total = len(failures)
-    unique_errors = len(groups)
-
-    setup_count = 0
-    classifications: Counter[str] = Counter()
-    severities: Counter[str] = Counter()
-    modules: Counter[str] = Counter()
-
-    # Use pre-parsed data from groups instead of re-parsing each failure
-    for group in groups:
-        p = group["parsed"]
-        group_count = len(group["failures"])
-        classifications[p["classification"]] += group_count
-        severities[p["severity"]] += group_count
-        if p["stage"] == "setup":
-            setup_count += group_count
-
-        for f in group["failures"]:
-            # Module extraction: first 2 dot-separated segments
-            parts = f.test_name.split(".")
-            if len(parts) >= 2:
-                module = ".".join(parts[:2])
-            else:
-                module = f.test_name
-            modules[module] += 1
-
-    exec_count = total - setup_count
-
-    dominant_classification = (
-        classifications.most_common(1)[0][0] if classifications else "Unknown"
-    )
-    dominant_severity = severities.most_common(1)[0][0] if severities else "unknown"
-
-    return {
-        "total": total,
-        "unique_errors": unique_errors,
-        "setup_count": setup_count,
-        "exec_count": exec_count,
-        "classifications": dict(classifications),
-        "severities": dict(severities),
-        "modules": dict(modules),
-        "dominant_classification": dominant_classification,
-        "dominant_severity": dominant_severity,
-    }
-
-
-def _collect_all_failures(
-    result: AnalysisResult, max_depth: int = 10
-) -> list[FailureAnalysis]:
-    """Recursively collect all failures from the result and its children.
-
-    Walks ``result.failures`` and all nested ``child_job_analyses`` to
-    produce a flat list of every ``FailureAnalysis``.
-
-    Args:
-        result: The top-level analysis result.
-        max_depth: Maximum recursion depth for nested children.
-
-    Returns:
-        A flat list of all ``FailureAnalysis`` instances.
-    """
-    all_failures: list[FailureAnalysis] = list(result.failures)
-
-    def _collect_from_child(child: ChildJobAnalysis, depth: int = 0) -> None:
-        all_failures.extend(child.failures)
-        if depth < max_depth:
-            for nested in child.failed_children:
-                _collect_from_child(nested, depth + 1)
-
-    for child in result.child_job_analyses:
-        _collect_from_child(child)
-
-    return all_failures
-
-
-def _extract_job_info_from_url(jenkins_url: str) -> tuple[str, str]:
-    """Extract job name and build number from a Jenkins URL.
-
-    Parses URL paths like ``/job/folder/job/name/123/`` to extract the
-    human-readable job name and build number.
-
-    Args:
-        jenkins_url: Full Jenkins build URL.
-
-    Returns:
-        A tuple of ``(job_name, build_number)`` as strings.  Returns
-        ``("Unknown", "")`` if parsing fails.
-    """
-    parsed = urlparse(str(jenkins_url))
-    path_parts = [p for p in parsed.path.split("/") if p]
-
-    # Jenkins URLs: /job/<name>/job/<name>/.../<build_number>/
-    job_segments: list[str] = []
-    build_number = ""
-    i = 0
-    while i < len(path_parts):
-        if path_parts[i] == "job" and i + 1 < len(path_parts):
-            job_segments.append(path_parts[i + 1])
-            i += 2
-        else:
-            # Might be the build number (a numeric segment)
-            if path_parts[i].isdigit():
-                build_number = path_parts[i]
-            i += 1
-
-    job_name = "/".join(job_segments) if job_segments else "Unknown"
-    return job_name, build_number
-
-
-def _severity_color(severity: str) -> str:
-    """Return CSS color variable name for a severity level.
-
-    Args:
-        severity: One of ``"critical"``, ``"high"``, ``"medium"``,
-            ``"low"``, or ``"unknown"``.
-
-    Returns:
-        CSS color value string.
-    """
-    mapping = {
-        "critical": "#ff6b63",
-        "high": "var(--accent-orange)",
-        "medium": "var(--accent-yellow)",
-        "low": "var(--accent-green)",
-        "unknown": "var(--text-muted)",
-    }
-    return mapping.get(severity.lower(), "var(--text-muted)")
-
-
-def _classification_css_class(classification: str) -> str:
-    """Return a CSS class suffix for a classification string.
-
-    Args:
-        classification: Classification text like ``"PRODUCT BUG"``.
-
-    Returns:
-        A CSS-safe class name like ``"product-bug"`` or ``"code-issue"``.
-    """
-    lower = classification.lower().strip()
-    if "product" in lower and "bug" in lower:
-        return "product-bug"
-    if "code" in lower and "issue" in lower:
-        return "code-issue"
-    # Generic fallback
-    return re.sub(r"[^a-z0-9]+", "-", lower).strip("-") or "unknown"
-
-
-def format_result_as_html(
-    result: AnalysisResult,
-    ai_provider: str = "",
-    ai_model: str = "",
-) -> str:
+def format_result_as_html(result: AnalysisResult) -> str:
     """Generate a self-contained HTML report for an analysis result.
 
     Produces a complete HTML document with inline CSS using a dark
-    GitHub-inspired theme.  The report includes statistics, charts,
-    bug cards, a detail table, and child job sections.
+    GitHub-inspired theme.  The report includes failure cards, a
+    detail table, and child job sections.
 
     Args:
         result: The analysis result to render.
-        ai_provider: AI provider name (e.g. ``"claude"``).
-        ai_model: AI model identifier (e.g. ``"claude-sonnet-4-20250514"``).
 
     Returns:
         A complete HTML document as a string.
     """
-    e = html.escape  # alias for convenience
+    e = html.escape
 
-    all_failures = _collect_all_failures(result)
-    groups = _group_failures_by_root_cause(all_failures)
-    stats = _compute_stats(all_failures, groups)
-
-    job_name, build_number = _extract_job_info_from_url(str(result.jenkins_url))
-    provider_info = _get_ai_provider_info(ai_provider=ai_provider, ai_model=ai_model)
+    job_name = result.job_name or "Unknown"
+    build_number = str(result.build_number) if result.build_number else ""
+    provider_info = _format_provider(result.ai_provider, result.ai_model)
     jenkins_url_str = str(result.jenkins_url)
+    total_failures = len(result.failures)
 
-    # Donut chart calculations
-    circumference = 2 * math.pi * 47  # ~295.31
-    total = stats["total"] if stats["total"] > 0 else 1
-    setup_pct = stats["setup_count"] / total
-    exec_pct = stats["exec_count"] / total
-    setup_dash = circumference * setup_pct
-    exec_dash = circumference * exec_pct
-    setup_gap = circumference - setup_dash
-    exec_gap = circumference - exec_dash
-    # Offset for exec segment: starts after setup segment
-    # SVG dashoffset for exec: negative offset moves forward along the circle
-    # With rotate(-90), 0 offset = 12 o'clock. We need to skip past the setup segment.
-    exec_offset = -setup_dash
-
-    # Root cause detection: dominant root cause > 50%
-    dominant_root_cause = None
-    if groups and stats["total"] > 0:
-        largest_group = max(groups, key=lambda g: len(g["failures"]))
-        if len(largest_group["failures"]) / stats["total"] > 0.5:
-            dominant_root_cause = largest_group
-
-    # Bar chart data: modules sorted by count descending
-    module_items = sorted(stats["modules"].items(), key=lambda x: x[1], reverse=True)
-    max_module_count = module_items[0][1] if module_items else 1
-
-    # Build the HTML parts
     parts: list[str] = []
 
     # --- HTML HEAD ---
@@ -415,14 +61,12 @@ def format_result_as_html(
     --accent-red: #f85149;
     --accent-red-bg: rgba(248, 81, 73, 0.12);
     --accent-green: #3fb950;
-    --accent-green-bg: rgba(63, 185, 80, 0.12);
-    --accent-yellow: #d29922;
-    --accent-yellow-bg: rgba(210, 153, 34, 0.12);
     --accent-blue: #58a6ff;
     --accent-blue-bg: rgba(88, 166, 255, 0.08);
-    --accent-purple: #bc8cff;
+    --accent-yellow: #d29922;
     --accent-orange: #f0883e;
     --accent-orange-bg: rgba(240, 136, 62, 0.12);
+    --accent-purple: #bc8cff;
     --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     --radius: 8px;
@@ -461,17 +105,6 @@ body {{
     border-radius: 12px;
     font-family: var(--font-mono);
 }}
-.pulse-dot {{
-    width: 8px;
-    height: 8px;
-    background: var(--accent-red);
-    border-radius: 50%;
-    animation: pulse 2s ease-in-out infinite;
-}}
-@keyframes pulse {{
-    0%, 100% {{ opacity: 1; transform: scale(1); }}
-    50% {{ opacity: 0.5; transform: scale(0.8); }}
-}}
 .env-chips {{ display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }}
 .env-chip {{
     font-size: 12px;
@@ -497,123 +130,73 @@ body {{
     border-bottom: 1px solid var(--border);
 }}
 
-/* Results overview with donut */
-.results-overview {{
-    display: grid;
-    grid-template-columns: 200px 1fr;
-    gap: 32px;
+/* Failure cards */
+.failure-card {{
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 24px;
-    margin-bottom: 24px;
-}}
-.donut-container {{ display: flex; flex-direction: column; align-items: center; gap: 12px; }}
-.donut-legend {{ font-size: 12px; color: var(--text-secondary); text-align: center; }}
-.donut-legend-item {{ display: flex; align-items: center; gap: 6px; margin: 4px 0; }}
-.legend-dot {{ width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }}
-
-/* Stats grid */
-.stats-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }}
-.stat-card {{
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
-}}
-.stat-label {{ font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }}
-.stat-value {{ font-size: 24px; font-weight: 700; font-family: var(--font-mono); }}
-.stat-detail {{ font-size: 11px; color: var(--text-muted); margin-top: 2px; font-family: var(--font-mono); }}
-
-/* Root cause banner */
-.root-cause-banner {{
-    background: var(--bg-secondary);
-    border: 2px solid var(--accent-red);
-    border-radius: var(--radius);
-    padding: 20px 24px;
-    margin-bottom: 24px;
-}}
-.root-cause-header {{ display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }}
-.root-cause-header h3 {{ font-size: 16px; color: var(--accent-red); }}
-.root-cause-desc {{ font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; }}
-.root-cause-error {{
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent-red);
-    border-radius: 4px;
-    padding: 12px 16px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--accent-red);
     margin-bottom: 12px;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
+    overflow: hidden;
 }}
-.root-cause-details {{
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px;
-}}
-.root-cause-detail {{
-    font-size: 12px;
-}}
-.root-cause-detail .label {{ color: var(--text-muted); }}
-.root-cause-detail .value {{ color: var(--text-primary); font-weight: 600; }}
-
-/* Charts row */
-.charts-row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }}
-.chart-card {{
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px 24px;
-}}
-.chart-card h3 {{ font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; }}
-
-/* Severity badge */
-.severity-badge-container {{ display: flex; justify-content: center; align-items: center; min-height: 160px; }}
-.severity-badge {{
+.failure-card[open] {{ border-color: var(--accent-blue); }}
+.failure-summary {{
+    padding: 16px 20px;
+    cursor: pointer;
     display: flex;
     align-items: center;
     gap: 12px;
-    font-size: 28px;
-    font-weight: 800;
+    flex-wrap: wrap;
+    list-style: none;
+}}
+.failure-summary::-webkit-details-marker {{ display: none; }}
+.failure-summary::before {{
+    content: "\\25B6";
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+}}
+.failure-card[open] .failure-summary::before {{ transform: rotate(90deg); }}
+.failure-title {{
+    flex: 1;
+    font-weight: 600;
+    font-size: 14px;
     font-family: var(--font-mono);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    padding: 16px 32px;
-    border-radius: 16px;
-    border: 2px solid;
-    animation: badgePulse 3s ease-in-out infinite;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }}
-@keyframes badgePulse {{
-    0%, 100% {{ border-color: currentColor; box-shadow: 0 0 20px rgba(255,255,255,0.05); }}
-    50% {{ border-color: transparent; box-shadow: 0 0 40px rgba(255,255,255,0.1); }}
-}}
-
-/* Bar chart */
-.bar-chart {{ display: flex; flex-direction: column; gap: 8px; }}
-.bar-row {{ display: flex; align-items: center; gap: 12px; }}
-.bar-label {{ font-size: 12px; font-family: var(--font-mono); color: var(--text-secondary); min-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-.bar-track {{ flex: 1; height: 20px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; position: relative; }}
-.bar-fill {{
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent-red), #ff6b63);
+.classification-tag {{
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
     border-radius: 4px;
-    transform-origin: left;
-    transform: scaleX(0);
-    animation: growBar 0.8s ease-out forwards;
+    text-transform: uppercase;
 }}
-.bar-value {{ font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); min-width: 30px; text-align: right; }}
-@keyframes growBar {{ to {{ transform: scaleX(1); }} }}
-.bar-row:nth-child(1) .bar-fill {{ animation-delay: 0.2s; }}
-.bar-row:nth-child(2) .bar-fill {{ animation-delay: 0.3s; }}
-.bar-row:nth-child(3) .bar-fill {{ animation-delay: 0.4s; }}
-.bar-row:nth-child(4) .bar-fill {{ animation-delay: 0.5s; }}
-.bar-row:nth-child(5) .bar-fill {{ animation-delay: 0.6s; }}
-.bar-row:nth-child(6) .bar-fill {{ animation-delay: 0.7s; }}
-
+.classification-tag.product-bug {{
+    background: var(--accent-orange-bg);
+    color: var(--accent-orange);
+}}
+.classification-tag.code-issue {{
+    background: var(--accent-blue-bg);
+    color: var(--accent-blue);
+}}
+.classification-tag.unknown {{
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}}
+.bug-id {{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-blue);
+    background: var(--accent-blue-bg);
+    padding: 2px 8px;
+    border-radius: 4px;
+}}
+.bug-count {{
+    font-size: 12px;
+    color: var(--text-muted);
+}}
 /* Bug cards */
 .bug-card {{
     background: var(--bg-secondary);
@@ -640,15 +223,6 @@ body {{
     transition: transform 0.2s;
 }}
 .bug-card[open] .bug-summary::before {{ transform: rotate(90deg); }}
-.bug-id {{
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--accent-blue);
-    background: var(--accent-blue-bg);
-    padding: 2px 8px;
-    border-radius: 4px;
-}}
 .bug-title {{
     flex: 1;
     font-weight: 600;
@@ -657,28 +231,34 @@ body {{
     text-overflow: ellipsis;
     white-space: nowrap;
 }}
-.bug-count {{
-    font-size: 12px;
-    color: var(--text-muted);
+.bug-body {{
+    padding: 0 20px 20px;
+    border-top: 1px solid var(--border);
 }}
-.classification-tag {{
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 4px;
+.bug-body h4 {{
+    font-size: 13px;
+    color: var(--text-muted);
     text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 16px 0 8px;
 }}
-.classification-tag.product-bug {{
-    background: var(--accent-orange-bg);
-    color: var(--accent-orange);
+.bug-tests ul {{
+    list-style: none;
+    padding: 0;
 }}
-.classification-tag.code-issue {{
-    background: var(--accent-blue-bg);
-    color: var(--accent-blue);
+.bug-tests li {{
+    padding: 4px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
 }}
-.classification-tag.unknown {{
-    background: var(--bg-tertiary);
+.bug-tests li::before {{
+    content: "\\2192 ";
     color: var(--text-muted);
+}}
+.bug-tests code {{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
 }}
 .severity-tag-inline {{
     font-size: 11px;
@@ -693,11 +273,11 @@ body {{
 .severity-tag-inline.medium {{ background: rgba(210,153,34,0.15); color: var(--accent-yellow); }}
 .severity-tag-inline.low {{ background: rgba(63,185,80,0.15); color: var(--accent-green); }}
 .severity-tag-inline.unknown {{ background: var(--bg-tertiary); color: var(--text-muted); }}
-.bug-body {{
+.failure-body {{
     padding: 0 20px 20px;
     border-top: 1px solid var(--border);
 }}
-.bug-body h4 {{
+.failure-body h4 {{
     font-size: 13px;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -721,24 +301,15 @@ body {{
     border-left: 3px solid var(--accent-red);
     color: var(--accent-red);
 }}
-.bug-tests ul {{
-    list-style: none;
-    padding: 0;
-}}
-.bug-tests li {{
-    padding: 4px 0;
+.detail-grid {{
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 16px;
     font-size: 13px;
-    color: var(--text-secondary);
+    margin-top: 8px;
 }}
-.bug-tests li::before {{
-    content: "\\2192 ";
-    color: var(--text-muted);
-}}
-.bug-tests code {{
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-primary);
-}}
+.detail-label {{ color: var(--text-muted); font-weight: 600; }}
+.detail-value {{ color: var(--text-primary); font-family: var(--font-mono); font-size: 12px; }}
 
 /* Detail table */
 .table-container {{
@@ -774,29 +345,6 @@ td {{
 tr:hover td {{ background: var(--bg-hover); }}
 td.test-name {{ font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); max-width: 300px; word-break: break-all; }}
 td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350px; word-break: break-word; color: var(--accent-red); }}
-.stage-tag {{
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 10px;
-    text-transform: uppercase;
-    white-space: nowrap;
-}}
-.stage-tag.setup {{ background: rgba(240, 136, 62, 0.12); color: var(--accent-orange); border: 1px solid rgba(240, 136, 62, 0.25); }}
-.stage-tag.execution {{ background: rgba(188, 140, 255, 0.12); color: var(--accent-purple); border: 1px solid rgba(188, 140, 255, 0.25); }}
-
-/* Key takeaway */
-.key-takeaway {{
-    background: var(--bg-secondary);
-    border: 1px solid var(--accent-yellow);
-    border-left: 4px solid var(--accent-yellow);
-    border-radius: var(--radius);
-    padding: 20px 24px;
-    margin-bottom: 24px;
-}}
-.key-takeaway-header {{ display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }}
-.key-takeaway-header h3 {{ font-size: 14px; color: var(--accent-yellow); }}
-.key-takeaway p {{ font-size: 14px; color: var(--text-secondary); line-height: 1.7; }}
 
 /* Child job sections */
 .child-job {{
@@ -832,6 +380,19 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
 .child-job-meta a:hover {{ text-decoration: underline; }}
 .child-note {{ font-size: 13px; color: var(--accent-yellow); font-style: italic; margin: 8px 0; }}
 
+/* Key takeaway */
+.key-takeaway {{
+    background: var(--bg-secondary);
+    border: 1px solid var(--accent-yellow);
+    border-left: 4px solid var(--accent-yellow);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+}}
+.key-takeaway-header {{ display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }}
+.key-takeaway-header h3 {{ font-size: 14px; color: var(--accent-yellow); }}
+.key-takeaway p {{ font-size: 14px; color: var(--text-secondary); line-height: 1.7; }}
+
 /* Footer */
 .report-footer {{
     margin-top: 48px;
@@ -858,46 +419,28 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
 
 /* Responsive */
 @media (max-width: 768px) {{
-    .results-overview {{ grid-template-columns: 1fr; }}
-    .stats-grid {{ grid-template-columns: repeat(2, 1fr); }}
-    .charts-row {{ grid-template-columns: 1fr; }}
     .header-content {{ flex-direction: column; align-items: flex-start; }}
     .env-chips {{ margin-left: 0; }}
-    .root-cause-details {{ grid-template-columns: 1fr 1fr; }}
 }}
 @media (max-width: 480px) {{
-    .stats-grid {{ grid-template-columns: 1fr; }}
-    .root-cause-details {{ grid-template-columns: 1fr; }}
-    .bug-summary {{ font-size: 12px; gap: 8px; }}
-    .bar-label {{ min-width: 120px; font-size: 11px; }}
+    .failure-summary {{ font-size: 12px; gap: 8px; }}
 }}
+</style>
+</head>
+<body>
+<div class="container">
 """)
-
-    # Dynamic donut animation keyframes
-    parts.append(f"""
-@keyframes fillSetup {{
-    from {{ stroke-dasharray: 0 {circumference:.2f}; }}
-    to {{ stroke-dasharray: {setup_dash:.2f} {setup_gap:.2f}; }}
-}}
-@keyframes fillExec {{
-    from {{ stroke-dasharray: 0 {circumference:.2f}; }}
-    to {{ stroke-dasharray: {exec_dash:.2f} {exec_gap:.2f}; }}
-}}
-""")
-
-    parts.append('</style>\n</head>\n<body>\n<div class="container">')
 
     # --- STICKY HEADER ---
-    status_escaped = e(result.status)
     parts.append(f"""
 <div class="sticky-header">
   <div class="header-content">
     <h1>{e(job_name)}</h1>
-    <span class="failure-badge"><span class="pulse-dot"></span>{stats["total"]} failure{"s" if stats["total"] != 1 else ""}</span>
+    <span class="failure-badge">{total_failures} failure{"s" if total_failures != 1 else ""}</span>
     <div class="env-chips">
-      <span class="env-chip">Job: {e(job_name)}</span>
       <span class="env-chip">Build: #{e(build_number)}</span>
-      <span class="env-chip">Status: {status_escaped}</span>
+      <span class="env-chip">Status: {e(result.status)}</span>
+      <span class="env-chip">AI: {e(provider_info)}</span>
       <span class="env-chip"><a href="{e(jenkins_url_str)}" target="_blank" rel="noopener">Jenkins</a></span>
     </div>
   </div>
@@ -905,7 +448,7 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
 """)
 
     # --- NO FAILURES CASE ---
-    if stats["total"] == 0:
+    if total_failures == 0 and not result.child_job_analyses:
         parts.append("""
 <div class="no-failures">
   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2">
@@ -915,7 +458,6 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
   <p>No failures detected in this build.</p>
 </div>
 """)
-        # Still show summary and footer
         _append_takeaway(parts, result.summary, e)
         _append_footer(
             parts,
@@ -929,134 +471,22 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
         parts.append("</div>\n</body>\n</html>")
         return "\n".join(parts)
 
-    # --- RESULTS OVERVIEW (donut + stats) ---
-    setup_pct_display = round(setup_pct * 100)
-    exec_pct_display = round(exec_pct * 100)
+    # --- FAILURE CARDS (grouped by root cause) ---
+    groups: list[dict] = []
+    if result.failures:
+        groups = _group_failures(result.failures)
+        parts.append('<h2 class="section-title">Root Cause Analysis</h2>')
+        for group in groups:
+            _render_group_card(parts, group, e)
 
-    parts.append(f"""
-<h2 class="section-title">Results Overview</h2>
-<div class="results-overview">
-  <div class="donut-container">
-    <svg width="140" height="140" viewBox="0 0 120 120">
-      <circle cx="60" cy="60" r="47" fill="none" stroke="var(--bg-tertiary)" stroke-width="12"/>
-      <circle cx="60" cy="60" r="47" fill="none"
-              stroke="var(--accent-orange)" stroke-width="12"
-              stroke-dasharray="0 {circumference:.2f}"
-              stroke-dashoffset="0"
-              stroke-linecap="round"
-              style="animation: fillSetup 1s ease-out both;"
-              transform="rotate(-90 60 60)"/>
-      <circle cx="60" cy="60" r="47" fill="none"
-              stroke="var(--accent-purple)" stroke-width="12"
-              stroke-dasharray="0 {circumference:.2f}"
-              stroke-dashoffset="{exec_offset:.2f}"
-              stroke-linecap="round"
-              style="animation: fillExec 1s ease-out 0.3s both;"
-              transform="rotate(-90 60 60)"/>
-      <text x="60" y="56" text-anchor="middle" fill="var(--text-primary)" font-size="22" font-weight="700" font-family="var(--font-mono)">{stats["total"]}</text>
-      <text x="60" y="72" text-anchor="middle" fill="var(--text-muted)" font-size="10">failures</text>
-    </svg>
-    <div class="donut-legend">
-      <div class="donut-legend-item"><span class="legend-dot" style="background:var(--accent-orange)"></span> Setup ({setup_pct_display}%)</div>
-      <div class="donut-legend-item"><span class="legend-dot" style="background:var(--accent-purple)"></span> Execution ({exec_pct_display}%)</div>
-    </div>
-  </div>
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="stat-label">Total Failures</div>
-      <div class="stat-value" style="color:var(--accent-red)">{stats["total"]}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Unique Errors</div>
-      <div class="stat-value" style="color:var(--accent-orange)">{stats["unique_errors"]}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Classification</div>
-      <div class="stat-value" style="font-size:16px;color:var(--text-primary)">{e(stats["dominant_classification"])}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Severity</div>
-      <div class="stat-value" style="font-size:16px;color:{_severity_color(stats["dominant_severity"])}">{e(stats["dominant_severity"].upper())}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Job ID</div>
-      <div class="stat-value" style="font-size:12px;color:var(--accent-purple);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px" title="{e(result.job_id)}">{e(result.job_id)}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Affected Modules</div>
-      <div class="stat-value" style="color:var(--accent-blue)">{len(stats["modules"])}</div>
-    </div>
-  </div>
-</div>
-""")
+    # --- CHILD JOB ANALYSES ---
+    if result.child_job_analyses:
+        parts.append('<h2 class="section-title">Child Job Analyses</h2>')
+        _render_child_jobs(parts, result.child_job_analyses, e)
 
-    # --- ROOT CAUSE BANNER ---
-    if dominant_root_cause is not None:
-        parsed_rc = dominant_root_cause["parsed"]
-        rc_failures = dominant_root_cause["failures"]
-        rc_count = len(rc_failures)
-        rc_pct = round(rc_count / stats["total"] * 100)
-        rc_stage = parsed_rc["stage"]
-        rc_setup = rc_count if rc_stage == "setup" else 0
-        rc_exec = rc_count - rc_setup
-
-        parts.append(f"""
-<div class="root-cause-banner">
-  <div class="root-cause-header">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-red)" stroke-width="2">
-      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-    <h3>Dominant Root Cause ({rc_pct}% of failures)</h3>
-  </div>
-  <div class="root-cause-desc">{e(parsed_rc["bug_title"])}</div>
-  <div class="root-cause-error">{e(rc_failures[0].error)}</div>
-  <div class="root-cause-details">
-    <div class="root-cause-detail"><span class="label">Component: </span><span class="value">{e(parsed_rc["component"])}</span></div>
-    <div class="root-cause-detail"><span class="label">Classification: </span><span class="value">{e(parsed_rc["classification"])}</span></div>
-    <div class="root-cause-detail"><span class="label">Setup failures: </span><span class="value">{rc_setup}</span></div>
-    <div class="root-cause-detail"><span class="label">Execution failures: </span><span class="value">{rc_exec}</span></div>
-  </div>
-</div>
-""")
-
-    # --- CHARTS ROW ---
-    severity_color = _severity_color(stats["dominant_severity"])
-    parts.append(f"""
-<div class="charts-row">
-  <div class="chart-card">
-    <h3>Overall Severity Assessment</h3>
-    <div class="severity-badge-container">
-      <div class="severity-badge" style="color:{severity_color};border-color:{severity_color};background:rgba(255,255,255,0.03)">
-        <svg width="28" height="28" viewBox="0 0 16 16" fill="currentColor"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
-        {e(stats["dominant_severity"].upper())}
-      </div>
-    </div>
-  </div>
-  <div class="chart-card">
-    <h3>Failures by Module</h3>
-    <div class="bar-chart">
-""")
-
-    for module_name, count in module_items:
-        bar_pct = round(count / max_module_count * 100)
-        parts.append(f"""      <div class="bar-row">
-        <span class="bar-label" title="{e(module_name)}">{e(module_name)}</span>
-        <div class="bar-track"><div class="bar-fill" style="width:{bar_pct}%"></div></div>
-        <span class="bar-value">{count}</span>
-      </div>
-""")
-
-    parts.append("    </div>\n  </div>\n</div>")
-
-    # --- BUG CARDS ---
-    parts.append('<h2 class="section-title">Root Cause Analysis</h2>')
-
-    for group in groups:
-        _render_bug_card(parts, group, e)
-
-    # --- DETAIL TABLE ---
-    parts.append("""
+    # --- ALL FAILURES TABLE ---
+    if result.failures:
+        parts.append("""
 <h2 class="section-title">All Failures</h2>
 <div class="table-container">
 <table>
@@ -1064,48 +494,32 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
 <tr>
   <th>#</th>
   <th>Test Name</th>
-  <th>Module</th>
-  <th>Bug Ref</th>
   <th>Error</th>
-  <th>Stage</th>
-  <th>Severity</th>
+  <th>Classification</th>
+  <th>Bug Ref</th>
 </tr>
 </thead>
 <tbody>
 """)
+        # Build lookup from failure analysis key to bug_id
+        analysis_to_bug: dict[str, str] = {}
+        for group in groups:
+            key = _grouping_key(group["analysis"])
+            analysis_to_bug[key] = group["bug_id"]
 
-    # Build lookups: failure analysis text -> bug_id and parsed data
-    analysis_to_bug: dict[str, str] = {}
-    analysis_to_parsed: dict[str, dict] = {}
-    for group in groups:
-        analysis_to_bug[group["analysis_text"]] = group["bug_id"]
-        analysis_to_parsed[group["analysis_text"]] = group["parsed"]
-
-    for idx, f in enumerate(all_failures, start=1):
-        parsed = analysis_to_parsed[f.analysis.strip()]
-        parts_name = f.test_name.split(".")
-        module = ".".join(parts_name[:2]) if len(parts_name) >= 2 else f.test_name
-        bug_ref = analysis_to_bug[f.analysis.strip()]
-        stage_class = parsed["stage"]
-        sev_class = parsed["severity"]
-
-        parts.append(f"""<tr>
+        for idx, f in enumerate(result.failures, start=1):
+            cls = f.analysis.classification or "Unknown"
+            cls_class = _classification_css_class(cls)
+            bug_ref = analysis_to_bug.get(_grouping_key(f.analysis), "")
+            parts.append(f"""<tr>
   <td>{idx}</td>
   <td class="test-name">{e(f.test_name)}</td>
-  <td>{e(module)}</td>
-  <td><span class="bug-id">{e(bug_ref)}</span></td>
   <td class="error-cell" title="{e(f.error)}">{e(f.error)}</td>
-  <td><span class="stage-tag {e(stage_class)}">{e(stage_class)}</span></td>
-  <td><span class="severity-tag-inline {e(sev_class)}">{e(parsed["severity"].upper())}</span></td>
+  <td><span class="classification-tag {e(cls_class)}">{e(cls)}</span></td>
+  <td><span class="bug-id">{e(bug_ref)}</span></td>
 </tr>
 """)
-
-    parts.append("</tbody>\n</table>\n</div>")
-
-    # --- CHILD JOB ANALYSES ---
-    if result.child_job_analyses:
-        parts.append('<h2 class="section-title">Child Job Analyses</h2>')
-        _render_child_jobs(parts, result.child_job_analyses, e)
+        parts.append("</tbody>\n</table>\n</div>")
 
     # --- KEY TAKEAWAY ---
     _append_takeaway(parts, result.summary, e)
@@ -1119,57 +533,327 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
     return "\n".join(parts)
 
 
-def _render_bug_card(
+def _format_provider(ai_provider: str, ai_model: str) -> str:
+    """Format AI provider and model for display.
+
+    Args:
+        ai_provider: AI provider name.
+        ai_model: AI model name.
+
+    Returns:
+        Display string like "Claude (claude-sonnet-4-20250514)".
+    """
+    if not ai_provider:
+        return "Unknown provider"
+    if ai_model:
+        return f"{ai_provider.capitalize()} ({ai_model})"
+    return ai_provider.capitalize()
+
+
+def _classification_css_class(classification: str) -> str:
+    """Return a CSS class suffix for a classification string.
+
+    Args:
+        classification: Classification text like "PRODUCT BUG".
+
+    Returns:
+        A CSS-safe class name like "product-bug" or "code-issue".
+    """
+    lower = classification.lower().strip()
+    if "product" in lower and "bug" in lower:
+        return "product-bug"
+    if "code" in lower and "issue" in lower:
+        return "code-issue"
+    return "unknown"
+
+
+def _grouping_key(detail: AnalysisDetail) -> str:
+    """Compute a grouping key for root cause aggregation.
+
+    Groups by classification + first 4 words of the bug title
+    (for product bugs) or classification + file path (for code issues).
+    Falls back to full JSON match when neither is available.
+
+    The first 4 words of the title capture the essence of the bug
+    while tolerating minor phrasing variations from different AI calls.
+    """
+    cls = (detail.classification or "").strip().upper()
+
+    # For product bugs, group by classification + first 4 words of title
+    if (
+        isinstance(detail.product_bug_report, ProductBugReport)
+        and detail.product_bug_report.title
+    ):
+        title = detail.product_bug_report.title.strip().lower()
+        words = title.split()[:4]
+        normalized_title = " ".join(words)
+        return f"{cls}|title:{normalized_title}"
+
+    # For code issues, group by classification + file path
+    if isinstance(detail.code_fix, CodeFix) and detail.code_fix.file:
+        return f"{cls}|file:{detail.code_fix.file.strip()}"
+
+    # Fallback: full JSON match
+    return detail.model_dump_json()
+
+
+def _group_failures(failures: list[FailureAnalysis]) -> list[dict]:
+    """Group failures that share the same root cause.
+
+    Groups by classification + first 4 words of the bug title
+    (for product bugs) or classification + file path (for code issues).
+    Falls back to full AnalysisDetail JSON match when neither is available.
+
+    After initial grouping, singleton groups are merged into the dominant
+    group (if one exists with >50% of failures) when they share the same
+    classification. This handles cases where the AI uses different phrasing
+    for the same root cause.
+
+    Args:
+        failures: List of FailureAnalysis instances to group.
+
+    Returns:
+        A list of dicts, each containing:
+        - ``analysis``: the representative AnalysisDetail
+        - ``failures``: list of FailureAnalysis in this group
+        - ``bug_id``: a short identifier like ``"BUG-1"``
+    """
+    if not failures:
+        return []
+
+    # First pass: group by key
+    groups_map: dict[str, list[FailureAnalysis]] = {}
+    order: list[str] = []
+    for f in failures:
+        key = _grouping_key(f.analysis)
+        if key not in groups_map:
+            groups_map[key] = []
+            order.append(key)
+        groups_map[key].append(f)
+
+    # Second pass: merge singletons into the dominant group
+    total = len(failures)
+    if total > 2 and len(groups_map) > 1:
+        # Find the largest group
+        dominant_key = max(groups_map, key=lambda k: len(groups_map[k]))
+        dominant_size = len(groups_map[dominant_key])
+
+        if dominant_size > total * 0.5:
+            # Get the classification of the dominant group
+            dominant_cls = (
+                groups_map[dominant_key][0].analysis.classification.strip().upper()
+            )
+            # Merge singletons with the same classification
+            keys_to_remove: list[str] = []
+            for key in order:
+                if key == dominant_key:
+                    continue
+                if len(groups_map[key]) == 1:
+                    singleton_cls = (
+                        groups_map[key][0].analysis.classification.strip().upper()
+                    )
+                    if singleton_cls == dominant_cls:
+                        groups_map[dominant_key].extend(groups_map[key])
+                        keys_to_remove.append(key)
+
+            for key in keys_to_remove:
+                del groups_map[key]
+                order.remove(key)
+
+    # Build final groups
+    groups: list[dict] = []
+    for idx, key in enumerate(order, start=1):
+        group_failures = groups_map[key]
+        groups.append(
+            {
+                "analysis": group_failures[0].analysis,
+                "failures": group_failures,
+                "bug_id": f"BUG-{idx}",
+            }
+        )
+    return groups
+
+
+def _render_failure_card(
+    parts: list[str],
+    failure: FailureAnalysis,
+    e: Callable[[str], str],
+    indent: str = "",
+) -> None:
+    """Render a single collapsible failure card.
+
+    Args:
+        parts: List of HTML string parts to append to.
+        failure: A FailureAnalysis instance to render.
+        e: HTML escape function reference.
+        indent: HTML indentation prefix for nested cards.
+    """
+    detail = failure.analysis
+    cls = detail.classification or "Unknown"
+    cls_class = _classification_css_class(cls)
+
+    parts.append(f"""{indent}<details class="failure-card">
+{indent}  <summary class="failure-summary">
+{indent}    <span class="failure-title">{e(failure.test_name)}</span>
+{indent}    <span class="classification-tag {e(cls_class)}">{e(cls)}</span>
+{indent}  </summary>
+{indent}  <div class="failure-body">
+""")
+
+    # Error
+    parts.append(f"""{indent}    <h4>Error</h4>
+{indent}    <pre class="error-pre">{e(failure.error)}</pre>
+""")
+
+    # Analysis text
+    if detail.details:
+        parts.append(f"""{indent}    <h4>Analysis</h4>
+{indent}    <pre class="analysis-pre">{e(detail.details)}</pre>
+""")
+
+    # Code Fix details
+    if isinstance(detail.code_fix, CodeFix):
+        fix = detail.code_fix
+        parts.append(f"""{indent}    <h4>Code Fix</h4>
+{indent}    <div class="detail-grid">
+{indent}      <span class="detail-label">File:</span><span class="detail-value">{e(fix.file)}</span>
+{indent}      <span class="detail-label">Line:</span><span class="detail-value">{e(fix.line)}</span>
+{indent}      <span class="detail-label">Change:</span><span class="detail-value">{e(fix.change)}</span>
+{indent}    </div>
+""")
+
+    # Product Bug Report details
+    if isinstance(detail.product_bug_report, ProductBugReport):
+        bug = detail.product_bug_report
+        parts.append(f"""{indent}    <h4>Product Bug Report</h4>
+{indent}    <div class="detail-grid">
+{indent}      <span class="detail-label">Title:</span><span class="detail-value">{e(bug.title)}</span>
+{indent}      <span class="detail-label">Severity:</span><span class="detail-value">{e(bug.severity)}</span>
+{indent}      <span class="detail-label">Component:</span><span class="detail-value">{e(bug.component)}</span>
+{indent}      <span class="detail-label">Description:</span><span class="detail-value">{e(bug.description)}</span>
+{indent}      <span class="detail-label">Evidence:</span><span class="detail-value">{e(bug.evidence)}</span>
+{indent}    </div>
+""")
+
+    # Affected tests
+    if detail.affected_tests:
+        parts.append(
+            f'{indent}    <h4>Affected Tests ({len(detail.affected_tests)})</h4>\n{indent}    <ul style="list-style:none;padding:0">\n'
+        )
+        for t in detail.affected_tests:
+            parts.append(
+                f'{indent}      <li style="padding:4px 0;font-size:13px;color:var(--text-secondary)"><code style="font-family:var(--font-mono);font-size:12px;color:var(--text-primary)">{e(t)}</code></li>\n'
+            )
+        parts.append(f"{indent}    </ul>\n")
+
+    parts.append(f"""{indent}  </div>
+{indent}</details>
+""")
+
+
+def _render_group_card(
     parts: list[str],
     group: dict,
     e: Callable[[str], str],
     indent: str = "",
-    extra_style: str = "",
 ) -> None:
-    """Render a single collapsible bug card.
+    """Render a collapsible card for a group of failures sharing the same analysis.
 
     Args:
         parts: List of HTML string parts to append to.
-        group: Root cause group dict with keys analysis_text, failures, parsed, bug_id.
+        group: Dict with keys 'analysis' (AnalysisDetail), 'failures' (list), 'bug_id' (str).
         e: HTML escape function reference.
         indent: HTML indentation prefix for nested cards.
-        extra_style: Additional inline style for the details element.
     """
-    parsed = group["parsed"]
+    detail = group["analysis"]
     bug_id = group["bug_id"]
-    cls_class = _classification_css_class(parsed["classification"])
-    sev_class = parsed["severity"]
-    test_count = len(group["failures"])
+    failures = group["failures"]
+    cls = detail.classification or "Unknown"
+    cls_class = _classification_css_class(cls)
+    test_count = len(failures)
     test_label = f"{test_count} test{'s' if test_count != 1 else ''}"
-    style_attr = f' style="{extra_style}"' if extra_style else ""
 
-    parts.append(f"""{indent}<details class="bug-card"{style_attr}>
+    # Severity from product bug report if available
+    severity = ""
+    if (
+        isinstance(detail.product_bug_report, ProductBugReport)
+        and detail.product_bug_report.severity
+    ):
+        severity = detail.product_bug_report.severity.lower()
+    if severity not in ("critical", "high", "medium", "low"):
+        severity = "unknown"
+
+    # Card title: bug report title, or first test error
+    if (
+        isinstance(detail.product_bug_report, ProductBugReport)
+        and detail.product_bug_report.title
+    ):
+        card_title = detail.product_bug_report.title
+    else:
+        card_title = failures[0].error or failures[0].test_name
+
+    parts.append(f"""{indent}<details class="bug-card">
 {indent}  <summary class="bug-summary">
 {indent}    <span class="bug-id">{e(bug_id)}</span>
-{indent}    <span class="bug-title">{e(parsed["bug_title"])}</span>
+{indent}    <span class="bug-title">{e(card_title)}</span>
 {indent}    <span class="bug-count">{e(test_label)}</span>
-{indent}    <span class="classification-tag {e(cls_class)}">{e(parsed["classification"])}</span>
-{indent}    <span class="severity-tag-inline {e(sev_class)}">{e(parsed["severity"].upper())}</span>
+{indent}    <span class="classification-tag {e(cls_class)}">{e(cls)}</span>
+{indent}    <span class="severity-tag-inline {e(severity)}">{e(severity.upper())}</span>
 {indent}  </summary>
 {indent}  <div class="bug-body">
-{indent}    <div class="bug-analysis">
+""")
+
+    # AI Analysis
+    if detail.details:
+        parts.append(f"""{indent}    <div class="bug-analysis">
 {indent}      <h4>AI Analysis</h4>
-{indent}      <pre class="analysis-pre">{e(group["analysis_text"])}</pre>
+{indent}      <pre class="analysis-pre">{e(detail.details)}</pre>
 {indent}    </div>
-{indent}    <div class="bug-tests">
+""")
+
+    # Code Fix details (improvement over reference)
+    if isinstance(detail.code_fix, CodeFix):
+        fix = detail.code_fix
+        parts.append(f"""{indent}    <h4>Code Fix</h4>
+{indent}    <div class="detail-grid">
+{indent}      <span class="detail-label">File:</span><span class="detail-value">{e(fix.file)}</span>
+{indent}      <span class="detail-label">Line:</span><span class="detail-value">{e(fix.line)}</span>
+{indent}      <span class="detail-label">Change:</span><span class="detail-value">{e(fix.change)}</span>
+{indent}    </div>
+""")
+
+    # Product Bug Report details (improvement over reference)
+    if isinstance(detail.product_bug_report, ProductBugReport):
+        bug = detail.product_bug_report
+        parts.append(f"""{indent}    <h4>Product Bug Report</h4>
+{indent}    <div class="detail-grid">
+{indent}      <span class="detail-label">Title:</span><span class="detail-value">{e(bug.title)}</span>
+{indent}      <span class="detail-label">Severity:</span><span class="detail-value">{e(bug.severity)}</span>
+{indent}      <span class="detail-label">Component:</span><span class="detail-value">{e(bug.component)}</span>
+{indent}      <span class="detail-label">Description:</span><span class="detail-value">{e(bug.description)}</span>
+{indent}      <span class="detail-label">Evidence:</span><span class="detail-value">{e(bug.evidence)}</span>
+{indent}    </div>
+""")
+
+    # Affected Tests
+    parts.append(f"""{indent}    <div class="bug-tests">
 {indent}      <h4>Affected Tests ({test_count})</h4>
 {indent}      <ul>
 """)
-    for f in group["failures"]:
+    for f in failures:
         parts.append(f"{indent}        <li><code>{e(f.test_name)}</code></li>\n")
-
     parts.append(f"""{indent}      </ul>
 {indent}    </div>
-{indent}    <div class="bug-error">
+""")
+
+    # Error
+    parts.append(f"""{indent}    <div class="bug-error">
 {indent}      <h4>Error</h4>
-{indent}      <pre class="error-pre">{e(group["failures"][0].error)}</pre>
+{indent}      <pre class="error-pre">{e(failures[0].error)}</pre>
 {indent}    </div>
-{indent}  </div>
+""")
+
+    parts.append(f"""{indent}  </div>
 {indent}</details>
 """)
 
@@ -1217,11 +901,9 @@ def _render_child_jobs(
             )
 
         if child.failures:
-            child_groups = _group_failures_by_root_cause(child.failures)
+            child_groups = _group_failures(child.failures)
             for group in child_groups:
-                _render_bug_card(
-                    parts, group, e, indent="    ", extra_style="margin-top:12px"
-                )
+                _render_group_card(parts, group, e, indent="    ")
 
         # Recurse into nested children
         if child.failed_children and depth < max_depth:

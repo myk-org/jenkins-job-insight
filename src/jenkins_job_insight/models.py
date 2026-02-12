@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, model_serializer, model_validator
 
 
 class AnalyzeRequest(BaseModel):
@@ -33,6 +33,10 @@ class AnalyzeRequest(BaseModel):
         default=None,
         description="AI model to use (overrides env var default)",
     )
+    html_report: bool | None = Field(
+        default=None,
+        description="Generate HTML report (default: true, overrides HTML_REPORT env var)",
+    )
 
 
 class TestFailure(BaseModel):
@@ -49,14 +53,63 @@ class TestFailure(BaseModel):
     )
 
 
+class ProductBugReport(BaseModel):
+    """Structured product bug report from AI analysis."""
+
+    title: str = Field(default="", description="Concise bug title")
+    severity: str = Field(
+        default="", description="Bug severity: critical/high/medium/low"
+    )
+    component: str = Field(default="", description="Affected component")
+    description: str = Field(default="", description="What product behavior is broken")
+    evidence: str = Field(default="", description="Relevant log snippets")
+
+
+class CodeFix(BaseModel):
+    """Structured code fix suggestion from AI analysis."""
+
+    file: str = Field(default="", description="File path to fix")
+    line: str = Field(default="", description="Line number")
+    change: str = Field(default="", description="Specific code change")
+
+
+class AnalysisDetail(BaseModel):
+    """Structured AI analysis broken into sections."""
+
+    classification: str = Field(default="", description="CODE ISSUE or PRODUCT BUG")
+    affected_tests: list[str] = Field(
+        default_factory=list, description="List of affected test names"
+    )
+    details: str = Field(default="", description="Detailed analysis text")
+    code_fix: CodeFix | bool | None = Field(
+        default=False, description="Code fix (if CODE ISSUE)"
+    )
+    product_bug_report: ProductBugReport | bool | None = Field(
+        default=False, description="Bug report (if PRODUCT BUG)"
+    )
+
+    @model_validator(mode="after")
+    def check_mutual_exclusivity(self) -> "AnalysisDetail":
+        if self.code_fix and self.product_bug_report:
+            raise ValueError("code_fix and product_bug_report are mutually exclusive")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _exclude_falsy_optionals(self, handler):
+        d = handler(self)
+        if not d.get("code_fix"):
+            d.pop("code_fix", None)
+        if not d.get("product_bug_report"):
+            d.pop("product_bug_report", None)
+        return d
+
+
 class FailureAnalysis(BaseModel):
     """Analysis result for a single test failure."""
 
     test_name: str = Field(description="Name of the failed test")
     error: str = Field(description="Error message or exception")
-    analysis: str = Field(
-        description="Full Claude CLI analysis output (human readable)"
-    )
+    analysis: AnalysisDetail = Field(description="Structured AI analysis output")
 
 
 class ChildJobAnalysis(BaseModel):
@@ -85,6 +138,8 @@ class AnalysisResult(BaseModel):
     """Complete analysis result for a Jenkins job."""
 
     job_id: str = Field(description="Unique identifier for the analysis job")
+    job_name: str = Field(default="", description="Jenkins job name")
+    build_number: int = Field(default=0, description="Jenkins build number")
     jenkins_url: HttpUrl = Field(description="URL of the analyzed Jenkins job")
     status: Literal["pending", "running", "completed", "failed"] = Field(
         description="Current status of the analysis"
