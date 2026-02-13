@@ -537,7 +537,7 @@ The report is fully self-contained (no external CSS/JS) and can be shared as a s
 
 ## pytest Integration
 
-Enrich JUnit XML reports with AI-powered failure analysis. A standalone `conftest.py` collects test failures during execution and injects AI analysis into the JUnit XML at session finish.
+Enrich JUnit XML reports with AI-powered failure analysis. After tests complete, the plugin parses the JUnit XML for failures, sends them to the jenkins-job-insight server, and injects analysis results back into the XML.
 
 **Safety**: The plugin never fails pytest or corrupts the original JUnit XML. All operations are wrapped in error handling with XML backup/restore.
 
@@ -545,27 +545,33 @@ Enrich JUnit XML reports with AI-powered failure analysis. A standalone `conftes
 
 1. Copy `examples/pytest-junitxml/conftest_junit_ai.py` and `examples/pytest-junitxml/conftest_junit_ai_utils.py` to your project root
 2. Rename `conftest_junit_ai.py` to `conftest.py`
-3. Install `requests`: `pip install requests`
-4. Set environment variables:
+3. Install dependencies: `pip install requests python-dotenv`
+4. Create a `.env` file or set environment variables:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `JJI_SERVER_URL` | Yes | - | Jenkins Job Insight server URL |
+| `JJI_AI_PROVIDER` | No | `claude` | AI provider: claude, gemini, or cursor |
+| `JJI_AI_MODEL` | No | `claude-opus-4-6[1m]` | AI model to use |
 | `JJI_TIMEOUT` | No | `600` | Request timeout in seconds |
-| `JJI_AI_PROVIDER` | Yes | - | AI provider to use: claude, gemini, or cursor |
-| `JJI_AI_MODEL` | Yes | - | AI model to use |
 
 ### Usage
 
 ```bash
-# Run tests with JUnit XML output
-pytest --junitxml=report.xml
+# Run tests with AI analysis
+pytest --junitxml=report.xml --analyze-with-ai
 
-# The conftest automatically:
-# 1. Collects failures during test execution
-# 2. POSTs them to the jenkins-job-insight server
-# 3. Injects AI analysis into report.xml as <properties> and <system-out>
+# Without the flag, the plugin is inactive (zero overhead)
+pytest --junitxml=report.xml
 ```
+
+### How It Works
+
+1. pytest runs tests and generates JUnit XML as usual
+2. At session finish, the plugin parses the XML for `<failure>` and `<error>` elements
+3. Failures are POSTed to the `/analyze-failures` endpoint
+4. AI analysis results are injected back into the XML as `<properties>` and `<system-out>`
+5. No global state or runtime collection -- works with pytest-xdist parallel execution
 
 ### What Gets Injected
 

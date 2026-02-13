@@ -4,73 +4,274 @@ import logging
 import os
 import shutil
 from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree as ET
+from xml.etree.ElementTree import Element
 
-try:
-    import requests
-except ImportError:
-    requests = None  # type: ignore[assignment]
+import requests
+from dotenv import load_dotenv
 
 logger = logging.getLogger("jenkins-job-insight")
 
 
-def nodeid_to_classname_and_name(nodeid):
-    """Convert a pytest nodeid to JUnit XML (classname, name) tuple.
-
-    Examples:
-        "tests/test_foo.py::test_bar" -> ("tests.test_foo", "test_bar")
-        "tests/test_foo.py::TestClass::test_bar" -> ("tests.test_foo.TestClass", "test_bar")
-        "tests/sub/test_foo.py::TestClass::test_bar[param]" -> ("tests.sub.test_foo.TestClass", "test_bar[param]")
-        "tests/test_foo.py::Outer::Inner::test_bar" -> ("tests.test_foo.Outer.Inner", "test_bar")
-    """
-    parts = nodeid.split("::")
-    module = parts[0].replace("/", ".").removesuffix(".py")
-    if len(parts) >= 3:
-        classname = f"{module}.{'.'.join(parts[1:-1])}"
-        return classname, parts[-1]
-    elif len(parts) == 2:
-        return module, parts[1]
-    return "", nodeid
+def is_dry_run(config) -> bool:
+    """Check if pytest was invoked in dry-run mode (--collectonly or --setupplan)."""
+    return config.option.setupplan or config.option.collectonly
 
 
-def inject_analysis(testcase, analysis):
-    """Inject AI analysis into a testcase element as properties and system-out.
+def setup_ai_analysis(session) -> None:
+    """Configure AI analysis for test failure reporting.
+
+    Loads .env, validates JJI_SERVER_URL, and sets defaults for AI provider/model.
+    Disables analysis if JJI_SERVER_URL is missing or if pytest was invoked
+    with --collectonly or --setupplan.
 
     Args:
-        testcase: XML Element for the testcase
-        analysis: dict with classification, details, affected_tests, etc.
+        session: The pytest session containing config options.
+    """
+    if is_dry_run(session.config):
+        session.config.option.analyze_with_ai = False
+        return
+
+    load_dotenv()
+
+    logger.info("Setting up AI-powered test failure analysis")
+
+    if not os.environ.get("JJI_SERVER_URL"):
+        logger.warning(
+            "JJI_SERVER_URL is not set. Analyze with AI features will be disabled."
+        )
+        session.config.option.analyze_with_ai = False
+    else:
+        if not os.environ.get("JJI_AI_PROVIDER"):
+            os.environ["JJI_AI_PROVIDER"] = "claude"
+
+        if not os.environ.get("JJI_AI_MODEL"):
+            os.environ["JJI_AI_MODEL"] = "claude-opus-4-6[1m]"
+
+
+def enrich_junit_xml(session) -> None:
+    """Parse failures from JUnit XML, send for AI analysis, and enrich the XML.
+
+    Reads the JUnit XML that pytest already generated, extracts all failed
+    testcases, sends them to the JJI server for AI analysis, and injects
+    the analysis results back into the same XML.
+
+    Args:
+        session: The pytest session containing config options.
+    """
+    xml_path_raw = getattr(session.config.option, "xmlpath", None)
+    if not xml_path_raw or not Path(xml_path_raw).exists():
+        return
+
+    xml_path = Path(xml_path_raw)
+
+    ai_provider = os.environ.get("JJI_AI_PROVIDER")
+    ai_model = os.environ.get("JJI_AI_MODEL")
+    if not ai_provider or not ai_model:
+        logger.warning(
+            "JJI_AI_PROVIDER and JJI_AI_MODEL must be set, skipping AI analysis enrichment"
+        )
+        return
+
+    failures = _extract_failures_from_xml(xml_path=xml_path)
+    if not failures:
+        logger.info(
+            "jenkins-job-insight: No failures found in JUnit XML, skipping AI analysis"
+        )
+        return
+
+    server_url = os.environ["JJI_SERVER_URL"]
+    payload: dict[str, Any] = {
+        "failures": failures,
+        "ai_provider": ai_provider,
+        "ai_model": ai_model,
+    }
+
+    analysis_map = _fetch_analysis_from_server(server_url=server_url, payload=payload)
+    if not analysis_map:
+        return
+
+    _apply_analysis_to_xml(xml_path=xml_path, analysis_map=analysis_map)
+
+
+def _extract_failures_from_xml(xml_path: Path) -> list[dict[str, str]]:
+    """Extract test failures and errors from a JUnit XML file.
+
+    Parses the XML and finds all testcase elements with failure or error
+    child elements, extracting test name, error message, and stack trace.
+
+    Args:
+        xml_path: Path to the JUnit XML report file.
+
+    Returns:
+        List of failure dicts with test_name, error_message, stack_trace, and status.
+    """
+    tree = ET.parse(xml_path)
+    failures: list[dict[str, str]] = []
+
+    for testcase in tree.iter("testcase"):
+        failure_elem = testcase.find("failure")
+        error_elem = testcase.find("error")
+        result_elem = failure_elem if failure_elem is not None else error_elem
+
+        if result_elem is None:
+            continue
+
+        classname = testcase.get("classname", "")
+        name = testcase.get("name", "")
+        test_name = f"{classname}.{name}" if classname else name
+
+        failures.append(
+            {
+                "test_name": test_name,
+                "error_message": result_elem.get("message", ""),
+                "stack_trace": result_elem.text or "",
+                "status": "ERROR"
+                if error_elem is not None and failure_elem is None
+                else "FAILED",
+            }
+        )
+
+    return failures
+
+
+def _fetch_analysis_from_server(
+    server_url: str, payload: dict[str, Any]
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Send collected failures to the JJI server and return the analysis map.
+
+    Args:
+        server_url: The JJI server base URL.
+        payload: Request payload containing failures and AI config.
+
+    Returns:
+        Mapping of (classname, test_name) to analysis results.
+        Returns empty dict on request failure.
+    """
+    try:
+        timeout_value = int(os.environ.get("JJI_TIMEOUT", "600"))
+    except ValueError:
+        logger.warning("Invalid JJI_TIMEOUT value, using default 600 seconds")
+        timeout_value = 600
+
+    try:
+        response = requests.post(
+            f"{server_url.rstrip('/')}/analyze-failures",
+            json=payload,
+            timeout=timeout_value,
+        )
+        response.raise_for_status()
+        result = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        error_detail = ""
+        if isinstance(exc, requests.RequestException) and exc.response is not None:
+            try:
+                error_detail = f" Response: {exc.response.text}"
+            except Exception as detail_exc:
+                logger.debug("Could not extract response detail: %s", detail_exc)
+        logger.error("Server request failed: %s%s", exc, error_detail)
+        return {}
+
+    analysis_map: dict[tuple[str, str], dict[str, Any]] = {}
+    for failure in result.get("failures", []):
+        test_name = failure.get("test_name", "")
+        analysis = failure.get("analysis", {})
+        if test_name and analysis:
+            # test_name is "classname.name" from XML extraction; split on last dot
+            dot_idx = test_name.rfind(".")
+            if dot_idx > 0:
+                analysis_map[(test_name[:dot_idx], test_name[dot_idx + 1 :])] = analysis
+            else:
+                analysis_map[("", test_name)] = analysis
+
+    return analysis_map
+
+
+def _apply_analysis_to_xml(
+    xml_path: Path, analysis_map: dict[tuple[str, str], dict[str, Any]]
+) -> None:
+    """Apply AI analysis results to JUnit XML testcase elements.
+
+    Uses exact (classname, name) matching since failures are extracted from
+    the same XML file, guaranteeing identical attribute values.
+    Backs up the original XML before modification and restores it on failure.
+
+    Args:
+        xml_path: Path to the JUnit XML report file.
+        analysis_map: Mapping of (classname, test_name) to analysis results.
+    """
+    backup_path = xml_path.with_suffix(".xml.bak")
+    shutil.copy2(xml_path, backup_path)
+
+    try:
+        tree = ET.parse(xml_path)
+        matched_keys: set[tuple[str, str]] = set()
+        for testcase in tree.iter("testcase"):
+            key = (testcase.get("classname", ""), testcase.get("name", ""))
+            analysis = analysis_map.get(key)
+            if analysis:
+                _inject_analysis(testcase, analysis)
+                matched_keys.add(key)
+
+        unmatched = set(analysis_map.keys()) - matched_keys
+        if unmatched:
+            logger.warning(
+                "jenkins-job-insight: %d analysis results did not match any testcase: %s",
+                len(unmatched),
+                unmatched,
+            )
+
+        tree.write(str(xml_path), encoding="unicode", xml_declaration=True)
+        backup_path.unlink()  # Success - remove backup
+    except Exception:
+        # Restore original XML from backup
+        shutil.copy2(backup_path, xml_path)
+        backup_path.unlink()
+        raise
+
+
+def _inject_analysis(testcase: Element, analysis: dict[str, Any]) -> None:
+    """Inject AI analysis into a JUnit XML testcase element.
+
+    Adds structured properties (classification, code fix, bug report) and a
+    human-readable summary to the testcase's system-out section.
+
+    Args:
+        testcase: The XML testcase element to enrich.
+        analysis: Analysis dict with classification, details, affected_tests, etc.
     """
     # Add structured properties
     properties = testcase.find("properties")
     if properties is None:
         properties = ET.SubElement(testcase, "properties")
 
-    add_property(properties, "ai_classification", analysis.get("classification", ""))
-    add_property(properties, "ai_details", analysis.get("details", ""))
+    _add_property(properties, "ai_classification", analysis.get("classification", ""))
+    _add_property(properties, "ai_details", analysis.get("details", ""))
 
     affected = analysis.get("affected_tests", [])
     if affected:
-        add_property(properties, "ai_affected_tests", ", ".join(affected))
+        _add_property(properties, "ai_affected_tests", ", ".join(affected))
 
     # Code fix properties
     code_fix = analysis.get("code_fix")
     if code_fix and isinstance(code_fix, dict):
-        add_property(properties, "ai_code_fix_file", code_fix.get("file", ""))
-        add_property(properties, "ai_code_fix_line", code_fix.get("line", ""))
-        add_property(properties, "ai_code_fix_change", code_fix.get("change", ""))
+        _add_property(properties, "ai_code_fix_file", code_fix.get("file", ""))
+        _add_property(properties, "ai_code_fix_line", str(code_fix.get("line", "")))
+        _add_property(properties, "ai_code_fix_change", code_fix.get("change", ""))
 
     # Product bug properties
     bug_report = analysis.get("product_bug_report")
     if bug_report and isinstance(bug_report, dict):
-        add_property(properties, "ai_bug_title", bug_report.get("title", ""))
-        add_property(properties, "ai_bug_severity", bug_report.get("severity", ""))
-        add_property(properties, "ai_bug_component", bug_report.get("component", ""))
-        add_property(
+        _add_property(properties, "ai_bug_title", bug_report.get("title", ""))
+        _add_property(properties, "ai_bug_severity", bug_report.get("severity", ""))
+        _add_property(properties, "ai_bug_component", bug_report.get("component", ""))
+        _add_property(
             properties, "ai_bug_description", bug_report.get("description", "")
         )
 
     # Add human-readable system-out
-    text = format_analysis_text(analysis)
+    text = _format_analysis_text(analysis)
     if text:
         system_out = testcase.find("system-out")
         if system_out is None:
@@ -84,15 +285,15 @@ def inject_analysis(testcase, analysis):
             )
 
 
-def add_property(properties_elem, name, value):
-    """Add a property element if value is non-empty."""
+def _add_property(properties_elem: Element, name: str, value: str) -> None:
+    """Add a property sub-element if value is non-empty."""
     if value:
         prop = ET.SubElement(properties_elem, "property")
         prop.set("name", name)
-        prop.set("value", str(value))
+        prop.set("value", value)
 
 
-def format_analysis_text(analysis):
+def _format_analysis_text(analysis: dict[str, Any]) -> str:
     """Format analysis dict as human-readable text for system-out."""
     parts = []
 
@@ -120,86 +321,3 @@ def format_analysis_text(analysis):
         parts.append(f"  Description: {bug_report.get('description', '')}")
 
     return "\n".join(parts) if parts else ""
-
-
-def enrich_junit_xml(session, collected_failures):
-    """Internal: POST failures to server and inject analysis into XML."""
-    if requests is None:
-        return
-
-    xml_path = getattr(session.config.option, "xmlpath", None)
-    if not xml_path or not Path(xml_path).exists() or not collected_failures:
-        return
-
-    xml_path = Path(xml_path)
-
-    # POST failures to jenkins-job-insight server
-    server_url = os.environ.get("JJI_SERVER_URL")
-    if not server_url:
-        logger.warning("JJI_SERVER_URL not set, skipping AI analysis enrichment")
-        return
-    payload: dict = {"failures": collected_failures}
-
-    ai_provider = os.environ.get("JJI_AI_PROVIDER")
-    ai_model = os.environ.get("JJI_AI_MODEL")
-    if not ai_provider or not ai_model:
-        logger.warning(
-            "JJI_AI_PROVIDER and JJI_AI_MODEL must be set, skipping AI analysis enrichment"
-        )
-        return
-    payload["ai_provider"] = ai_provider
-    payload["ai_model"] = ai_model
-
-    try:
-        timeout = int(os.environ.get("JJI_TIMEOUT", "600"))
-    except ValueError:
-        timeout = 600
-
-    try:
-        response = requests.post(
-            f"{server_url.rstrip('/')}/analyze-failures",
-            json=payload,
-            timeout=timeout,
-        )
-        response.raise_for_status()
-        result = response.json()
-    except requests.RequestException as exc:
-        error_detail = ""
-        if hasattr(exc, "response") and exc.response is not None:
-            try:
-                error_detail = f" Response: {exc.response.text}"
-            except Exception as inner_exc:
-                logger.debug("Could not read error response body: %s", inner_exc)
-        logger.error("Server request failed: %s%s", exc, error_detail)
-        return
-
-    # Build (classname, name) -> analysis mapping using nodeid conversion
-    analysis_map = {}
-    for failure in result.get("failures", []):
-        test_name = failure.get("test_name", "")
-        analysis = failure.get("analysis", {})
-        if test_name and analysis:
-            key = nodeid_to_classname_and_name(test_name)
-            analysis_map[key] = analysis
-
-    if not analysis_map:
-        return
-
-    # Backup original XML before modification
-    backup_path = xml_path.with_suffix(".xml.bak")
-    shutil.copy2(xml_path, backup_path)
-
-    try:
-        tree = ET.parse(xml_path)
-        for testcase in tree.iter("testcase"):
-            key = (testcase.get("classname", ""), testcase.get("name", ""))
-            if key in analysis_map:
-                inject_analysis(testcase, analysis_map[key])
-
-        tree.write(str(xml_path), encoding="unicode", xml_declaration=True)
-        backup_path.unlink()  # Success - remove backup
-    except Exception:
-        # Restore original XML from backup
-        shutil.copy2(backup_path, xml_path)
-        backup_path.unlink()
-        raise  # Re-raise to be caught by outer try/except in sessionfinish

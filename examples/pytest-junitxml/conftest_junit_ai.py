@@ -1,25 +1,28 @@
 """
 Standalone conftest.py for enriching JUnit XML with AI failure analysis.
 
-Collects test failures during pytest execution and sends them to a
-jenkins-job-insight server for AI analysis. Results are injected into
-the JUnit XML report as <properties> and <system-out> elements.
+Parses the JUnit XML that pytest generates, extracts failed test cases,
+sends them to a jenkins-job-insight server for AI analysis, and injects
+the analysis results back into the XML.
 
 SAFETY: This plugin NEVER fails pytest or compromises the original JUnit XML.
 All operations are wrapped in error handling. The original XML is backed up
 before modification and restored if anything goes wrong.
 
 Usage:
-    1. Copy this file into your project's root (or a conftest.py directory)
-    2. Set environment variables:
+    1. Copy conftest_junit_ai.py and conftest_junit_ai_utils.py to your project root
+    2. Rename conftest_junit_ai.py to conftest.py
+    3. Install dependencies: pip install requests python-dotenv
+    4. Create a .env file or set environment variables:
        - JJI_SERVER_URL: jenkins-job-insight server URL (required)
+       - JJI_AI_PROVIDER: AI provider - claude, gemini, or cursor (default: claude)
+       - JJI_AI_MODEL: AI model (default: claude-opus-4-6[1m])
        - JJI_TIMEOUT: request timeout in seconds (default: 600)
-       - JJI_AI_PROVIDER: AI provider to use - claude, gemini, or cursor (required)
-       - JJI_AI_MODEL: AI model to use (required)
-    3. Run: pytest --junitxml=report.xml
+    5. Run: pytest --junitxml=report.xml --analyze-with-ai
 
 Requirements:
     - requests
+    - python-dotenv
     - A running jenkins-job-insight server
 """
 
@@ -27,42 +30,26 @@ import logging
 
 import pytest
 
-from conftest_junit_ai_utils import enrich_junit_xml
+from conftest_junit_ai_utils import enrich_junit_xml, setup_ai_analysis
 
 logger = logging.getLogger("jenkins-job-insight")
 
-# Module-level collection of failures
-_collected_failures: list[dict] = []
+
+def pytest_addoption(parser):
+    """Add --analyze-with-ai CLI option."""
+    group = parser.getgroup("jenkins-job-insight", "AI-powered failure analysis")
+    group.addoption(
+        "--analyze-with-ai",
+        action="store_true",
+        default=False,
+        help="Enrich JUnit XML with AI-powered failure analysis from jenkins-job-insight",
+    )
 
 
-@pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session):
-    """Clear collected failures at the start of each session."""
-    _collected_failures.clear()
-
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_runtest_makereport(item, call):
-    """Collect failure data during test execution.
-
-    Captures failures from all phases: setup (fixtures), call (test body),
-    and teardown. Uses tryfirst to capture data before other plugins process it.
-    Wrapped in try/except to never interfere with test execution.
-    """
-    try:
-        if call.excinfo:
-            _collected_failures.append(
-                {
-                    "test_name": item.nodeid,
-                    "error_message": str(call.excinfo.value),
-                    "stack_trace": str(call.excinfo.getrepr()),
-                    "duration": call.duration,
-                    "status": "FAILED",
-                    "phase": call.when,
-                }
-            )
-    except Exception as exc:
-        logger.warning("Failed to collect failure data: %s", exc)
+    """Set up AI analysis if --analyze-with-ai is passed."""
+    if session.config.option.analyze_with_ai:
+        setup_ai_analysis(session)
 
 
 @pytest.hookimpl(trylast=True)
@@ -70,9 +57,11 @@ def pytest_sessionfinish(session, exitstatus):
     """Enrich JUnit XML with AI analysis after all tests complete.
 
     Uses trylast to run AFTER the junitxml plugin writes the XML file.
-    Wrapped in try/except to never change pytest's exit code or lose the XML.
     """
+    if not session.config.option.analyze_with_ai:
+        return
+
     try:
-        enrich_junit_xml(session, _collected_failures)
+        enrich_junit_xml(session)
     except Exception:
         logger.exception("Failed to enrich JUnit XML, original preserved")
