@@ -543,9 +543,10 @@ Enrich JUnit XML reports with AI-powered failure analysis. A standalone `conftes
 
 ### Setup
 
-1. Copy `examples/conftest_junit_ai.py` to your project root as `conftest.py`
-2. Install `requests`: `pip install requests`
-3. Set environment variables:
+1. Copy `examples/pytest-junitxml/conftest_junit_ai.py` and `examples/pytest-junitxml/conftest_junit_ai_utils.py` to your project root
+2. Rename `conftest_junit_ai.py` to `conftest.py`
+3. Install `requests`: `pip install requests`
+4. Set environment variables:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|

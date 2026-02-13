@@ -74,5 +74,5 @@ def pytest_sessionfinish(session, exitstatus):
     """
     try:
         enrich_junit_xml(session, _collected_failures)
-    except Exception as exc:
-        logger.error("Failed to enrich JUnit XML, original preserved: %s", exc)
+    except Exception:
+        logger.exception("Failed to enrich JUnit XML, original preserved")

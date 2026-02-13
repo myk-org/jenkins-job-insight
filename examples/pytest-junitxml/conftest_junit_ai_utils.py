@@ -21,11 +21,13 @@ def nodeid_to_classname_and_name(nodeid):
         "tests/test_foo.py::test_bar" -> ("tests.test_foo", "test_bar")
         "tests/test_foo.py::TestClass::test_bar" -> ("tests.test_foo.TestClass", "test_bar")
         "tests/sub/test_foo.py::TestClass::test_bar[param]" -> ("tests.sub.test_foo.TestClass", "test_bar[param]")
+        "tests/test_foo.py::Outer::Inner::test_bar" -> ("tests.test_foo.Outer.Inner", "test_bar")
     """
     parts = nodeid.split("::")
     module = parts[0].replace("/", ".").removesuffix(".py")
-    if len(parts) == 3:
-        return f"{module}.{parts[1]}", parts[2]
+    if len(parts) >= 3:
+        classname = f"{module}.{'.'.join(parts[1:-1])}"
+        return classname, parts[-1]
     elif len(parts) == 2:
         return module, parts[1]
     return "", nodeid
@@ -149,10 +151,15 @@ def enrich_junit_xml(session, collected_failures):
     payload["ai_model"] = ai_model
 
     try:
+        timeout = int(os.environ.get("JJI_TIMEOUT", "600"))
+    except ValueError:
+        timeout = 600
+
+    try:
         response = requests.post(
             f"{server_url.rstrip('/')}/analyze-failures",
             json=payload,
-            timeout=int(os.environ.get("JJI_TIMEOUT", "600")),
+            timeout=timeout,
         )
         response.raise_for_status()
         result = response.json()
@@ -161,8 +168,8 @@ def enrich_junit_xml(session, collected_failures):
         if hasattr(exc, "response") and exc.response is not None:
             try:
                 error_detail = f" Response: {exc.response.text}"
-            except Exception:
-                pass
+            except Exception as inner_exc:
+                logger.debug("Could not read error response body: %s", inner_exc)
         logger.error("Server request failed: %s%s", exc, error_detail)
         return
 

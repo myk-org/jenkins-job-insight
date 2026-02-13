@@ -1,3 +1,4 @@
+import asyncio
 import os
 import urllib.parse
 import uuid
@@ -276,7 +277,7 @@ async def analyze_failures(body: AnalyzeFailuresRequest) -> FailureAnalysisResul
     )
 
     # Save initial pending state so GET /results/{job_id} works immediately
-    await save_result(job_id, "direct-analysis", "pending", None)
+    await save_result(job_id, "", "pending", None)
 
     # Group failures by error signature for deduplication
     groups: dict[str, list] = defaultdict(list)
@@ -296,7 +297,7 @@ async def analyze_failures(body: AnalyzeFailuresRequest) -> FailureAnalysisResul
         await update_status(job_id, "running")
 
         if tests_repo_url:
-            repo_path = repo_manager.clone(str(tests_repo_url))
+            repo_path = await asyncio.to_thread(repo_manager.clone, str(tests_repo_url))
 
         # Analyze each unique failure group in parallel
         coroutines = [
