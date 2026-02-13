@@ -164,3 +164,34 @@ class JobStatus(BaseModel):
         description="Current status of the analysis"
     )
     created_at: datetime = Field(description="Timestamp when the job was created")
+
+
+class AnalyzeFailuresRequest(BaseModel):
+    """Request payload for direct failure analysis (no Jenkins)."""
+
+    failures: list[TestFailure] = Field(description="Raw test failures to analyze")
+    tests_repo_url: HttpUrl | None = Field(
+        default=None,
+        description="Optional repo URL for AI code context",
+    )
+    ai_provider: Literal["claude", "gemini", "cursor"] | None = Field(
+        default=None,
+        description="AI provider to use (overrides env var default)",
+    )
+    ai_model: str | None = Field(
+        default=None,
+        description="AI model to use (overrides env var default)",
+    )
+
+
+class FailureAnalysisResult(BaseModel):
+    """Analysis result for direct failure analysis (no Jenkins context)."""
+
+    job_id: str = Field(description="Unique identifier for the analysis job")
+    status: Literal["completed", "failed"] = Field(description="Analysis status")
+    summary: str = Field(description="Summary of the analysis findings")
+    ai_provider: str = Field(default="", description="AI provider used")
+    ai_model: str = Field(default="", description="AI model used")
+    failures: list[FailureAnalysis] = Field(
+        default_factory=list, description="Analyzed failures"
+    )
