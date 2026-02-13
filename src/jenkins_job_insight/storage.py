@@ -64,6 +64,44 @@ async def save_result(
         await db.commit()
 
 
+async def update_status(
+    job_id: str,
+    status: str,
+    result: dict | None = None,
+) -> None:
+    """Update the status of an existing analysis result.
+
+    Unlike save_result, this uses UPDATE to preserve the original created_at timestamp.
+    Only updates result_json when result is explicitly provided.
+
+    Args:
+        job_id: Unique identifier for the analysis job.
+        status: New status for the analysis.
+        result: Optional result data to store. When None, result_json is not modified.
+    """
+    logger.debug(f"Updating status for job_id: {job_id} (status: {status})")
+    async with aiosqlite.connect(DB_PATH) as db:
+        if result is not None:
+            cursor = await db.execute(
+                """
+                UPDATE results SET status = ?, result_json = ?
+                WHERE job_id = ?
+                """,
+                (status, json.dumps(result), job_id),
+            )
+        else:
+            cursor = await db.execute(
+                """
+                UPDATE results SET status = ?
+                WHERE job_id = ?
+                """,
+                (status, job_id),
+            )
+        if cursor.rowcount == 0:
+            logger.warning(f"update_status: no row found for job_id={job_id}")
+        await db.commit()
+
+
 async def get_result(job_id: str) -> dict | None:
     """Retrieve an analysis result by job ID.
 

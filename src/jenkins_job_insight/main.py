@@ -22,6 +22,7 @@ from jenkins_job_insight.storage import (
     list_results,
     save_html_report,
     save_result,
+    update_status,
 )
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -137,14 +138,13 @@ async def process_analysis_with_id(
         body: The analysis request.
         settings: Application settings.
     """
-    jenkins_url = build_jenkins_url(
-        settings.jenkins_url, body.job_name, body.build_number
-    )
     logger.info(
         f"Analysis request received for {body.job_name} #{body.build_number} "
         f"(job_id: {job_id})"
     )
     try:
+        await update_status(job_id, "running")
+
         ai_provider, ai_model = _resolve_ai_config(body)
 
         result = await analyze_job(
@@ -159,7 +159,7 @@ async def process_analysis_with_id(
             result_data["html_report_url"] = f"/results/{job_id}.html"
 
         # Save to storage
-        await save_result(job_id, jenkins_url, "completed", result_data)
+        await update_status(job_id, "completed", result_data)
         logger.info(
             f"Analysis completed for {body.job_name} #{body.build_number} "
             f"(job_id: {job_id})"
@@ -169,7 +169,7 @@ async def process_analysis_with_id(
 
     except Exception as e:
         logger.exception(f"Analysis failed for job {job_id}")
-        await save_result(job_id, jenkins_url, "failed", {"error": str(e)})
+        await update_status(job_id, "failed", {"error": str(e)})
 
 
 @app.post("/analyze", status_code=202, response_model=None)
