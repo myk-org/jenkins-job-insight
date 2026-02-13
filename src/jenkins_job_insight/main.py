@@ -1,6 +1,8 @@
+import asyncio
 import os
 import urllib.parse
 import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
@@ -9,12 +11,21 @@ from simple_logger.logger import get_logger
 
 from jenkins_job_insight.analyzer import (
     VALID_AI_PROVIDERS,
+    analyze_failure_group,
     analyze_job,
+    get_failure_signature,
+    run_parallel_with_limit,
 )
 from jenkins_job_insight.config import Settings, get_settings
-from jenkins_job_insight.models import AnalysisResult, AnalyzeRequest
+from jenkins_job_insight.models import (
+    AnalysisResult,
+    AnalyzeFailuresRequest,
+    AnalyzeRequest,
+    FailureAnalysisResult,
+)
 from jenkins_job_insight.html_report import format_result_as_html
 from jenkins_job_insight.output import send_callback
+from jenkins_job_insight.repository import RepositoryManager
 from jenkins_job_insight.storage import (
     get_html_report,
     get_result,
@@ -87,11 +98,14 @@ app = FastAPI(
 )
 
 
-def _resolve_ai_config(body: AnalyzeRequest) -> tuple[str, str]:
-    """Resolve AI provider and model from request or env var defaults.
+def _resolve_ai_config_values(
+    ai_provider: str | None, ai_model: str | None
+) -> tuple[str, str]:
+    """Resolve and validate AI provider and model from given values or env defaults.
 
     Args:
-        body: The analysis request with optional ai_provider/ai_model overrides.
+        ai_provider: Provider from request body (or None).
+        ai_model: Model from request body (or None).
 
     Returns:
         Tuple of (ai_provider, ai_model).
@@ -99,19 +113,24 @@ def _resolve_ai_config(body: AnalyzeRequest) -> tuple[str, str]:
     Raises:
         HTTPException: If provider or model is not configured.
     """
-    ai_provider = body.ai_provider or AI_PROVIDER
-    ai_model = body.ai_model or AI_MODEL
-    if not ai_provider:
+    provider = ai_provider or AI_PROVIDER
+    model = ai_model or AI_MODEL
+    if not provider:
         raise HTTPException(
             status_code=400,
             detail=f"No AI provider configured. Set AI_PROVIDER env var or pass ai_provider in request body. Valid providers: {', '.join(sorted(VALID_AI_PROVIDERS))}",
         )
-    if not ai_model:
+    if not model:
         raise HTTPException(
             status_code=400,
             detail="No AI model configured. Set AI_MODEL env var or pass ai_model in request body.",
         )
-    return ai_provider, ai_model
+    return provider, model
+
+
+def _resolve_ai_config(body: AnalyzeRequest) -> tuple[str, str]:
+    """Resolve AI config from an AnalyzeRequest."""
+    return _resolve_ai_config_values(body.ai_provider, body.ai_model)
 
 
 def _resolve_html_report(body: AnalyzeRequest) -> bool:
@@ -238,6 +257,102 @@ async def analyze(
     }
 
     return response
+
+
+@app.post("/analyze-failures", response_model=FailureAnalysisResult)
+async def analyze_failures(body: AnalyzeFailuresRequest) -> FailureAnalysisResult:
+    """Analyze raw test failures directly without Jenkins.
+
+    Accepts test failure data and returns AI analysis. Sync only.
+    Reuses the same deduplication and analysis logic as Jenkins-based analysis.
+    """
+    if not body.failures:
+        raise HTTPException(status_code=400, detail="No failures provided")
+
+    ai_provider, ai_model = _resolve_ai_config_values(body.ai_provider, body.ai_model)
+
+    job_id = str(uuid.uuid4())
+    logger.info(
+        f"Direct failure analysis request received with {len(body.failures)} failures (job_id: {job_id})"
+    )
+
+    # Save initial pending state so GET /results/{job_id} works immediately
+    await save_result(job_id, "", "pending", None)
+
+    # Group failures by error signature for deduplication
+    groups: dict[str, list] = defaultdict(list)
+    for failure in body.failures:
+        sig = get_failure_signature(failure)
+        groups[sig].append(failure)
+
+    logger.info(
+        f"Grouped {len(body.failures)} failures into {len(groups)} unique error signatures"
+    )
+
+    # Optionally clone repo for AI code context
+    repo_manager = RepositoryManager()
+    repo_path = None
+    tests_repo_url = body.tests_repo_url or os.getenv("TESTS_REPO_URL")
+    try:
+        await update_status(job_id, "running")
+
+        if tests_repo_url:
+            repo_path = await asyncio.to_thread(repo_manager.clone, str(tests_repo_url))
+
+        # Analyze each unique failure group in parallel
+        coroutines = [
+            analyze_failure_group(
+                failures=group_failures,
+                console_context="",
+                repo_path=repo_path,
+                ai_provider=ai_provider,
+                ai_model=ai_model,
+            )
+            for group_failures in groups.values()
+        ]
+
+        results = await run_parallel_with_limit(coroutines)
+
+        # Flatten results and filter out exceptions
+        all_analyses = []
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(
+                    f"Failed to analyze failure group: {result}", exc_info=result
+                )
+            else:
+                all_analyses.extend(result)
+
+        unique_errors = len(groups)
+        summary = f"Analyzed {len(body.failures)} test failures ({unique_errors} unique errors). {len(all_analyses)} analyzed successfully."
+
+        analysis_result = FailureAnalysisResult(
+            job_id=job_id,
+            status="completed",
+            summary=summary,
+            ai_provider=ai_provider,
+            ai_model=ai_model,
+            failures=all_analyses,
+        )
+        await update_status(
+            job_id, "completed", analysis_result.model_dump(mode="json")
+        )
+        return analysis_result
+
+    except Exception as e:
+        logger.exception(f"Direct failure analysis failed for job {job_id}")
+        analysis_result = FailureAnalysisResult(
+            job_id=job_id,
+            status="failed",
+            summary=f"Analysis failed: {e}",
+            ai_provider=ai_provider,
+            ai_model=ai_model,
+        )
+        await update_status(job_id, "failed", analysis_result.model_dump(mode="json"))
+        return analysis_result
+
+    finally:
+        repo_manager.cleanup()
 
 
 @app.get("/results/{job_id}.html", response_class=HTMLResponse)

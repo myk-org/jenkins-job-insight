@@ -19,6 +19,8 @@ For each failure, the service provides detailed explanations and either fix sugg
 - **SQLite result storage**: Persists analysis results for later retrieval
 - **Callback webhooks**: Delivers results to your specified endpoint with custom headers
 - **HTML report output**: Generate self-contained, dark-themed HTML failure reports viewable in any browser
+- **Direct failure analysis**: Analyze raw test failures without Jenkins via `POST /analyze-failures`
+- **pytest JUnit XML integration**: Enrich JUnit XML reports with AI analysis using a standalone conftest.py
 
 ## Quick Start
 
@@ -266,6 +268,7 @@ The custom prompt should include instructions for the AI on how to analyze Jenki
 | `/results/{job_id}.html` | GET    | Retrieve stored result as an HTML report          |
 | `/results`               | GET    | List recent analysis jobs (default: 50, max: 100) |
 | `/health`                | GET    | Health check endpoint                             |
+| `/analyze-failures`      | POST   | Analyze raw test failures directly (no Jenkins)   |
 
 The service connects to the Jenkins instance configured via the `JENKINS_URL` environment variable. All analysis requests specify only the job name and build number.
 
@@ -422,6 +425,60 @@ curl "http://localhost:8000/results?limit=10"
 ]
 ```
 
+### Analyze Raw Test Failures (No Jenkins)
+
+Analyze test failures directly without Jenkins. Accepts raw failure data and returns AI analysis.
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:8000/analyze-failures \
+  -H "Content-Type: application/json" \
+  -d '{
+    "failures": [
+      {
+        "test_name": "tests/test_auth.py::test_login",
+        "error_message": "AssertionError: expected 200 but got 401",
+        "stack_trace": "...",
+        "duration": 1.5,
+        "status": "FAILED"
+      }
+    ],
+    "ai_provider": "claude",
+    "ai_model": "sonnet"
+  }'
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "summary": "Analyzed 1 test failures (1 unique errors). 1 analyzed successfully.",
+  "ai_provider": "claude",
+  "ai_model": "sonnet",
+  "failures": [
+    {
+      "test_name": "tests/test_auth.py::test_login",
+      "error": "AssertionError: expected 200 but got 401",
+      "analysis": {
+        "classification": "PRODUCT BUG",
+        "affected_tests": ["tests/test_auth.py::test_login"],
+        "details": "The authentication endpoint returns 401...",
+        "product_bug_report": {
+          "title": "Authentication endpoint rejects valid credentials",
+          "severity": "high",
+          "component": "auth-service",
+          "description": "...",
+          "evidence": "..."
+        }
+      }
+    }
+  ]
+}
+```
+
 ### Response Fields
 
 | Field | Type | Description |
@@ -477,6 +534,51 @@ The HTML report includes:
 - **Key takeaway** callout summarizing the analysis
 
 The report is fully self-contained (no external CSS/JS) and can be shared as a single file.
+
+## pytest Integration
+
+Enrich JUnit XML reports with AI-powered failure analysis. A standalone `conftest.py` collects test failures during execution and injects AI analysis into the JUnit XML at session finish.
+
+**Safety**: The plugin never fails pytest or corrupts the original JUnit XML. All operations are wrapped in error handling with XML backup/restore.
+
+### Setup
+
+1. Copy `examples/pytest-junitxml/conftest_junit_ai.py` and `examples/pytest-junitxml/conftest_junit_ai_utils.py` to your project root
+2. Rename `conftest_junit_ai.py` to `conftest.py`
+3. Install `requests`: `pip install requests`
+4. Set environment variables:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `JJI_SERVER_URL` | Yes | - | Jenkins Job Insight server URL |
+| `JJI_TIMEOUT` | No | `600` | Request timeout in seconds |
+| `JJI_AI_PROVIDER` | Yes | - | AI provider to use: claude, gemini, or cursor |
+| `JJI_AI_MODEL` | Yes | - | AI model to use |
+
+### Usage
+
+```bash
+# Run tests with JUnit XML output
+pytest --junitxml=report.xml
+
+# The conftest automatically:
+# 1. Collects failures during test execution
+# 2. POSTs them to the jenkins-job-insight server
+# 3. Injects AI analysis into report.xml as <properties> and <system-out>
+```
+
+### What Gets Injected
+
+For each failed test case, the JUnit XML is enriched with:
+
+**`<properties>`** (machine-readable, for CI tool parsing):
+- `ai_classification` -- "CODE ISSUE" or "PRODUCT BUG"
+- `ai_details` -- detailed analysis text
+- `ai_affected_tests` -- related tests with the same root cause
+- Code fix or product bug report fields
+
+**`<system-out>`** (human-readable, visible in Jenkins test details):
+- Formatted analysis text with classification, details, and fix/bug information
 
 ## Development
 
