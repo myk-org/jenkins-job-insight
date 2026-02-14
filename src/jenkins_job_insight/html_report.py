@@ -1016,3 +1016,160 @@ def _append_footer(
   <a href="{e(jenkins_url)}" target="_blank" rel="noopener">View in Jenkins</a>
 </div>
 """)
+
+
+def format_status_page(job_id: str, status: str, result: dict) -> str:
+    """Generate a status page for a job that is still processing.
+
+    Uses the same dark theme as the full report, with auto-refresh
+    and a simple status indicator.
+
+    Args:
+        job_id: The analysis job identifier.
+        status: Current job status (pending/running).
+        result: The job result dict from storage.
+
+    Returns:
+        A complete HTML document as a string.
+    """
+    e = html.escape
+
+    jenkins_url = result.get("jenkins_url", "")
+    created_at = result.get("created_at", "")
+
+    status_icon = "&#9203;" if status == "running" else "&#8987;"
+    status_label = "Analyzing..." if status == "running" else "Queued"
+    status_detail = (
+        "AI is analyzing the Jenkins build failures. This page will auto-refresh."
+        if status == "running"
+        else "Job is queued and waiting to start. This page will auto-refresh."
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analysis {e(status_label)} - {e(job_id[:8])}</title>
+<style>
+:root {{
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --border: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --accent-blue: #58a6ff;
+    --accent-yellow: #d29922;
+    --font-mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --radius: 8px;
+}}
+*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}}
+.status-container {{
+    max-width: 520px;
+    width: 100%;
+    padding: 40px;
+    text-align: center;
+}}
+.status-icon {{
+    font-size: 48px;
+    margin-bottom: 20px;
+    animation: pulse 2s ease-in-out infinite;
+}}
+@keyframes pulse {{
+    0%, 100% {{ opacity: 1; }}
+    50% {{ opacity: 0.5; }}
+}}
+.status-label {{
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--accent-yellow);
+}}
+.status-detail {{
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+}}
+.info-card {{
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: left;
+}}
+.info-row {{
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+}}
+.info-row:last-child {{ border-bottom: none; }}
+.info-label {{ color: var(--text-muted); font-weight: 600; }}
+.info-value {{ color: var(--text-primary); font-family: var(--font-mono); font-size: 12px; }}
+.info-value a {{ color: var(--accent-blue); text-decoration: none; }}
+.info-value a:hover {{ text-decoration: underline; }}
+.spinner {{
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent-yellow);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+}}
+@keyframes spin {{
+    to {{ transform: rotate(360deg); }}
+}}
+.refresh-note {{
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--text-muted);
+}}
+</style>
+</head>
+<body>
+<div class="status-container">
+    <div class="status-icon">{status_icon}</div>
+    <div class="status-label"><span class="spinner"></span>{e(status_label)}</div>
+    <div class="status-detail">{e(status_detail)}</div>
+    <div class="info-card">
+        <div class="info-row">
+            <span class="info-label">Job ID</span>
+            <span class="info-value">{e(job_id)}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Status</span>
+            <span class="info-value">{e(status)}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Created</span>
+            <span class="info-value">{e(created_at)}</span>
+        </div>
+        {
+        ""
+        if not jenkins_url
+        else f'''<div class="info-row">
+            <span class="info-label">Jenkins</span>
+            <span class="info-value"><a href="{e(jenkins_url)}" target="_blank" rel="noopener">View Build</a></span>
+        </div>'''
+    }
+    </div>
+    <div class="refresh-note">Auto-refreshing every 10 seconds</div>
+</div>
+</body>
+</html>"""

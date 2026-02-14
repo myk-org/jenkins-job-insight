@@ -26,7 +26,7 @@ from jenkins_job_insight.models import (
     FailureAnalysis,
     FailureAnalysisResult,
 )
-from jenkins_job_insight.html_report import format_result_as_html
+from jenkins_job_insight.html_report import format_result_as_html, format_status_page
 from jenkins_job_insight.output import send_callback
 from jenkins_job_insight.repository import RepositoryManager
 from jenkins_job_insight.storage import (
@@ -419,14 +419,31 @@ async def analyze_failures(
 
 @app.get("/results/{job_id}.html", response_class=HTMLResponse)
 async def get_job_report(job_id: str) -> HTMLResponse:
-    """Serve a saved HTML report."""
+    """Serve a saved HTML report or a status page if still processing."""
     html_content = await get_html_report(job_id)
-    if not html_content:
+    if html_content:
+        return HTMLResponse(html_content)
+
+    # Check if the job exists and show a status page
+    result = await get_result(job_id)
+    if not result:
         raise HTTPException(
             status_code=404,
-            detail=f"HTML report not found for job '{job_id}'. The report may not have been generated.",
+            detail=f"Job '{job_id}' not found.",
         )
-    return HTMLResponse(html_content)
+
+    status = result.get("status", "unknown")
+    if status in ("pending", "running"):
+        return HTMLResponse(
+            format_status_page(job_id, status, result),
+            headers={"Refresh": "10"},
+        )
+
+    # Job completed/failed but no HTML report was generated
+    raise HTTPException(
+        status_code=404,
+        detail=f"HTML report not found for job '{job_id}'. The report may not have been generated.",
+    )
 
 
 @app.get("/results/{job_id}", response_model=None)
