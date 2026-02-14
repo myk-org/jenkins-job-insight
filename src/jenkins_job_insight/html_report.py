@@ -1050,7 +1050,7 @@ def format_status_page(job_id: str, status: str, result: dict) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Analysis {e(status_label)} - {e(job_id[:8])}</title>
+<title>Analysis {e(status_label)} - {e(job_id)}</title>
 <style>
 :root {{
     --bg-primary: #0d1117;

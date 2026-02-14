@@ -237,7 +237,7 @@ When the AI classifies a failure as **PRODUCT BUG**, the service can optionally 
 
 Jira integration works with all analysis endpoints: `/analyze`, `/analyze?sync=true`, and `/analyze-failures`.
 
-#### Configuration
+#### Jira Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|

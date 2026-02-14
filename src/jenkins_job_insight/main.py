@@ -22,6 +22,7 @@ from jenkins_job_insight.models import (
     AnalysisResult,
     AnalyzeFailuresRequest,
     AnalyzeRequest,
+    BaseAnalysisRequest,
     ChildJobAnalysis,
     FailureAnalysis,
     FailureAnalysisResult,
@@ -143,6 +144,21 @@ def _resolve_html_report(body: AnalyzeRequest) -> bool:
     return HTML_REPORT
 
 
+def _resolve_enable_jira(body: BaseAnalysisRequest, settings: Settings) -> bool:
+    """Resolve enable_jira flag from request or config default.
+
+    Args:
+        body: The analysis request (AnalyzeRequest or AnalyzeFailuresRequest).
+        settings: Application settings with Jira configuration.
+
+    Returns:
+        True if Jira enrichment should run, False otherwise.
+    """
+    if body.enable_jira is not None:
+        return body.enable_jira
+    return settings.jira_enabled
+
+
 async def _generate_html_report(result: AnalysisResult) -> None:
     """Generate and save HTML report to disk."""
     html_content = format_result_as_html(result)
@@ -177,7 +193,7 @@ async def _enrich_result_with_jira(
         for item in items:
             if isinstance(item, FailureAnalysis):
                 all_failures.append(item)
-            if isinstance(item, ChildJobAnalysis):
+            elif isinstance(item, ChildJobAnalysis):
                 _collect(item.failures)
                 _collect(item.failed_children)
 
@@ -210,12 +226,13 @@ async def process_analysis_with_id(
         )
 
         # Enrich PRODUCT BUG failures with Jira matches
-        await _enrich_result_with_jira(
-            result.failures + list(result.child_job_analyses),
-            settings,
-            ai_provider,
-            ai_model,
-        )
+        if _resolve_enable_jira(body, settings):
+            await _enrich_result_with_jira(
+                result.failures + list(result.child_job_analyses),
+                settings,
+                ai_provider,
+                ai_model,
+            )
 
         result_data = result.model_dump(mode="json")
 
@@ -262,12 +279,13 @@ async def analyze(
         )
 
         # Enrich PRODUCT BUG failures with Jira matches
-        await _enrich_result_with_jira(
-            result.failures + list(result.child_job_analyses),
-            settings,
-            ai_provider,
-            ai_model,
-        )
+        if _resolve_enable_jira(body, settings):
+            await _enrich_result_with_jira(
+                result.failures + list(result.child_job_analyses),
+                settings,
+                ai_provider,
+                ai_model,
+            )
 
         jenkins_url = build_jenkins_url(
             settings.jenkins_url, body.job_name, body.build_number
@@ -386,7 +404,10 @@ async def analyze_failures(
         summary = f"Analyzed {len(body.failures)} test failures ({unique_errors} unique errors). {len(all_analyses)} analyzed successfully."
 
         # Enrich PRODUCT BUG failures with Jira matches
-        await enrich_with_jira_matches(all_analyses, settings, ai_provider, ai_model)
+        if _resolve_enable_jira(body, settings):
+            await enrich_with_jira_matches(
+                all_analyses, settings, ai_provider, ai_model
+            )
 
         analysis_result = FailureAnalysisResult(
             job_id=job_id,

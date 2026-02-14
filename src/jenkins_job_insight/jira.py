@@ -24,6 +24,21 @@ from jenkins_job_insight.models import (
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
+# JQL reserved characters that need to be stripped from search keywords
+_JQL_SPECIAL_CHARS = set(r'"\'{}[]()~^&|!?*%+-:')
+
+
+def _sanitize_jql_keyword(keyword: str) -> str:
+    """Strip JQL-reserved characters from a search keyword.
+
+    Args:
+        keyword: Raw keyword from AI output.
+
+    Returns:
+        Sanitized keyword safe for JQL text search.
+    """
+    return "".join(c for c in keyword if c not in _JQL_SPECIAL_CHARS).strip()
+
 
 class JiraClient:
     """HTTP client for Jira REST API.
@@ -41,14 +56,19 @@ class JiraClient:
         self._auth: tuple[str, str] | None
         if settings.jira_email and settings.jira_api_token:
             # Cloud: Basic auth with email:token, API v3
-            self._auth = (settings.jira_email, settings.jira_api_token)
+            self._auth = (
+                settings.jira_email,
+                settings.jira_api_token.get_secret_value(),
+            )
             self._api_path = "/rest/api/3"
             self._headers: dict[str, str] = {}
         else:
             # Server/DC: PAT bearer token, API v2
             self._auth = None
             self._api_path = "/rest/api/2"
-            self._headers = {"Authorization": f"Bearer {settings.jira_pat}"}
+            self._headers = {
+                "Authorization": f"Bearer {settings.jira_pat.get_secret_value() if settings.jira_pat else ''}"
+            }
 
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
@@ -86,7 +106,7 @@ class JiraClient:
 
         # Build JQL: summary ~ "kw1" OR summary ~ "kw2" ...
         text_clauses = " OR ".join(
-            f'summary ~ "{kw.replace(chr(34), "")}"' for kw in keywords
+            f'summary ~ "{_sanitize_jql_keyword(kw)}"' for kw in keywords
         )
         jql = f"issuetype = Bug AND ({text_clauses})"
         if self._project_key:
@@ -201,7 +221,7 @@ async def _filter_matches_with_ai(
     # Build candidate list for the AI prompt
     candidate_lines = []
     for i, c in enumerate(candidates, 1):
-        desc_preview = c["description"][:500] if c["description"] else "No description"
+        desc_preview = c["description"] if c["description"] else "No description"
         candidate_lines.append(
             f"{i}. {c['key']} [{c['status']}] - {c['summary']}\n"
             f"   Description: {desc_preview}"
@@ -271,7 +291,10 @@ Respond with ONLY the JSON array, no other text."""
             continue
         key = evaluation.get("key", "")
         is_relevant = evaluation.get("relevant", False)
-        score = float(evaluation.get("score", 0.0))
+        try:
+            score = float(evaluation.get("score", 0.0))
+        except (ValueError, TypeError):
+            score = 0.0
 
         if is_relevant and key in candidate_by_key:
             c = candidate_by_key[key]

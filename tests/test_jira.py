@@ -1,7 +1,7 @@
 """Tests for Jira integration."""
 
 import os
-from typing import Generator
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import httpx

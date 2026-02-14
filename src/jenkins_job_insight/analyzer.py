@@ -203,7 +203,7 @@ def _parse_json_response(raw_text: str) -> AnalysisDetail:
         try:
             data = json.loads(text)
             return AnalysisDetail(**data)
-        except (json.JSONDecodeError, Exception):
+        except Exception:
             pass
 
     # Strategy 2: Find the outermost JSON object using brace matching
@@ -360,7 +360,7 @@ def _extract_json_by_braces(text: str) -> AnalysisDetail | None:
                 escape_next = True
             continue
 
-        if char == '"' and not escape_next:
+        if char == '"':
             in_string = not in_string
             continue
 
@@ -382,7 +382,7 @@ def _extract_json_by_braces(text: str) -> AnalysisDetail | None:
     try:
         data = json.loads(json_str)
         return AnalysisDetail(**data)
-    except (json.JSONDecodeError, Exception):
+    except Exception:
         return None
 
 
@@ -412,7 +412,7 @@ def _extract_json_from_code_blocks(text: str) -> AnalysisDetail | None:
         try:
             data = json.loads(block_content)
             return AnalysisDetail(**data)
-        except (json.JSONDecodeError, Exception):
+        except Exception:
             pass
 
         # Try brace matching within the block

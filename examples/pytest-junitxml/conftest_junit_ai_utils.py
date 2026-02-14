@@ -286,6 +286,14 @@ def _inject_analysis(testcase: Element, analysis: dict[str, Any]) -> None:
                 _add_property(
                     properties, f"ai_jira_match_{idx}_url", match.get("url", "")
                 )
+                _add_property(
+                    properties,
+                    f"ai_jira_match_{idx}_priority",
+                    match.get("priority", ""),
+                )
+                score = match.get("score")
+                if score is not None:
+                    _add_property(properties, f"ai_jira_match_{idx}_score", str(score))
 
     # Add human-readable system-out
     text = _format_analysis_text(analysis)

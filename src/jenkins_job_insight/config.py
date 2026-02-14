@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,8 +38,8 @@ class Settings(BaseSettings):
     # Jira integration (optional)
     jira_url: str | None = None
     jira_email: str | None = None
-    jira_api_token: str | None = None
-    jira_pat: str | None = None
+    jira_api_token: SecretStr | None = None
+    jira_pat: SecretStr | None = None
     jira_project_key: str | None = None
     jira_ssl_verify: bool = True
     jira_max_results: int = 5
