@@ -153,6 +153,8 @@ async def _generate_html_report(result: AnalysisResult) -> None:
 async def _enrich_result_with_jira(
     failures: list[FailureAnalysis | ChildJobAnalysis],
     settings: Settings,
+    ai_provider: str = "",
+    ai_model: str = "",
 ) -> None:
     """Enrich PRODUCT BUG failures with Jira matches.
 
@@ -163,6 +165,8 @@ async def _enrich_result_with_jira(
     Args:
         failures: Mixed list of FailureAnalysis and ChildJobAnalysis objects.
         settings: Application settings with Jira configuration.
+        ai_provider: AI provider for Jira relevance filtering.
+        ai_model: AI model for Jira relevance filtering.
     """
     if not settings.jira_enabled:
         return
@@ -179,7 +183,7 @@ async def _enrich_result_with_jira(
 
     _collect(failures)
 
-    await enrich_with_jira_matches(all_failures, settings)
+    await enrich_with_jira_matches(all_failures, settings, ai_provider, ai_model)
 
 
 async def process_analysis_with_id(
@@ -207,7 +211,10 @@ async def process_analysis_with_id(
 
         # Enrich PRODUCT BUG failures with Jira matches
         await _enrich_result_with_jira(
-            result.failures + list(result.child_job_analyses), settings
+            result.failures + list(result.child_job_analyses),
+            settings,
+            ai_provider,
+            ai_model,
         )
 
         result_data = result.model_dump(mode="json")
@@ -256,7 +263,10 @@ async def analyze(
 
         # Enrich PRODUCT BUG failures with Jira matches
         await _enrich_result_with_jira(
-            result.failures + list(result.child_job_analyses), settings
+            result.failures + list(result.child_job_analyses),
+            settings,
+            ai_provider,
+            ai_model,
         )
 
         jenkins_url = build_jenkins_url(
@@ -376,7 +386,7 @@ async def analyze_failures(
         summary = f"Analyzed {len(body.failures)} test failures ({unique_errors} unique errors). {len(all_analyses)} analyzed successfully."
 
         # Enrich PRODUCT BUG failures with Jira matches
-        await enrich_with_jira_matches(all_analyses, settings)
+        await enrich_with_jira_matches(all_analyses, settings, ai_provider, ai_model)
 
         analysis_result = FailureAnalysisResult(
             job_id=job_id,

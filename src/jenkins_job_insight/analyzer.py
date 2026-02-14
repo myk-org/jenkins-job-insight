@@ -83,9 +83,17 @@ If PRODUCT BUG:
     "component": "affected component",
     "description": "what product behavior is broken",
     "evidence": "relevant log snippets",
-    "jira_search_keywords": ["keyword1", "keyword2", "keyword3"]
+    "jira_search_keywords": ["specific error symptom", "component + behavior", "error type"]
   }
-}"""
+}
+
+jira_search_keywords rules:
+- Generate 3-5 SHORT specific keywords for finding matching bugs in Jira
+- Focus on the specific error symptom and broken behavior, NOT test infrastructure
+- Combine component name with the specific failure (e.g. "VM start failure migration", "API timeout authentication")
+- AVOID generic/broad terms alone like "vSphere", "OpenShift", "timeout", "failure", "error"
+- Each keyword should be specific enough to narrow Jira search results to relevant bugs
+- Think: "what would someone title a Jira bug for this exact issue?\""""
 
 
 @dataclass(frozen=True)

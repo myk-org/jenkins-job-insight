@@ -11,7 +11,7 @@ from jenkins_job_insight.config import Settings
 from jenkins_job_insight.jira import (
     JiraClient,
     _collect_product_bug_reports,
-    _compute_relevance,
+    _extract_text_from_adf,
     enrich_with_jira_matches,
 )
 from jenkins_job_insight.models import (
@@ -65,6 +65,7 @@ def product_bug_failure() -> FailureAnalysis:
                 title="Login fails",
                 severity="high",
                 component="auth",
+                description="Login service returns 500 error",
                 jira_search_keywords=["login", "authentication", "500 error"],
             ),
         ),
@@ -101,30 +102,48 @@ def product_bug_no_keywords() -> FailureAnalysis:
     )
 
 
-class TestComputeRelevance:
-    """Tests for the _compute_relevance helper."""
+class TestExtractTextFromAdf:
+    """Tests for ADF text extraction."""
 
-    def test_all_keywords_match(self) -> None:
-        score = _compute_relevance(["login", "auth"], "PROJ-1", "Login auth failure")
-        assert score == 1.0
+    def test_extracts_text_nodes(self) -> None:
+        adf = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {"type": "text", "text": "Hello"},
+                        {"type": "text", "text": "World"},
+                    ],
+                }
+            ],
+        }
+        assert _extract_text_from_adf(adf) == "Hello World"
 
-    def test_partial_match(self) -> None:
-        score = _compute_relevance(
-            ["login", "auth", "timeout"], "PROJ-1", "Login failure"
-        )
-        assert 0.0 < score < 1.0
+    def test_empty_doc(self) -> None:
+        assert _extract_text_from_adf({}) == ""
 
-    def test_no_match(self) -> None:
-        score = _compute_relevance(["database", "migration"], "PROJ-1", "Login failure")
-        assert score == 0.0
-
-    def test_empty_keywords(self) -> None:
-        score = _compute_relevance([], "PROJ-1", "Login failure")
-        assert score == 0.0
-
-    def test_case_insensitive(self) -> None:
-        score = _compute_relevance(["LOGIN"], "PROJ-1", "login failure")
-        assert score > 0.0
+    def test_nested_content(self) -> None:
+        adf = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "bulletList",
+                    "content": [
+                        {
+                            "type": "listItem",
+                            "content": [
+                                {
+                                    "type": "paragraph",
+                                    "content": [{"type": "text", "text": "item"}],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+        assert "item" in _extract_text_from_adf(adf)
 
 
 class TestCollectProductBugReports:
@@ -166,8 +185,8 @@ class TestJiraClient:
         assert client._auth is None
         assert "Bearer" in client._headers.get("Authorization", "")
 
-    async def test_search_returns_matches(self, jira_settings) -> None:
-        """Search returns JiraMatch objects from API response."""
+    async def test_search_returns_candidates(self, jira_settings) -> None:
+        """Search returns candidate dicts from API response."""
         mock_response = httpx.Response(
             200,
             json={
@@ -176,16 +195,9 @@ class TestJiraClient:
                         "key": "PROJ-123",
                         "fields": {
                             "summary": "Login authentication failure",
+                            "description": "Users cannot log in",
                             "status": {"name": "Open"},
                             "priority": {"name": "High"},
-                        },
-                    },
-                    {
-                        "key": "PROJ-456",
-                        "fields": {
-                            "summary": "API timeout issue",
-                            "status": {"name": "Closed"},
-                            "priority": {"name": "Medium"},
                         },
                     },
                 ]
@@ -197,25 +209,24 @@ class TestJiraClient:
         with patch.object(
             client._client, "get", new_callable=AsyncMock, return_value=mock_response
         ):
-            matches = await client.search(["login", "authentication"])
+            candidates = await client.search(["login", "authentication"])
 
-        assert len(matches) == 2
-        assert matches[0].key in ("PROJ-123", "PROJ-456")
-        assert all(isinstance(m, JiraMatch) for m in matches)
-        assert all(
-            m.url.startswith("https://jira.example.com/browse/") for m in matches
-        )
+        assert len(candidates) == 1
+        assert candidates[0]["key"] == "PROJ-123"
+        assert candidates[0]["summary"] == "Login authentication failure"
+        assert candidates[0]["description"] == "Users cannot log in"
+        assert candidates[0]["url"].startswith("https://jira.example.com/browse/")
         await client.close()
 
     async def test_search_empty_keywords(self, jira_settings) -> None:
         """Search with empty keywords returns empty list."""
         client = JiraClient(jira_settings)
-        matches = await client.search([])
-        assert matches == []
+        candidates = await client.search([])
+        assert candidates == []
         await client.close()
 
-    async def test_search_with_project_key(self, jira_settings) -> None:
-        """Search includes project filter in JQL when configured."""
+    async def test_search_jql_contains_bug_filter(self, jira_settings) -> None:
+        """Search JQL includes issuetype = Bug and summary search."""
         mock_response = httpx.Response(
             200,
             json={"issues": []},
@@ -232,6 +243,8 @@ class TestJiraClient:
         jql = call_kwargs.kwargs.get("params", {}).get("jql", "") or call_kwargs[1].get(
             "params", {}
         ).get("jql", "")
+        assert "issuetype = Bug" in jql
+        assert 'summary ~ "login"' in jql
         assert 'project = "PROJ"' in jql
         await client.close()
 
@@ -245,6 +258,7 @@ class TestJiraClient:
                         "key": "PROJ-789",
                         "fields": {
                             "summary": "Some issue",
+                            "description": None,
                             "status": None,
                             "priority": None,
                         },
@@ -258,11 +272,54 @@ class TestJiraClient:
         with patch.object(
             client._client, "get", new_callable=AsyncMock, return_value=mock_response
         ):
-            matches = await client.search(["test"])
+            candidates = await client.search(["test"])
 
-        assert len(matches) == 1
-        assert matches[0].status == ""
-        assert matches[0].priority == ""
+        assert len(candidates) == 1
+        assert candidates[0]["status"] == ""
+        assert candidates[0]["priority"] == ""
+        assert candidates[0]["description"] == ""
+        await client.close()
+
+    async def test_search_handles_adf_description(self, jira_settings) -> None:
+        """Search extracts text from ADF (Cloud v3) descriptions."""
+        mock_response = httpx.Response(
+            200,
+            json={
+                "issues": [
+                    {
+                        "key": "PROJ-100",
+                        "fields": {
+                            "summary": "ADF test",
+                            "description": {
+                                "type": "doc",
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": "ADF description text",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            },
+                            "status": {"name": "Open"},
+                            "priority": {"name": "High"},
+                        },
+                    }
+                ]
+            },
+            request=httpx.Request("GET", "https://jira.example.com"),
+        )
+
+        client = JiraClient(jira_settings)
+        with patch.object(
+            client._client, "get", new_callable=AsyncMock, return_value=mock_response
+        ):
+            candidates = await client.search(["test"])
+
+        assert candidates[0]["description"] == "ADF description text"
         await client.close()
 
 
@@ -296,27 +353,76 @@ class TestEnrichWithJiraMatches:
             await enrich_with_jira_matches([product_bug_no_keywords], jira_settings)
             mock_client_cls.assert_not_called()
 
-    async def test_enriches_product_bug_failures(
+    async def test_enriches_with_ai_filtering(
         self, product_bug_failure, jira_settings
     ) -> None:
-        """Attaches Jira matches to PRODUCT BUG failures."""
-        mock_matches = [
-            JiraMatch(key="PROJ-100", summary="Related bug", status="Open"),
+        """Searches Jira then uses AI to filter relevant matches."""
+        mock_candidates = [
+            {
+                "key": "PROJ-100",
+                "summary": "Login fails with 500",
+                "description": "Auth service returns 500",
+                "status": "Open",
+                "priority": "High",
+                "url": "https://jira.example.com/browse/PROJ-100",
+            },
+        ]
+        mock_ai_matches = [
+            JiraMatch(
+                key="PROJ-100", summary="Login fails with 500", status="Open", score=0.9
+            ),
         ]
 
         with patch("jenkins_job_insight.jira.JiraClient") as mock_client_cls:
             mock_instance = AsyncMock()
-            mock_instance.search = AsyncMock(return_value=mock_matches)
-            mock_instance.close = AsyncMock()
+            mock_instance.search = AsyncMock(return_value=mock_candidates)
             mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_instance.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_instance
 
-            await enrich_with_jira_matches([product_bug_failure], jira_settings)
+            with patch(
+                "jenkins_job_insight.jira._filter_matches_with_ai",
+                new_callable=AsyncMock,
+                return_value=mock_ai_matches,
+            ):
+                await enrich_with_jira_matches(
+                    [product_bug_failure], jira_settings, "claude", "test-model"
+                )
 
         report = product_bug_failure.analysis.product_bug_report
         assert len(report.jira_matches) == 1
         assert report.jira_matches[0].key == "PROJ-100"
+        assert report.jira_matches[0].score == 0.9
+
+    async def test_fallback_without_ai_config(
+        self, product_bug_failure, jira_settings
+    ) -> None:
+        """Returns all candidates when no AI provider is configured."""
+        mock_candidates = [
+            {
+                "key": "PROJ-200",
+                "summary": "Some bug",
+                "description": "Details",
+                "status": "Open",
+                "priority": "Medium",
+                "url": "https://jira.example.com/browse/PROJ-200",
+            },
+        ]
+
+        with patch("jenkins_job_insight.jira.JiraClient") as mock_client_cls:
+            mock_instance = AsyncMock()
+            mock_instance.search = AsyncMock(return_value=mock_candidates)
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_instance
+
+            # No ai_provider/ai_model — should fall back
+            await enrich_with_jira_matches([product_bug_failure], jira_settings)
+
+        report = product_bug_failure.analysis.product_bug_report
+        assert len(report.jira_matches) == 1
+        assert report.jira_matches[0].key == "PROJ-200"
+        assert report.jira_matches[0].score == 0.0
 
     async def test_deduplicates_by_keyword_set(self, jira_settings) -> None:
         """Same keyword set causes only one Jira search."""
@@ -338,10 +444,7 @@ class TestEnrichWithJiraMatches:
                 classification="PRODUCT BUG",
                 product_bug_report=ProductBugReport(
                     title="Bug B",
-                    jira_search_keywords=[
-                        "auth",
-                        "login",
-                    ],  # Same keywords, different order
+                    jira_search_keywords=["auth", "login"],
                 ),
             ),
         )
@@ -349,14 +452,12 @@ class TestEnrichWithJiraMatches:
         with patch("jenkins_job_insight.jira.JiraClient") as mock_client_cls:
             mock_instance = AsyncMock()
             mock_instance.search = AsyncMock(return_value=[])
-            mock_instance.close = AsyncMock()
             mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_instance.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_instance
 
             await enrich_with_jira_matches([failure1, failure2], jira_settings)
 
-            # Only one search call since keywords are the same (after sorting)
             assert mock_instance.search.call_count == 1
 
     async def test_never_raises(self, product_bug_failure, jira_settings) -> None:
@@ -366,7 +467,6 @@ class TestEnrichWithJiraMatches:
             mock_instance.search = AsyncMock(
                 side_effect=httpx.ConnectError("Connection refused")
             )
-            mock_instance.close = AsyncMock()
             mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_instance.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_instance
@@ -374,5 +474,4 @@ class TestEnrichWithJiraMatches:
             # Should not raise
             await enrich_with_jira_matches([product_bug_failure], jira_settings)
 
-        # Matches should remain empty
         assert product_bug_failure.analysis.product_bug_report.jira_matches == []
