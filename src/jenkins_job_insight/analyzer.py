@@ -178,8 +178,14 @@ def _parse_json_response(raw_text: str) -> AnalysisDetail:
     """Parse AI CLI JSON response into an AnalysisDetail.
 
     Attempts to extract a JSON object from the AI response text.
-    The AI may wrap the JSON in markdown code blocks or add
-    surrounding text.
+    The AI may wrap the JSON in markdown code blocks, add
+    surrounding text, or embed code blocks inside JSON string values.
+
+    Uses a multi-strategy approach:
+    1. Try parsing the raw text directly as JSON
+    2. Try extracting JSON from brace-matching ({...})
+    3. Try extracting from markdown code blocks
+    4. Fallback: store raw text in details
 
     Args:
         raw_text: The raw text output from the AI CLI.
@@ -188,32 +194,127 @@ def _parse_json_response(raw_text: str) -> AnalysisDetail:
         An AnalysisDetail instance parsed from the JSON, or a
         fallback instance with the raw text stored in details.
     """
-    # Try to find JSON in the response
     text = raw_text.strip()
 
-    # Strip markdown code block wrapper if present
-    if "```json" in text:
-        start = text.index("```json") + len("```json")
-        end = text.index("```", start)
-        text = text[start:end].strip()
-    elif "```" in text:
-        start = text.index("```") + len("```")
-        end = text.index("```", start)
-        text = text[start:end].strip()
-
-    # Try to find a JSON object in the text
-    json_start = text.find("{")
-    json_end = text.rfind("}")
-    if json_start != -1 and json_end != -1 and json_end > json_start:
-        json_str = text[json_start : json_end + 1]
+    # Strategy 1: Try parsing the entire text as JSON directly
+    if text.startswith("{"):
         try:
-            data = json.loads(json_str)
+            data = json.loads(text)
             return AnalysisDetail(**data)
-        except Exception:
+        except (json.JSONDecodeError, Exception):
             pass
+
+    # Strategy 2: Find the outermost JSON object using brace matching
+    result = _extract_json_by_braces(text)
+    if result is not None:
+        return result
+
+    # Strategy 3: Try markdown code block extraction
+    # Find ALL ```json or ``` blocks and try each one
+    result = _extract_json_from_code_blocks(text)
+    if result is not None:
+        return result
 
     # Fallback: store raw text in details
     return AnalysisDetail(details=raw_text)
+
+
+def _extract_json_by_braces(text: str) -> AnalysisDetail | None:
+    """Extract JSON by finding matching outermost braces.
+
+    Handles cases where JSON values contain embedded code blocks
+    or other special characters by tracking brace nesting depth
+    and string boundaries.
+
+    Args:
+        text: Text potentially containing a JSON object.
+
+    Returns:
+        Parsed AnalysisDetail or None if extraction fails.
+    """
+    first_brace = text.find("{")
+    if first_brace == -1:
+        return None
+
+    # Track brace depth to find the matching closing brace
+    depth = 0
+    in_string = False
+    escape_next = False
+    end_pos = -1
+
+    for i in range(first_brace, len(text)):
+        char = text[i]
+
+        if escape_next:
+            escape_next = False
+            continue
+
+        if char == "\\":
+            if in_string:
+                escape_next = True
+            continue
+
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                end_pos = i
+                break
+
+    if end_pos == -1:
+        return None
+
+    json_str = text[first_brace : end_pos + 1]
+    try:
+        data = json.loads(json_str)
+        return AnalysisDetail(**data)
+    except (json.JSONDecodeError, Exception):
+        return None
+
+
+def _extract_json_from_code_blocks(text: str) -> AnalysisDetail | None:
+    """Extract JSON from markdown code blocks in the text.
+
+    Finds code blocks (```json or ```) and attempts to parse
+    each one as JSON. Uses brace matching within each block
+    to handle embedded code blocks in JSON string values.
+
+    Args:
+        text: Text containing markdown code blocks.
+
+    Returns:
+        Parsed AnalysisDetail or None if no valid JSON found.
+    """
+    # Find all code block positions using a pattern that matches
+    # opening ``` markers (with optional language tag)
+    blocks = re.findall(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL)
+
+    for block_content in blocks:
+        block_content = block_content.strip()
+        if not block_content or "{" not in block_content:
+            continue
+
+        # Try parsing the block content directly
+        try:
+            data = json.loads(block_content)
+            return AnalysisDetail(**data)
+        except (json.JSONDecodeError, Exception):
+            pass
+
+        # Try brace matching within the block
+        result = _extract_json_by_braces(block_content)
+        if result is not None:
+            return result
+
+    return None
 
 
 async def check_ai_cli_available(ai_provider: str, ai_model: str) -> tuple[bool, str]:
