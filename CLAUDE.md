@@ -51,6 +51,9 @@ This project uses AI CLI tools (Claude CLI, Gemini CLI, Cursor Agent CLI) instea
 | `get_failure_signature()` | Deduplicates identical test failures |
 | `analyze_failure_group()` | Analyzes unique failures, applies to all matches |
 | `run_parallel_with_limit()` | Bounded parallel execution |
+| `JiraClient` | Searches Jira for matching bugs (Cloud + Server/DC) |
+| `enrich_with_jira_matches()` | Post-processing: attaches Jira matches to PRODUCT BUG failures |
+| `_filter_matches_with_ai()` | AI-powered relevance filtering of Jira candidates |
 
 ### Failure Deduplication
 
@@ -59,6 +62,15 @@ When multiple tests fail with the same error:
 2. Only one AI CLI call per unique error type
 3. Analysis is applied to all failures with matching signature
 4. Reduces redundant API calls and output
+
+### Jira Integration (Optional)
+
+When configured, searches Jira for existing bugs matching PRODUCT BUG failures:
+1. AI generates specific search keywords during analysis
+2. After analysis, keywords are used to search Jira (Bug type, summary search)
+3. AI evaluates each Jira candidate's relevance by reading its summary and description
+4. Only genuinely relevant matches are attached to the result
+5. Jira errors never crash the pipeline — all failures are swallowed gracefully
 
 ### Logging
 

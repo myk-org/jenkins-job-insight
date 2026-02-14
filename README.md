@@ -16,6 +16,7 @@ For each failure, the service provides detailed explanations and either fix sugg
 - **Async and sync analysis modes**: Submit jobs for background processing or wait for immediate results
 - **AI-powered classification**: Distinguishes between test code issues and product bugs
 - **Multiple AI providers**: Supports Claude CLI, Gemini CLI, and Cursor Agent CLI
+- **Optional Jira integration**: Searches Jira for matching bugs on PRODUCT BUG failures with AI-powered relevance filtering
 - **SQLite result storage**: Persists analysis results for later retrieval
 - **Callback webhooks**: Delivers results to your specified endpoint with custom headers
 - **HTML report output**: Generate self-contained, dark-themed HTML failure reports viewable in any browser
