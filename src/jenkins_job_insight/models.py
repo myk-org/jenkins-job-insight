@@ -70,6 +70,11 @@ class BaseAnalysisRequest(BaseModel):
         default=None,
         description="Raw prompt to append as additional AI instructions (overrides repo-level JOB_INSIGHT_PROMPT.md)",
     )
+    github_token: str | None = Field(
+        default=None,
+        description="GitHub API token for private repo PR status in comments (overrides GITHUB_TOKEN env var)",
+        json_schema_extra={"format": "password"},
+    )
 
 
 class AnalyzeRequest(BaseAnalysisRequest):
@@ -213,6 +218,10 @@ class FailureAnalysis(BaseModel):
     test_name: str = Field(description="Name of the failed test")
     error: str = Field(description="Error message or exception")
     analysis: AnalysisDetail = Field(description="Structured AI analysis output")
+    error_signature: str = Field(
+        default="",
+        description="SHA-256 hash of error + stack trace for deduplication",
+    )
 
     @field_validator("analysis", mode="before")
     @classmethod
@@ -320,3 +329,74 @@ class FailureAnalysisResult(BaseModel):
         default=None,
         description="Enriched JUnit XML with analysis results (only when raw_xml was provided in request)",
     )
+
+
+class _ChildJobFieldsValidator(BaseModel):
+    """Mixin providing child_job_name + child_build_number cross-validation."""
+
+    child_job_name: str = ""
+    child_build_number: int = 0
+
+    @model_validator(mode="after")
+    def validate_child_fields(self):
+        if self.child_job_name and self.child_build_number <= 0:
+            raise ValueError(
+                "child_build_number must be positive when child_job_name is set"
+            )
+        if not self.child_job_name and self.child_build_number > 0:
+            raise ValueError(
+                "child_job_name is required when child_build_number is set"
+            )
+        return self
+
+
+class AddCommentRequest(_ChildJobFieldsValidator):
+    """Request body for adding a comment to a test failure."""
+
+    test_name: str
+    comment: str
+    # NOTE: error_signature is NOT sent by the browser.
+    # It is read server-side from the pre-computed FailureAnalysis.error_signature
+    # stored in the result data (computed during analysis when stack traces are available).
+
+
+class SetReviewedRequest(_ChildJobFieldsValidator):
+    """Request body for toggling the reviewed state of a test failure."""
+
+    test_name: str
+    reviewed: bool
+
+
+class CommentResponse(BaseModel):
+    """A single comment entry."""
+
+    id: int
+    job_id: str
+    test_name: str
+    child_job_name: str = ""
+    child_build_number: int = 0
+    comment: str
+    username: str = ""
+    created_at: str
+
+
+class ReviewState(BaseModel):
+    """Reviewed state for a single failure."""
+
+    reviewed: bool
+    updated_at: str
+
+
+class CommentsAndReviewsResponse(BaseModel):
+    """Combined response for all comments and review states for a job."""
+
+    comments: list[CommentResponse]
+    reviews: dict[str, ReviewState]
+
+
+class ReviewStatusResponse(BaseModel):
+    """Lightweight review summary for dashboard cards."""
+
+    total_failures: int
+    reviewed_count: int
+    comment_count: int

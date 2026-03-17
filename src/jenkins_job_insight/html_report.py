@@ -7,6 +7,7 @@ without external dependencies.
 
 import base64
 import html
+import json
 from collections.abc import Callable
 
 from jenkins_job_insight.models import (
@@ -110,7 +111,7 @@ body {
 }"""
 
 
-def format_result_as_html(result: AnalysisResult) -> str:
+def format_result_as_html(result: AnalysisResult, completed_at: str = "") -> str:
     """Generate a self-contained HTML report for an analysis result.
 
     Produces a complete HTML document with inline CSS using a dark
@@ -119,6 +120,7 @@ def format_result_as_html(result: AnalysisResult) -> str:
 
     Args:
         result: The analysis result to render.
+        completed_at: Optional timestamp string for when the analysis completed.
 
     Returns:
         A complete HTML document as a string.
@@ -154,6 +156,17 @@ def format_result_as_html(result: AnalysisResult) -> str:
     padding: 4px 12px;
     border-radius: 12px;
     font-family: var(--font-mono);
+}}
+.status-chip {{
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 12px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }}
 .env-chips {{ display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }}
 .env-chip {{
@@ -489,6 +502,127 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
 }}
 .no-failures svg {{ margin-bottom: 16px; }}
 
+/* Reviewed toggle */
+.reviewed-toggle {{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}}
+.reviewed-toggle:hover {{
+    background: var(--bg-hover);
+    border-color: var(--accent-blue);
+}}
+.reviewed-toggle.checked {{
+    background: rgba(63, 185, 80, 0.15);
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+}}
+
+/* Comments section */
+.comments-section {{
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}}
+.comments-header {{
+    background: var(--bg-tertiary);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}}
+.comment-item {{
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+}}
+.comment-timestamp {{
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}}
+.comment-text {{
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+}}
+.comment-text a {{
+    color: var(--accent-blue);
+    text-decoration: none;
+}}
+.comment-text a:hover {{ text-decoration: underline; }}
+.enrichment-badge {{
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    margin-left: 6px;
+}}
+.comment-input-row {{
+    padding: 10px 16px;
+    background: var(--bg-primary);
+    display: flex;
+    gap: 8px;
+}}
+.comment-input {{
+    flex: 1;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    outline: none;
+    transition: border-color 0.15s;
+    resize: vertical;
+    min-height: 36px;
+    max-height: 200px;
+}}
+.comment-input::placeholder {{ color: var(--text-muted); }}
+.comment-input:focus {{ border-color: var(--accent-blue); }}
+.comment-add-btn {{
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}}
+.comment-add-btn:hover {{
+    background: var(--bg-hover);
+    border-color: var(--accent-blue);
+}}
+.comment-test-select {{
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: var(--font-mono);
+}}
+
 /* Responsive (page-specific) */
 @media (max-width: 768px) {{
     .env-chips {{ margin-left: 0; }}
@@ -508,10 +642,12 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
   <div class="header-content">
     <h1>{e(job_name)}</h1>
     <span class="failure-badge">{total_failures} failure{"s" if total_failures != 1 else ""}</span>
+    <span id="overall-review-status" class="status-chip" style="display:none"></span>
     <div class="env-chips">
       <span class="env-chip">Build: #{e(build_number)}</span>
       <span class="env-chip">Status: {e(result.status)}</span>
       <span class="env-chip">AI: {e(provider_info)}</span>
+      {f'<span class="env-chip">Analyzed: {e(completed_at)}</span>' if completed_at else ""}
       {f'<span class="env-chip"><a href="{e(jenkins_url_str)}" target="_blank" rel="noopener">Jenkins</a></span>' if jenkins_url_str else ""}
       <a class="regenerate-btn" href="?refresh=1" title="Regenerate report from stored data"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Regenerate</a>
     </div>
@@ -549,12 +685,12 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
         groups = _group_failures(result.failures)
         parts.append('<h2 class="section-title">Root Cause Analysis</h2>')
         for group in groups:
-            _render_group_card(parts, group, e)
+            _render_group_card(parts, group, e, job_id=result.job_id)
 
     # --- CHILD JOB ANALYSES ---
     if result.child_job_analyses:
         parts.append('<h2 class="section-title">Child Job Analyses</h2>')
-        _render_child_jobs(parts, result.child_job_analyses, e)
+        _render_child_jobs(parts, result.child_job_analyses, e, job_id=result.job_id)
 
     # --- ALL FAILURES TABLE ---
     if result.failures:
@@ -600,6 +736,318 @@ td.error-cell {{ font-family: var(--font-mono); font-size: 11px; max-width: 350p
     _append_footer(
         parts, job_name, build_number, result.job_id, provider_info, jenkins_url_str, e
     )
+
+    # --- INLINE JAVASCRIPT ---
+    parts.append(f"""
+<script>
+const JOB_ID = "{e(result.job_id)}";
+// Derive base path for API calls (works behind reverse proxies with path prefixes)
+const BASE_PATH = window.location.pathname.replace(/\\/results\\/.*$/, '');
+
+async function loadCommentsAndReviews() {{
+    try {{
+        const resp = await fetch(`${{BASE_PATH}}/results/${{JOB_ID}}/comments`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        data.comments.forEach(c => {{
+            const childJob = c.child_job_name || '';
+            const childBuildNumber = c.child_build_number || 0;
+            const testNames = c.test_name;
+            document.querySelectorAll('.comments-section').forEach(section => {{
+                const sectionTests = JSON.parse(section.dataset.testNames || '[]');
+                const sectionChild = section.dataset.childJob || '';
+                const sectionChildBuild = parseInt(section.dataset.childBuild || '0');
+                if (sectionTests.includes(testNames) && sectionChild === childJob && sectionChildBuild === childBuildNumber) {{
+                    appendCommentToList(section, c);
+                }}
+            }});
+        }});
+
+        document.querySelectorAll('.comments-section').forEach(section => {{
+            const count = section.querySelectorAll('.comment-item').length;
+            section.querySelector('.comment-count').textContent = count;
+        }});
+
+        for (const [key, review] of Object.entries(data.reviews)) {{
+            if (review.reviewed) {{
+                document.querySelectorAll('.reviewed-toggle').forEach(toggle => {{
+                    const testName = toggle.dataset.testName;
+                    const childJob = toggle.dataset.childJob || '';
+                    const toggleChildBuild = parseInt(toggle.dataset.childBuild || '0');
+                    const toggleKey = childJob ? childJob + '#' + toggleChildBuild + '::' + testName : testName;
+                    if (toggleKey === key) {{
+                        toggle.classList.add('checked');
+                        toggle.querySelector('input').checked = true;
+                    }}
+                }});
+            }}
+        }}
+        updateReviewBadges();
+    }} catch (err) {{
+        console.warn('Failed to load comments:', err);
+    }}
+}}
+
+function updateReviewBadges() {{
+    // Overall job review status
+    const allToggles = document.querySelectorAll('.reviewed-toggle');
+    const totalTests = allToggles.length;
+    const reviewedTests = document.querySelectorAll('.reviewed-toggle.checked').length;
+
+    const overallBadge = document.getElementById('overall-review-status');
+    if (overallBadge && totalTests > 0) {{
+        overallBadge.style.display = '';
+        if (reviewedTests >= totalTests) {{
+            overallBadge.textContent = '\u2713 Fully Reviewed';
+            overallBadge.style.background = 'rgba(63,185,80,0.15)';
+            overallBadge.style.color = 'var(--accent-green)';
+        }} else if (reviewedTests > 0) {{
+            overallBadge.textContent = reviewedTests + '/' + totalTests + ' Reviewed';
+            overallBadge.style.background = 'rgba(210,153,34,0.15)';
+            overallBadge.style.color = 'var(--accent-yellow)';
+        }} else {{
+            overallBadge.textContent = 'Needs Review';
+            overallBadge.style.background = 'rgba(248,81,73,0.12)';
+            overallBadge.style.color = 'var(--accent-red)';
+        }}
+    }}
+
+    // Per child job review status
+    document.querySelectorAll('.child-review-status').forEach(badge => {{
+        const job = badge.closest('.child-job');
+        if (!job) return;
+        const toggles = job.querySelectorAll('.reviewed-toggle');
+        const total = toggles.length;
+        const checked = job.querySelectorAll('.reviewed-toggle.checked').length;
+        if (total === 0) return;
+
+        badge.style.display = '';
+        if (checked >= total) {{
+            badge.textContent = '\u2713 Reviewed';
+            badge.style.background = 'rgba(63,185,80,0.15)';
+            badge.style.color = 'var(--accent-green)';
+        }} else if (checked > 0) {{
+            badge.textContent = checked + '/' + total;
+            badge.style.background = 'rgba(210,153,34,0.15)';
+            badge.style.color = 'var(--accent-yellow)';
+        }} else {{
+            badge.textContent = 'Needs Review';
+            badge.style.background = 'rgba(248,81,73,0.12)';
+            badge.style.color = 'var(--accent-red)';
+        }}
+    }});
+
+    // Per bug card review status
+    document.querySelectorAll('.group-review-status').forEach(badge => {{
+        const card = badge.closest('.bug-card');
+        if (!card) return;
+        const toggles = card.querySelectorAll('.reviewed-toggle');
+        const total = toggles.length;
+        const checked = card.querySelectorAll('.reviewed-toggle.checked').length;
+        if (total === 0) return;
+
+        badge.style.display = '';
+        if (checked >= total) {{
+            badge.textContent = '\u2713 Reviewed';
+            badge.style.background = 'rgba(63,185,80,0.15)';
+            badge.style.color = 'var(--accent-green)';
+        }} else if (checked > 0) {{
+            badge.textContent = checked + '/' + total;
+            badge.style.background = 'rgba(210,153,34,0.15)';
+            badge.style.color = 'var(--accent-yellow)';
+        }} else {{
+            badge.textContent = 'Needs Review';
+            badge.style.background = 'rgba(248,81,73,0.12)';
+            badge.style.color = 'var(--accent-red)';
+        }}
+    }});
+}}
+
+function appendCommentToList(section, comment) {{
+    const list = section.querySelector('.comment-list');
+    const item = document.createElement('div');
+    item.className = 'comment-item';
+    if (comment.id) item.dataset.commentId = comment.id;
+    const text = autoLink(escapeHtml(comment.comment));
+    var userLabel = comment.username ? '<span style="font-family:var(--font-mono);font-size:11px;color:var(--accent-purple);margin-right:6px;">' + escapeHtml(comment.username) + '</span>' : '';
+    // Safe: escapeHtml sanitizes all user content, autoLink only adds <a> tags for URL patterns
+    item.innerHTML = '<div class="comment-timestamp">' + (comment.created_at || '') + '</div><div class="comment-text">' + userLabel + text + '</div>';  // nosec: innerHTML is safe here because escapeHtml sanitizes user input
+    list.appendChild(item);
+}}
+
+function escapeHtml(str) {{
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}}
+
+function autoLink(text) {{
+    // GitHub PR URLs -> org/repo#number
+    text = text.replace(
+        /https?:\\/\\/github\\.com\\/([^\\/]+)\\/([^\\/]+)\\/pull\\/(\\d+)(?:[^\\s<]*)/g,
+        '<a href="https://github.com/$1/$2/pull/$3" target="_blank" rel="noopener">$1/$2#$3</a>'
+    );
+    // Jira browse URLs -> TICKET-KEY (strip query params)
+    text = text.replace(
+        /https?:\\/\\/[^\\s<]*\\/browse\\/([A-Z][A-Z0-9]+-\\d+)(?:\\?[^\\s<]*)?/g,
+        function(match, key) {{
+            var cleanUrl = match.split('?')[0];
+            return '<a href="' + cleanUrl + '" target="_blank" rel="noopener">' + key + '</a>';
+        }}
+    );
+    // Other URLs -> clickable with full URL text
+    text = text.replace(
+        /(https?:\\/\\/[^\\s<]+)/g,
+        function(match) {{
+            if (match.includes('github.com') && match.includes('/pull/')) return match;
+            if (match.includes('/browse/')) return match;
+            return '<a href="' + match + '" target="_blank" rel="noopener">' + match + '</a>';
+        }}
+    );
+    return text;
+}}
+
+async function toggleReviewed(label) {{
+    const checkbox = label.querySelector('input');
+    const testName = label.dataset.testName;
+    const childJob = label.dataset.childJob || '';
+    const childBuild = parseInt(label.dataset.childBuild || '0');
+    const reviewed = checkbox.checked;
+
+    try {{
+        const resp = await fetch(`${{BASE_PATH}}/results/${{JOB_ID}}/reviewed`, {{
+            method: 'PUT',
+            headers: {{'Content-Type': 'application/json'}},
+            body: JSON.stringify({{test_name: testName, child_job_name: childJob, child_build_number: childBuild, reviewed: reviewed}}),
+        }});
+        if (resp.ok) {{
+            label.classList.toggle('checked', reviewed);
+            updateReviewBadges();
+        }} else {{
+            checkbox.checked = !reviewed;
+            console.warn('Failed to toggle reviewed: server returned', resp.status);
+        }}
+    }} catch (err) {{
+        checkbox.checked = !reviewed;
+        console.warn('Failed to toggle reviewed:', err);
+    }}
+}}
+
+async function addComment(btn) {{
+    const row = btn.closest('.comment-input-row');
+    const input = row.querySelector('.comment-input');
+    const comment = input.value.trim();
+    if (!comment) return;
+
+    const section = btn.closest('.comments-section');
+    const selector = section.querySelector('.comment-test-select');
+    const testName = selector.value;
+    const childJob = section.dataset.childJob || '';
+    const childBuild = parseInt(section.dataset.childBuild || '0');
+
+    try {{
+        const resp = await fetch(`${{BASE_PATH}}/results/${{JOB_ID}}/comments`, {{
+            method: 'POST',
+            headers: {{'Content-Type': 'application/json'}},
+            body: JSON.stringify({{test_name: testName, child_job_name: childJob, child_build_number: childBuild, comment: comment}}),
+        }});
+        if (resp.ok) {{
+            const result = await resp.json();
+            const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+            var currentUser = '';
+            var uc = document.cookie.split('; ').find(function(c) {{ return c.startsWith('jji_username='); }});
+            if (uc) currentUser = decodeURIComponent(uc.split('=')[1]);
+            appendCommentToList(section, {{id: result.id, comment: comment, created_at: now, test_name: testName, username: currentUser}});
+            const count = section.querySelectorAll('.comment-item').length;
+            section.querySelector('.comment-count').textContent = count;
+            input.value = '';
+            await loadEnrichments();
+        }}
+    }} catch (err) {{
+        console.warn('Failed to add comment:', err);
+    }}
+}}
+
+async function loadEnrichments() {{
+    try {{
+        const resp = await fetch(`${{BASE_PATH}}/results/${{JOB_ID}}/enrich-comments`, {{
+            method: 'POST',
+            headers: {{'Content-Type': 'application/json'}},
+        }});
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        // Remove existing enrichment badges to avoid duplicates on re-runs
+        document.querySelectorAll('.enrichment-badge').forEach(el => el.remove());
+
+        for (const [commentId, enrichments] of Object.entries(data.enrichments)) {{
+            const commentEl = document.querySelector(`.comment-item[data-comment-id="${{commentId}}"]`);
+            if (!commentEl) continue;
+            const textEl = commentEl.querySelector('.comment-text');
+            for (const e of enrichments) {{
+                const badge = document.createElement('span');
+                badge.className = 'enrichment-badge';
+                const statusUpper = e.status.toUpperCase();
+                if (e.status === 'merged') {{
+                    badge.style.background = 'rgba(63,185,80,0.15)';
+                    badge.style.color = 'var(--accent-green)';
+                }} else if (e.status === 'open') {{
+                    badge.style.background = 'rgba(63,185,80,0.15)';
+                    badge.style.color = 'var(--accent-green)';
+                }} else if (e.status === 'closed') {{
+                    badge.style.background = 'rgba(248,81,73,0.15)';
+                    badge.style.color = 'var(--accent-red)';
+                }} else {{
+                    badge.style.background = 'rgba(88,166,255,0.12)';
+                    badge.style.color = 'var(--accent-blue)';
+                }}
+                badge.textContent = statusUpper;
+                textEl.appendChild(badge);
+            }}
+        }}
+    }} catch (err) {{
+        console.warn('Failed to load enrichments:', err);
+    }}
+}}
+
+document.addEventListener('DOMContentLoaded', async function() {{
+    document.querySelectorAll('.reviewed-toggle input[type="checkbox"]').forEach(cb => {{
+        cb.addEventListener('change', function(event) {{
+            event.stopPropagation();
+            toggleReviewed(this.closest('.reviewed-toggle'));
+        }});
+    }});
+    // Show current user in header
+    var userCookie = document.cookie.split('; ').find(function(c) {{ return c.startsWith('jji_username='); }});
+    if (userCookie) {{
+        var uname = decodeURIComponent(userCookie.split('=')[1]);
+        var headerContent = document.querySelector('.header-content');
+        if (headerContent) {{
+            var chips = headerContent.querySelector('.env-chips');
+            if (chips) {{
+                var userChip = document.createElement('span');
+                userChip.className = 'env-chip';
+                userChip.textContent = 'User: ' + uname;
+                chips.appendChild(userChip);
+            }}
+        }}
+    }}
+    // Enter to send, Shift+Enter for new line
+    document.querySelectorAll('.comment-input').forEach(textarea => {{
+        textarea.addEventListener('keydown', function(e) {{
+            if (e.key === 'Enter' && !e.shiftKey) {{
+                e.preventDefault();
+                const btn = this.closest('.comment-input-row').querySelector('.comment-add-btn');
+                if (btn) btn.click();
+            }}
+        }});
+    }});
+    await loadCommentsAndReviews();
+    await loadEnrichments();
+}});
+</script>
+""")
 
     parts.append("</div>\n</body>\n</html>")
     return "\n".join(parts)
@@ -835,6 +1283,9 @@ def _render_group_card(
     group: dict,
     e: Callable[[str], str],
     indent: str = "",
+    job_id: str = "",
+    child_job_name: str = "",
+    child_build_number: int = 0,
 ) -> None:
     """Render a collapsible card for a group of failures sharing the same analysis.
 
@@ -843,6 +1294,9 @@ def _render_group_card(
         group: Dict with keys 'analysis' (AnalysisDetail), 'failures' (list), 'bug_id' (str).
         e: HTML escape function reference.
         indent: HTML indentation prefix for nested cards.
+        job_id: The job identifier for reviewed toggle data attributes.
+        child_job_name: The child job name for reviewed toggle data attributes.
+        child_build_number: The child build number for reviewed toggle data attributes.
     """
     detail = group["analysis"]
     bug_id = group["bug_id"]
@@ -878,6 +1332,7 @@ def _render_group_card(
 {indent}    <span class="bug-count">{e(test_label)}</span>
 {indent}    <span class="classification-tag {e(cls_class)}">{e(cls)}</span>
 {indent}    <span class="severity-tag-inline {e(severity)}">{e(severity.upper())}</span>
+{indent}    <span class="group-review-status status-chip" style="display:none"></span>
 {indent}  </summary>
 {indent}  <div class="bug-body">
 """)
@@ -927,7 +1382,9 @@ def _render_group_card(
 {indent}      <ul>
 """)
     for f in failures:
-        parts.append(f"{indent}        <li><code>{e(f.test_name)}</code></li>\n")
+        parts.append(
+            f'{indent}        <li><label class="reviewed-toggle" data-job-id="{e(job_id)}" data-test-name="{e(f.test_name)}" data-child-job="{e(child_job_name)}" data-child-build="{child_build_number}"><input type="checkbox"> <code style="font-family:var(--font-mono);font-size:12px;color:var(--text-primary)">{e(f.test_name)}</code></label></li>\n'
+        )
     parts.append(f"""{indent}      </ul>
 {indent}    </div>
 """)
@@ -936,6 +1393,28 @@ def _render_group_card(
     parts.append(f"""{indent}    <div class="bug-error">
 {indent}      <h4>Error</h4>
 {indent}      <pre class="error-pre">{e(failures[0].error)}</pre>
+{indent}    </div>
+""")
+
+    # Comments section (populated by JavaScript)
+    # Build test name selector for multi-test groups
+    if len(failures) > 1:
+        select_html = f'{indent}        <select class="comment-test-select">'
+        for f in failures:
+            select_html += f'<option value="{e(f.test_name)}">{e(f.test_name)}</option>'
+        select_html += "</select>"
+    else:
+        select_html = f'<input type="hidden" class="comment-test-select" value="{e(failures[0].test_name)}">'
+
+    all_test_names = e(json.dumps([f.test_name for f in failures]))
+    parts.append(f"""{indent}    <div class="comments-section" data-test-names="{all_test_names}" data-child-job="{e(child_job_name)}" data-child-build="{child_build_number}">
+{indent}      <div class="comments-header">Comments (<span class="comment-count">0</span>)</div>
+{indent}      <div class="comment-list"></div>
+{indent}      <div class="comment-input-row">
+{indent}        {select_html}
+{indent}        <textarea class="comment-input" placeholder="Add a comment (bug link, PR, notes...)" rows="1"></textarea>
+{indent}        <button class="comment-add-btn" onclick="addComment(this)">Add</button>
+{indent}      </div>
 {indent}    </div>
 """)
 
@@ -989,6 +1468,7 @@ def _render_child_jobs(
     e: Callable[[str], str],
     depth: int = 0,
     max_depth: int = 10,
+    job_id: str = "",
 ) -> None:
     """Render child job analysis sections recursively.
 
@@ -998,6 +1478,7 @@ def _render_child_jobs(
         e: HTML escape function reference.
         depth: Current recursion depth.
         max_depth: Maximum recursion depth for nested children.
+        job_id: The job identifier for reviewed toggle data attributes.
     """
     for child in children:
         child_failures_count = len(child.failures)
@@ -1018,6 +1499,7 @@ def _render_child_jobs(
     <span style="color:var(--accent-purple)">{e(child.job_name)}</span>
     <span style="color:var(--text-muted)">#{child.build_number}</span>
     <span class="failure-badge" style="font-size:11px;padding:2px 8px">{badge_text}</span>
+    <span class="child-review-status status-chip" data-child-job="{e(child.job_name)}" style="display:none"></span>
   </summary>
   <div class="child-job-body">
     <div class="child-job-meta">
@@ -1039,12 +1521,25 @@ def _render_child_jobs(
 
         if child_groups:
             for group in child_groups:
-                _render_group_card(parts, group, e, indent="    ")
+                _render_group_card(
+                    parts,
+                    group,
+                    e,
+                    indent="    ",
+                    job_id=job_id,
+                    child_job_name=child.job_name,
+                    child_build_number=child.build_number,
+                )
 
         # Recurse into nested children
         if child.failed_children and depth < max_depth:
             _render_child_jobs(
-                parts, child.failed_children, e, depth=depth + 1, max_depth=max_depth
+                parts,
+                child.failed_children,
+                e,
+                depth=depth + 1,
+                max_depth=max_depth,
+                job_id=job_id,
             )
 
         parts.append("  </div>\n</details>\n")
@@ -1771,6 +2266,26 @@ def generate_dashboard_html(
 </script>
 """)
 
+    # --- USERNAME DISPLAY (always, regardless of job count) ---
+    parts.append("""
+<script>
+(function() {
+    var userCookie = document.cookie.split('; ').find(function(c) { return c.startsWith('jji_username='); });
+    if (userCookie) {
+        var uname = decodeURIComponent(userCookie.split('=')[1]);
+        var headerContent = document.querySelector('.header-content');
+        if (headerContent) {
+            var userChip = document.createElement('span');
+            userChip.className = 'env-chip';
+            userChip.style.marginLeft = 'auto';
+            userChip.textContent = 'User: ' + uname;
+            headerContent.appendChild(userChip);
+        }
+    }
+})();
+</script>
+""")
+
     parts.append("</div>\n</body>\n</html>")
     return "\n".join(parts)
 
@@ -1864,6 +2379,37 @@ def _render_dashboard_card(
             f"</span>"
         )
 
+    # Review status chip (only for cards with failures)
+    reviewed_count = job.get("reviewed_count", 0)
+    comment_count = job.get("comment_count", 0)
+    if failure_count is not None and failure_count > 0:
+        if reviewed_count >= failure_count:
+            parts.append(
+                '    <span class="status-chip" '
+                'style="background: rgba(63,185,80,0.15); color: var(--accent-green)">'
+                "\u2713 Fully Reviewed</span>"
+            )
+        elif reviewed_count > 0:
+            parts.append(
+                '    <span class="status-chip" '
+                'style="background: rgba(210,153,34,0.15); color: var(--accent-yellow)">'
+                f"{reviewed_count}/{failure_count} Reviewed</span>"
+            )
+        else:
+            parts.append(
+                '    <span class="status-chip" '
+                'style="background: rgba(248,81,73,0.12); color: var(--accent-red)">'
+                "Needs Review</span>"
+            )
+
+    # Comment count badge
+    if comment_count > 0:
+        parts.append(
+            f'    <span class="card-build-chip">'
+            f"{comment_count} comment{'s' if comment_count != 1 else ''}"
+            f"</span>"
+        )
+
     parts.append("  </div>")
     parts.append('  <div class="card-meta">')
     parts.append(
@@ -1885,3 +2431,84 @@ def _render_dashboard_card(
 
     parts.append("  </div>")
     parts.append("</a>")
+
+
+def generate_register_html() -> str:
+    """Generate the user registration page HTML.
+
+    Returns:
+        A complete HTML document as a string with the registration form.
+    """
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jenkins Job Insight - Register</title>
+<link rel="icon" href="{FAVICON_DATA_URI}">
+<style>
+{_common_css()}
+.register-container {{
+    max-width: 400px;
+    margin: 100px auto;
+    padding: 40px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+}}
+.register-container h2 {{
+    font-size: 20px;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}}
+.register-container p {{
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+}}
+.register-input {{
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 16px;
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    outline: none;
+    margin-bottom: 16px;
+    transition: border-color 0.15s;
+}}
+.register-input::placeholder {{ color: var(--text-muted); }}
+.register-input:focus {{ border-color: var(--accent-blue); }}
+.register-btn {{
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--accent-blue);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}}
+.register-btn:hover {{
+    background: var(--bg-hover);
+    border-color: var(--accent-blue);
+}}
+</style>
+</head>
+<body>
+<div class="register-container">
+    <h2>Welcome to Jenkins Job Insight</h2>
+    <p>Enter your name to get started</p>
+    <form method="POST" action="/register">
+        <input class="register-input" type="text" name="username" placeholder="Your name" required autofocus>
+        <button class="register-btn" type="submit">Continue</button>
+    </form>
+</div>
+</body>
+</html>"""

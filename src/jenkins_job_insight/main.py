@@ -8,7 +8,8 @@ from contextlib import asynccontextmanager
 from xml.etree.ElementTree import ParseError
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import SecretStr
 from simple_logger.logger import get_logger
 
@@ -22,6 +23,7 @@ from jenkins_job_insight.analyzer import (
 from jenkins_job_insight.config import Settings, get_settings
 from jenkins_job_insight.jira import enrich_with_jira_matches
 from jenkins_job_insight.models import (
+    AddCommentRequest,
     AnalysisResult,
     AnalyzeFailuresRequest,
     AnalyzeRequest,
@@ -29,6 +31,7 @@ from jenkins_job_insight.models import (
     ChildJobAnalysis,
     FailureAnalysis,
     FailureAnalysisResult,
+    SetReviewedRequest,
 )
 from jenkins_job_insight.xml_enrichment import (
     build_enriched_xml,
@@ -39,9 +42,11 @@ from jenkins_job_insight.html_report import (
     format_result_as_html,
     format_status_page,
     generate_dashboard_html,
+    generate_register_html,
 )
 from jenkins_job_insight.output import send_callback
 from jenkins_job_insight.repository import RepositoryManager
+from jenkins_job_insight import storage
 from jenkins_job_insight.storage import (
     get_html_report,
     get_result,
@@ -158,6 +163,53 @@ app = FastAPI(
 )
 
 
+class UsernameMiddleware(BaseHTTPMiddleware):
+    """Middleware that checks for jji_username cookie and redirects to /register if missing."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path in ("/register", "/health", "/favicon.ico") or path.startswith(
+            "/register"
+        ):
+            return await call_next(request)
+
+        username = request.cookies.get("jji_username", "")
+        if not username:
+            # Only redirect browser requests, not API calls
+            accept = request.headers.get("accept", "")
+            if "text/html" in accept:
+                return RedirectResponse(url="/register", status_code=303)
+
+        request.state.username = username
+        return await call_next(request)
+
+
+app.add_middleware(UsernameMiddleware)
+
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_page() -> str:
+    """Show registration page for new users."""
+    return generate_register_html()
+
+
+@app.post("/register")
+async def register(request: Request) -> RedirectResponse:
+    """Set username cookie and redirect to dashboard."""
+    form = await request.form()
+    username = str(form.get("username", "")).strip()
+    if not username:
+        return RedirectResponse(url="/register", status_code=303)
+    response = RedirectResponse(url="/dashboard", status_code=303)
+    response.set_cookie(
+        key="jji_username",
+        value=username,
+        max_age=365 * 24 * 60 * 60,  # 1 year
+        samesite="lax",
+    )
+    return response
+
+
 def _resolve_ai_config_values(
     ai_provider: str | None, ai_model: str | None
 ) -> tuple[str, str]:
@@ -258,6 +310,8 @@ def _merge_settings(body: BaseAnalysisRequest, settings: Settings) -> Settings:
         overrides["jira_api_token"] = SecretStr(body.jira_api_token)
     if body.jira_pat is not None:
         overrides["jira_pat"] = SecretStr(body.jira_pat)
+    if body.github_token is not None:
+        overrides["github_token"] = SecretStr(body.github_token)
 
     # AnalyzeRequest-specific fields (Jenkins overrides)
     if isinstance(body, AnalyzeRequest):
@@ -682,7 +736,9 @@ async def get_job_report(
     result_data = result.get("result")
     if result_data and status == "completed":
         analysis_result = _build_analysis_result(job_id, result_data)
-        html_content = format_result_as_html(analysis_result)
+        html_content = format_result_as_html(
+            analysis_result, completed_at=result.get("created_at", "")
+        )
         try:
             await save_html_report(job_id, html_content)
         except OSError:
@@ -715,6 +771,267 @@ async def get_job_result(request: Request, job_id: str) -> dict:
                 f"{base_url}{result_data['html_report_url']}"
             )
     return result
+
+
+def _find_test_in_children(
+    children: list[dict],
+    test_name: str,
+    child_job_name: str,
+    child_build_number: int = 0,
+) -> bool:
+    """Recursively search child job analyses for a test."""
+    for child in children:
+        if child.get("job_name") == child_job_name and (
+            child_build_number == 0 or child.get("build_number") == child_build_number
+        ):
+            for f in child.get("failures", []):
+                if f.get("test_name") == test_name:
+                    return True
+        if _find_test_in_children(
+            child.get("failed_children", []),
+            test_name,
+            child_job_name,
+            child_build_number,
+        ):
+            return True
+    return False
+
+
+async def _validate_test_name_in_result(
+    job_id: str, test_name: str, child_job_name: str = "", child_build_number: int = 0
+) -> None:
+    """Validate that a test_name exists in the stored result."""
+    stored = await storage.get_result(job_id)
+    if not stored:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    result_data = stored.get("result") or {}
+
+    if child_job_name:
+        if _find_test_in_children(
+            result_data.get("child_job_analyses", []),
+            test_name,
+            child_job_name,
+            child_build_number,
+        ):
+            return
+        raise HTTPException(
+            status_code=400,
+            detail=f"Test '{test_name}' not found in child job '{child_job_name}' of job {job_id}",
+        )
+    else:
+        for f in result_data.get("failures", []):
+            if f.get("test_name") == test_name:
+                return
+        raise HTTPException(
+            status_code=400, detail=f"Test '{test_name}' not found in job {job_id}"
+        )
+
+
+def _find_error_signature_in_children(
+    children: list[dict],
+    test_name: str,
+    child_job_name: str,
+    child_build_number: int = 0,
+) -> str:
+    """Recursively find error_signature for a test in child job analyses."""
+    for child in children:
+        if child.get("job_name") == child_job_name and (
+            child_build_number == 0 or child.get("build_number") == child_build_number
+        ):
+            for f in child.get("failures", []):
+                if f.get("test_name") == test_name:
+                    return f.get("error_signature", "")
+        result = _find_error_signature_in_children(
+            child.get("failed_children", []),
+            test_name,
+            child_job_name,
+            child_build_number,
+        )
+        if result:
+            return result
+    return ""
+
+
+async def _invalidate_cached_html(job_id: str) -> None:
+    """Delete cached HTML report so next request regenerates it."""
+    try:
+        report_path = storage.REPORTS_DIR / f"{job_id}.html"
+        await asyncio.to_thread(lambda: report_path.unlink(missing_ok=True))
+    except OSError:
+        pass  # Cache cleanup is best-effort
+
+
+@app.get("/results/{job_id}/comments")
+async def get_comments(job_id: str) -> dict:
+    """Get all comments and review states for a job."""
+    comments = await storage.get_comments_for_job(job_id)
+    reviews = await storage.get_reviews_for_job(job_id)
+    return {"comments": comments, "reviews": reviews}
+
+
+@app.post("/results/{job_id}/comments", status_code=201)
+async def add_comment(job_id: str, body: AddCommentRequest, request: Request) -> dict:
+    """Add a comment to a test failure."""
+    await _validate_test_name_in_result(
+        job_id, body.test_name, body.child_job_name, body.child_build_number
+    )
+
+    # Read pre-computed error_signature from stored analysis
+    error_signature = ""
+    stored = await storage.get_result(job_id)
+    if stored and stored.get("result"):
+        if body.child_job_name:
+            error_signature = _find_error_signature_in_children(
+                stored["result"].get("child_job_analyses", []),
+                body.test_name,
+                body.child_job_name,
+                body.child_build_number,
+            )
+        else:
+            for f in stored["result"].get("failures", []):
+                if f.get("test_name") == body.test_name:
+                    error_signature = f.get("error_signature", "")
+                    break
+
+    username = request.cookies.get("jji_username", "")
+    try:
+        comment_id = await storage.add_comment(
+            job_id=job_id,
+            test_name=body.test_name,
+            comment=body.comment,
+            child_job_name=body.child_job_name,
+            child_build_number=body.child_build_number,
+            error_signature=error_signature,
+            username=username,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    await _invalidate_cached_html(job_id)
+    return {"id": comment_id}
+
+
+@app.put("/results/{job_id}/reviewed")
+async def set_reviewed(job_id: str, body: SetReviewedRequest, request: Request) -> dict:
+    """Toggle the reviewed state for a test failure."""
+    await _validate_test_name_in_result(
+        job_id, body.test_name, body.child_job_name, body.child_build_number
+    )
+    username = request.cookies.get("jji_username", "")
+    try:
+        await storage.set_reviewed(
+            job_id=job_id,
+            test_name=body.test_name,
+            reviewed=body.reviewed,
+            child_job_name=body.child_job_name,
+            child_build_number=body.child_build_number,
+            username=username,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    await _invalidate_cached_html(job_id)
+    return {"status": "ok"}
+
+
+@app.post("/results/{job_id}/enrich-comments")
+async def enrich_comments(
+    job_id: str, settings: Settings = Depends(get_settings)
+) -> dict:
+    """Fetch live statuses for GitHub PRs and Jira tickets found in comments."""
+    from jenkins_job_insight.comment_enrichment import (
+        detect_github_prs,
+        detect_jira_keys,
+        fetch_github_pr_status,
+        fetch_jira_ticket_status,
+    )
+
+    comments = await storage.get_comments_for_job(job_id)
+
+    # Detect Cloud vs Server/DC auth once, matching JiraClient logic:
+    # - Cloud: jira_email is set -> Basic auth with email:token
+    # - Server/DC: no email -> Bearer PAT
+    # Token resolution: prefer jira_api_token (backward compat), fall back to jira_pat
+    auth: tuple[str, str] | None = None
+    auth_headers: dict[str, str] = {}
+    jira_url: str | None = settings.jira_url if settings.jira_enabled else None
+    jira_active = bool(jira_url)
+
+    if jira_active and jira_url:
+        jira_token = ""
+        if settings.jira_api_token:
+            jira_token = settings.jira_api_token.get_secret_value()
+        elif settings.jira_pat:
+            jira_token = settings.jira_pat.get_secret_value()
+
+        if settings.jira_email and jira_token:
+            # Cloud: Basic auth
+            auth = (settings.jira_email, jira_token)
+        elif jira_token:
+            # Server/DC: Bearer
+            auth_headers["Authorization"] = f"Bearer {jira_token}"
+
+    github_token = (
+        settings.github_token.get_secret_value() if settings.github_token else None
+    )
+
+    # Collect all enrichment tasks for parallel execution
+    tasks: list = []
+    task_map: dict[int, tuple[str, dict]] = {}
+
+    for c in comments:
+        for pr in detect_github_prs(c["comment"]):
+            idx = len(tasks)
+            tasks.append(
+                fetch_github_pr_status(
+                    pr["owner"],
+                    pr["repo"],
+                    pr["number"],
+                    token=github_token,
+                )
+            )
+            task_map[idx] = (
+                str(c["id"]),
+                {
+                    "type": "github_pr",
+                    "key": f"{pr['owner']}/{pr['repo']}#{pr['number']}",
+                },
+            )
+
+        if jira_active and jira_url:
+            for key in detect_jira_keys(c["comment"]):
+                idx = len(tasks)
+                tasks.append(
+                    fetch_jira_ticket_status(
+                        jira_url,
+                        key,
+                        auth_headers,
+                        ssl_verify=settings.jira_ssl_verify,
+                        auth=auth,
+                    )
+                )
+                task_map[idx] = (str(c["id"]), {"type": "jira", "key": key})
+
+    enrichments: dict[str, list[dict]] = {}
+
+    if tasks:
+        results = await run_parallel_with_limit(tasks)
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.debug("Enrichment task %d failed: %s", i, result)
+                continue
+            if result is None:
+                continue
+            comment_id, info = task_map[i]
+            info["status"] = result
+            enrichments.setdefault(comment_id, []).append(info)
+
+    return {"enrichments": enrichments}
+
+
+@app.get("/results/{job_id}/review-status")
+async def get_review_status(job_id: str) -> dict:
+    """Get review summary for a job (used by dashboard)."""
+    return await storage.get_review_status(job_id)
 
 
 @app.get("/results")

@@ -12,6 +12,7 @@ dependencies = [
     "httpx",
     "pydantic-settings",
     "python-jenkins",
+    "python-multipart",
     "python-simple-logger",
     "uvicorn",
 ]

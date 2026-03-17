@@ -267,6 +267,7 @@ dependencies = [
     { name = "httpx" },
     { name = "pydantic-settings" },
     { name = "python-jenkins" },
+    { name = "python-multipart" },
     { name = "python-simple-logger" },
     { name = "uvicorn" },
 ]
@@ -289,6 +290,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "python-jenkins" },
+    { name = "python-multipart" },
     { name = "python-simple-logger" },
     { name = "uvicorn" },
 ]
@@ -489,6 +491,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/46/e8/4cb6c251d32b440bdd5400b53ed7941d7e9301011f805d0b89d6987fc978/python_jenkins-1.8.3.tar.gz", hash = "sha256:8f4761c391ac11e8c1f23f771010920c10440497705ab7175d52358f5a12dc98", size = 66915, upload-time = "2025-08-03T10:35:58.605Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/84/78/2105fc1fc43257057bf687429af3114f16b0574f905dd4840eabd40585ed/python_jenkins-1.8.3-py3-none-any.whl", hash = "sha256:2e1766b253e3b2f28f52abfd0de45ffeaa1191f98520cc8d74d2c317786e59d0", size = 29594, upload-time = "2025-08-03T10:35:57.373Z" },
+]
+
+[[package]]
+name = "python-multipart"
+version = "0.0.22"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/01/979e98d542a70714b0cb2b6728ed0b7c46792b695e3eaec3e20711271ca3/python_multipart-0.0.22.tar.gz", hash = "sha256:7340bef99a7e0032613f56dc36027b959fd3b30a787ed62d310e951f7c3a3a58", size = 37612, upload-time = "2026-01-25T10:15:56.219Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/d0/397f9626e711ff749a95d96b7af99b9c566a9bb5129b8e4c10fc4d100304/python_multipart-0.0.22-py3-none-any.whl", hash = "sha256:2b2cd894c83d21bf49d702499531c7bafd057d730c201782048f7945d82de155", size = 24579, upload-time = "2026-01-25T10:15:54.811Z" },
 ]
 
 [[package]]

@@ -1654,3 +1654,216 @@ class TestFaviconEndpoint:
         assert response.status_code == 200
         cache_control = response.headers.get("cache-control", "")
         assert "max-age" in cache_control
+
+
+class TestCommentEndpoints:
+    @pytest.mark.asyncio
+    async def test_add_comment(self, test_client):
+        from jenkins_job_insight import storage
+
+        result_data = {
+            "status": "completed",
+            "summary": "",
+            "failures": [
+                {
+                    "test_name": "test_foo",
+                    "error": "some error",
+                    "analysis": {"classification": "CODE ISSUE"},
+                }
+            ],
+        }
+        await storage.save_result(
+            "job-test-1", "http://jenkins", "completed", result_data
+        )
+        response = test_client.post(
+            "/results/job-test-1/comments",
+            json={"test_name": "test_foo", "comment": "opened bug"},
+        )
+        assert response.status_code == 201
+        assert "id" in response.json()
+
+    @pytest.mark.asyncio
+    async def test_get_comments(self, test_client):
+        from jenkins_job_insight import storage
+
+        result_data = {
+            "status": "completed",
+            "summary": "",
+            "failures": [
+                {
+                    "test_name": "test_foo",
+                    "error": "err",
+                    "analysis": {"classification": "CODE ISSUE"},
+                }
+            ],
+        }
+        await storage.save_result(
+            "job-test-2", "http://jenkins", "completed", result_data
+        )
+        await storage.add_comment("job-test-2", "test_foo", "comment 1")
+        response = test_client.get("/results/job-test-2/comments")
+        assert response.status_code == 200
+        data = response.json()
+        assert "comments" in data
+        assert "reviews" in data
+        assert len(data["comments"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_add_comment_nonexistent_job(self, test_client):
+        response = test_client.post(
+            "/results/nonexistent/comments",
+            json={"test_name": "test_foo", "comment": "test"},
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_add_comment_invalid_test_name(self, test_client):
+        from jenkins_job_insight import storage
+
+        result_data = {
+            "status": "completed",
+            "summary": "",
+            "failures": [
+                {
+                    "test_name": "test_foo",
+                    "error": "err",
+                    "analysis": {"classification": "CODE ISSUE"},
+                }
+            ],
+        }
+        await storage.save_result(
+            "job-test-3", "http://jenkins", "completed", result_data
+        )
+        response = test_client.post(
+            "/results/job-test-3/comments",
+            json={"test_name": "nonexistent_test", "comment": "test"},
+        )
+        assert response.status_code == 400
+
+
+class TestReviewedEndpoint:
+    @pytest.mark.asyncio
+    async def test_set_reviewed(self, test_client):
+        from jenkins_job_insight import storage
+
+        result_data = {
+            "status": "completed",
+            "summary": "",
+            "failures": [
+                {
+                    "test_name": "test_foo",
+                    "error": "err",
+                    "analysis": {"classification": "CODE ISSUE"},
+                }
+            ],
+        }
+        await storage.save_result(
+            "job-rev-1", "http://jenkins", "completed", result_data
+        )
+        response = test_client.put(
+            "/results/job-rev-1/reviewed",
+            json={"test_name": "test_foo", "reviewed": True},
+        )
+        assert response.status_code == 200
+        response = test_client.get("/results/job-rev-1/comments")
+        data = response.json()
+        assert "test_foo" in data["reviews"]
+        assert data["reviews"]["test_foo"]["reviewed"] is True
+
+    @pytest.mark.asyncio
+    async def test_set_reviewed_nonexistent_job(self, test_client):
+        response = test_client.put(
+            "/results/nonexistent/reviewed",
+            json={"test_name": "test_foo", "reviewed": True},
+        )
+        assert response.status_code == 404
+
+
+class TestReviewStatusEndpoint:
+    @pytest.mark.asyncio
+    async def test_get_review_status(self, test_client):
+        from jenkins_job_insight import storage
+
+        result_data = {
+            "status": "completed",
+            "summary": "",
+            "failures": [
+                {
+                    "test_name": "test_a",
+                    "error": "err",
+                    "analysis": {"classification": "CODE ISSUE"},
+                },
+                {
+                    "test_name": "test_b",
+                    "error": "err",
+                    "analysis": {"classification": "PRODUCT BUG"},
+                },
+            ],
+        }
+        await storage.save_result(
+            "job-rs-1", "http://jenkins", "completed", result_data
+        )
+        await storage.set_reviewed("job-rs-1", "test_a", reviewed=True)
+        await storage.add_comment("job-rs-1", "test_a", "bug opened")
+        response = test_client.get("/results/job-rs-1/review-status")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_failures"] == 2
+        assert data["reviewed_count"] == 1
+        assert data["comment_count"] == 1
+
+
+class TestChildScopeValidation:
+    @pytest.mark.asyncio
+    async def test_comment_child_job_without_build_number_rejected(self, test_client):
+        """child_job_name without child_build_number should be rejected (422)."""
+        result_data = {
+            "status": "completed",
+            "summary": "",
+            "failures": [
+                {
+                    "test_name": "test_foo",
+                    "error": "err",
+                    "analysis": {"classification": "CODE ISSUE"},
+                }
+            ],
+        }
+        await storage.save_result(
+            "job-val-1", "http://jenkins", "completed", result_data
+        )
+        response = test_client.post(
+            "/results/job-val-1/comments",
+            json={
+                "test_name": "test_foo",
+                "child_job_name": "child-1",
+                "comment": "test",
+            },
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_comment_build_number_without_child_job_rejected(self, test_client):
+        """child_build_number without child_job_name should be rejected (422)."""
+        result_data = {
+            "status": "completed",
+            "summary": "",
+            "failures": [
+                {
+                    "test_name": "test_foo",
+                    "error": "err",
+                    "analysis": {"classification": "CODE ISSUE"},
+                }
+            ],
+        }
+        await storage.save_result(
+            "job-val-2", "http://jenkins", "completed", result_data
+        )
+        response = test_client.post(
+            "/results/job-val-2/comments",
+            json={
+                "test_name": "test_foo",
+                "child_build_number": 42,
+                "comment": "test",
+            },
+        )
+        assert response.status_code == 422

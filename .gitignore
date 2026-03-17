@@ -47,3 +47,6 @@ htmlcov/
 
 # Local development directory
 .dev/
+
+# Superpowers development tool artifacts
+.superpowers/

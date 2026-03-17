@@ -210,8 +210,9 @@ class TestFormatResultAsHtml:
             failures=[xss_failure],
         )
         html_output = format_result_as_html(result)
-        assert "<script>" not in html_output
-        assert "&lt;script&gt;" in html_output
+        # The XSS payload must be escaped (not rendered as raw HTML)
+        assert "&lt;script&gt;alert(" in html_output
+        assert "<script>alert(" not in html_output
         assert "<img onerror" not in html_output
         assert "&lt;img onerror" in html_output
 

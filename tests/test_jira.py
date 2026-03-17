@@ -53,6 +53,25 @@ def jira_server_settings() -> Generator[Settings, None, None]:
 
 
 @pytest.fixture
+def jira_cloud_pat_settings() -> Generator[Settings, None, None]:
+    """Create Settings with Cloud API token stored in JIRA_PAT (no JIRA_API_TOKEN).
+
+    This is the common misconfiguration where users set JIRA_PAT with a
+    Cloud API token instead of using JIRA_API_TOKEN.
+    """
+    env = {
+        "JENKINS_URL": "https://jenkins.example.com",
+        "JENKINS_USER": "testuser",
+        "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
+        "JIRA_URL": "https://myorg.atlassian.net",
+        "JIRA_EMAIL": "user@example.com",
+        "JIRA_PAT": "ATATT3xFfGF0AbM93-cloud-api-token",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        yield Settings()
+
+
+@pytest.fixture
 def product_bug_failure() -> FailureAnalysis:
     """A failure classified as PRODUCT BUG with search keywords."""
     return FailureAnalysis(
@@ -176,14 +195,25 @@ class TestJiraClient:
         """Cloud credentials use email+token auth and API v3."""
         client = JiraClient(jira_settings)
         assert client._api_path == "/rest/api/3"
+        assert client._search_path == "/rest/api/3/search/jql"
         assert client._auth is not None
 
     def test_server_auth_detection(self, jira_server_settings) -> None:
         """Server/DC credentials use PAT bearer token and API v2."""
         client = JiraClient(jira_server_settings)
         assert client._api_path == "/rest/api/2"
+        assert client._search_path == "/rest/api/2/search"
         assert client._auth is None
         assert "Bearer" in client._headers.get("Authorization", "")
+
+    def test_cloud_pat_auth_detection(self, jira_cloud_pat_settings) -> None:
+        """Cloud API token in JIRA_PAT with email uses Cloud auth (Basic + v3)."""
+        client = JiraClient(jira_cloud_pat_settings)
+        assert client._api_path == "/rest/api/3"
+        assert client._search_path == "/rest/api/3/search/jql"
+        assert client._auth is not None
+        assert client._auth[0] == "user@example.com"
+        assert client._auth[1] == "ATATT3xFfGF0AbM93-cloud-api-token"
 
     async def test_search_returns_candidates(self, jira_settings) -> None:
         """Search returns candidate dicts from API response."""
