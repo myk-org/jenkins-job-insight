@@ -1,46 +1,27 @@
 # jenkins-job-insight
 
-> AI-powered Jenkins failure analysis service with direct JUnit XML enrichment, HTML reports, and optional Jira matching.
-
-## Introduction
-
-- [Overview](overview.md): Introduce the service, its main inputs and outputs, supported AI providers, and the primary user workflows.
-- [Architecture and Project Structure](architecture-and-project-structure.md): Map the FastAPI app, analyzer, Jenkins client, Jira integration, storage, HTML reporting, examples, and tests so readers can understand how the system is composed.
+> Turn Jenkins failures into actionable analysis, team review, and ready-to-file bugs.
 
 ## Getting Started
 
-- [Installation](installation.md): List prerequisites including Python 3.12, Jenkins access, and external AI CLI authentication, then cover local package installation.
-- [Run Locally](run-locally.md): Show how to start the service with the packaged entrypoint or uvicorn and verify it through /health, /docs, and OpenAPI.
-- [Container Deployment](container-deployment.md): Document the provided Dockerfile and docker-compose setup, persistent /data storage, provider credentials, and OpenShift-specific runtime considerations.
-- [Quickstart](quickstart.md): Walk through submitting a first analysis request and reading the returned JSON, result URL, and HTML report.
+- [Running Your First Analysis](quickstart.md): Launch the service with the fastest supported setup, configure the minimum Jenkins and AI settings, register your profile, and inspect your first analysis from the CLI and web UI.
 
-## Configuration
+## User Guides
 
-- [Configuration Reference](configuration-reference.md): Document every environment variable and matching request override for Jenkins, AI, callbacks, Jira, SSL, logging, and timeouts.
-- [AI Provider Setup](ai-provider-setup.md): Explain Claude, Gemini, and Cursor CLI authentication and the provider-agnostic execution model used by the service.
-- [Jenkins, Repository Context, and Prompts](jenkins-repository-and-prompts.md): Describe Jenkins connection settings, optional repository cloning for source-code context, allowed repository URL schemes, and custom prompt resolution via raw_prompt or JOB_INSIGHT_PROMPT.md.
-- [Jira Integration](jira-integration.md): Explain Cloud and Server/DC authentication, automatic enablement rules, project scoping, search behavior, and AI-based relevance filtering.
+- [Analyzing Jenkins Jobs](analyzing-jenkins-jobs.md): Queue a Jenkins build for analysis, choose per-run overrides, and understand how waiting, artifact downloads, and Jira enrichment affect the result.
+- [Analyzing JUnit XML and Raw Failures](analyzing-junit-xml-and-raw-failures.md): Send raw failures or JUnit XML straight to the API and get structured analysis back when you want to work without a live Jenkins job.
+- [Monitoring and Re-Running Analyses](monitoring-and-rerunning-analyses.md): Follow queued, waiting, running, failed, and completed jobs, then launch a re-analysis with adjusted settings when a run times out or needs another pass.
+- [Reviewing, Commenting, and Reclassifying Failures](reviewing-commenting-and-reclassifying-failures.md): Use the report UI to inspect grouped failures, mark reviews complete, leave team comments, and override AI classifications when human judgment should win.
+- [Managing Your Profile and Personal Tokens](managing-your-profile-and-personal-tokens.md): Set your display name, store GitHub and Jira credentials, validate them, and make issue creation work under your own identity instead of shared server credentials.
+- [Tracking Failure History](tracking-failure-history.md): Search recurring failures, inspect a single test's trend over time, and use stored classifications and comments to spot flaky or systemic problems faster.
+- [Creating GitHub Issues and Jira Bugs](creating-github-issues-and-jira-bugs.md): Preview generated issue content, pick the target repository or Jira project, edit the final text, and file follow-up work directly from an analysis report.
+- [Improving Analysis with Repository Context](improving-analysis-with-repository-context.md): Give the AI better code context with test repositories, additional repositories, raw prompts, and artifact settings so the analysis can point to the right code and evidence.
+- [Adding Peer Review with Multiple AI Models](adding-peer-review-with-multiple-ai-models.md): Configure peer providers and models, tune debate rounds, and use multi-model review when you want higher-confidence triage for difficult failures.
+- [Pushing Classifications to Report Portal](pushing-classifications-to-report-portal.md): Sync JJI classifications into matching Report Portal items, including child-job runs, and handle unmatched or partially successful pushes without losing track of what happened.
+- [Managing Admin Users and API Keys](managing-admin-users-and-api-keys.md): Create admin accounts, rotate keys, change roles, remove access, and use admin authentication safely from the UI, CLI, and API.
 
-## Guides
+## Reference
 
-- [Analyze Jenkins Jobs](analyze-jenkins-jobs.md): Cover POST /analyze, sync versus async execution, callbacks, polling, successful-build handling, and recursive child-job analysis.
-- [Analyze Raw Failures and JUnit XML](direct-failure-analysis.md): Show how to use POST /analyze-failures with either structured failures or raw JUnit XML and explain enriched_xml output.
-- [Pytest JUnit XML Integration](pytest-junitxml-integration.md): Document the bundled pytest example that posts junitxml output to the service and rewrites the XML artifact with AI annotations.
-- [HTML Reports and Dashboard](html-reports-and-dashboard.md): Explain lazy HTML report generation, refresh behavior, grouped root-cause cards, result browsing, and dashboard search and pagination.
-- [Pipeline Analysis and Failure Deduplication](pipeline-analysis-and-failure-deduplication.md): Explain how identical failures are grouped by signature, how failed child jobs are discovered, and how summaries and counts are computed.
-- [Jira-Assisted Bug Triage](jira-assisted-bug-triage.md): Show how PRODUCT BUG analyses carry search keywords and matched Jira issues to reduce duplicate bug filing.
-
-## API Reference
-
-- [API Overview](api-overview.md): Summarize endpoints, job states, absolute URLs in responses, and the generated OpenAPI and Swagger interfaces.
-- [POST /analyze](api-post-analyze.md): Reference the Jenkins-analysis request and response schema, sync flag, background job behavior, and callback fields.
-- [POST /analyze-failures](api-post-analyze-failures.md): Reference direct failure and raw_xml inputs, validation rules, response shapes, and enriched XML behavior.
-- [Results, Reports, and Dashboard Endpoints](api-results-and-dashboard.md): Reference GET /results, GET /results/{job_id}, GET /results/{job_id}.html, GET /dashboard, GET /health, and related supporting endpoints.
-- [Schemas and Data Models](api-schemas-and-models.md): Document request and response models such as AnalyzeRequest, AnalyzeFailuresRequest, AnalysisResult, FailureAnalysis, ChildJobAnalysis, and JiraMatch.
-
-## Operations
-
-- [Storage and Result Lifecycle](storage-and-result-lifecycle.md): Describe SQLite persistence, default DB and report paths, pending/running/completed/failed states, and HTML report caching.
-- [Reverse Proxy and Base URL Handling](reverse-proxy-and-base-urls.md): Explain forwarded-header handling and how result and report URLs are constructed when the service runs behind proxies or ingress.
-- [Troubleshooting](troubleshooting.md): Help operators diagnose Jenkins auth failures, missing AI configuration, XML parse errors, Jira issues, callback failures, and report generation problems.
-- [Development and Testing](development-and-testing.md): Cover the pytest suite, pre-commit hooks, linting, typing, secret scanning, and the repository layout for maintainers.
+- [CLI Command Reference](cli-command-reference.md): Look up every `jji` command, option, config-file interaction, and output mode when you need exact syntax.
+- [REST API Reference](rest-api-reference.md): Look up every endpoint, request field, query parameter, response shape, and status code for analysis, results, history, integrations, auth, and admin workflows.
+- [Configuration and Environment Reference](configuration-and-environment-reference.md): Look up server environment variables, Docker Compose settings, `~/.config/jji/config.toml` fields, feature toggles, authentication knobs, and per-request override behavior.

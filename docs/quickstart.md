@@ -1,305 +1,206 @@
-# Quickstart
+# Running Your First Analysis
 
-`jenkins-job-insight` analyzes a Jenkins build, stores the result, and gives you one canonical `result_url` back. API clients use that URL for JSON, and browsers use it for the React status/report UI. This page walks through the shortest path to a first successful request.
+You want to get from a fresh setup to one real Jenkins analysis you can inspect from both the terminal and the browser. The fastest supported path uses Docker Compose so the service, web UI, and supported AI CLIs come up together with the fewest moving parts.
 
-## Start the service
+## Prerequisites
+- Docker with Docker Compose
+- `uv` installed so you can install the `jji` CLI
+- A Jenkins URL, username, API token or password, and a build number you want to inspect
+- One AI provider credential; the simplest first run is `claude` with `ANTHROPIC_API_KEY`
 
-The repo includes `docker-compose.yaml`, `.env.example`, and a container image that installs the supported AI CLIs, so Docker Compose is the fastest way to get started.
+## Quick Example
 
-1. Copy `.env.example` to `.env`.
-2. Fill in your Jenkins credentials.
-3. Choose one AI provider and configure its authentication.
-4. Start the service on port `8000`.
+```bash
+cp .env.example .env
+```
+
+```dotenv
+# set at least these values in .env
+JENKINS_URL=https://jenkins.example.com
+JENKINS_USER=your-username
+JENKINS_PASSWORD=your-api-token
+AI_PROVIDER=claude
+AI_MODEL=your-model-name
+ANTHROPIC_API_KEY=your-anthropic-api-key
+```
+
+```bash
+docker compose up -d
+uv tool install jenkins-job-insight
+
+export JJI_SERVER=http://localhost:8000
+export JJI_USERNAME=jdoe
+
+jji health
+jji analyze --job-name test --build-number 123
+```
+
+Open `http://localhost:8000`, enter the same username on the register page, and use the dashboard to open the new run. After `jji analyze`, copy the printed `job_id`; `jji status <job_id>` follows the run from the terminal, and the `Poll:` URL is the browser URL for the same stored result.
+
+```text
+Job queued: <job_id>
+Status: queued
+Poll: /results/<job_id>
+```
+
+## Step-by-Step
+
+```mermaid
+flowchart LR
+  A[Set Jenkins and AI values] --> B[docker compose up -d]
+  B --> C[Open /register and save a username]
+  C --> D[jji analyze --job-name ... --build-number ...]
+  D --> E[/status/<job_id> while work is in progress]
+  E --> F[/results/<job_id> when analysis is complete]
+```
+
+1. Create the server environment file.
+
+```bash
+cp .env.example .env
+```
 
 ```dotenv
 JENKINS_URL=https://jenkins.example.com
 JENKINS_USER=your-username
 JENKINS_PASSWORD=your-api-token
-JENKINS_SSL_VERIFY=true
-
-# Choose AI provider (required): "claude", "gemini", or "cursor"
 AI_PROVIDER=claude
-
-# AI model to use (required, applies to any provider)
 AI_MODEL=your-model-name
-
-# --- Claude CLI Options ---
-
-# Option 1: Direct API key (simplest)
 ANTHROPIC_API_KEY=your-anthropic-api-key
-
-# --- AI CLI Timeout ---
-
-# Timeout for AI CLI calls in minutes (default: 10)
-# Increase for slower models like gpt-5.2
-# AI_CLI_TIMEOUT=10
-
-# ===================
-# Peer Analysis (Optional)
-# ===================
-# Enable multi-AI consensus by configuring peer AI providers
-# PEER_AI_CONFIGS=cursor:gpt-5.4-xhigh,gemini:gemini-2.5-pro
-# PEER_ANALYSIS_MAX_ROUNDS=3
 ```
+
+This is the minimum setup for a Jenkins-backed analysis. Keep the rest of `.env` at the defaults for your first run.
+
+> **Tip:** Use a failed build number for your first run. A passed build finishes cleanly, but there is nothing to analyze.
+
+2. Start the service and point the CLI at it.
 
 ```bash
 docker compose up -d
-curl http://localhost:8000/health
-```
+uv tool install jenkins-job-insight
 
-The health check returns:
-
-```json
-{"status":"healthy"}
-```
-
-If you prefer a local process instead of Docker, set the same environment variables, run `uv sync`, build the frontend with `cd frontend && npm install && npm run build`, then start the API with `uv run jenkins-job-insight`. Without `frontend/dist`, the JSON API still works but the browser UI returns `Frontend not built`.
-
-> **Warning:** `JENKINS_URL`, `JENKINS_USER`, and `JENKINS_PASSWORD` no longer have to be server-wide settings. For the quickest first run, put them in `.env`; otherwise, send `jenkins_url`, `jenkins_user`, and `jenkins_password` in the `POST /analyze` body. If your Jenkins uses a self-signed certificate, set `JENKINS_SSL_VERIFY=false` or send `"jenkins_ssl_verify": false` in the request.
-
-> **Note:** If you enable `PEER_AI_CONFIGS`, every provider listed there must also be installed and authenticated in the same runtime.
-
-## Submit your first request
-
-Use a failed build number for your first run. If the build actually passed, the service returns a completed result with the summary `Build passed successfully. No failures to analyze.` You can also submit a still-running build: with the default `"wait_for_completion": true`, the service watches Jenkins until the build finishes, then starts analysis.
-
-If Jenkins is already configured in `.env`, the smallest useful request body is just `job_name` and `build_number`. `tests_repo_url` is optional, but when you provide it the service clones the repository and gives the AI code context. If Jenkins is not configured on the server, add `jenkins_url`, `jenkins_user`, and `jenkins_password` to this same request body.
-
-> **Note:** The JSON snippets below are taken from the test suite and fixtures, so the field names and shapes match the implementation exactly. Replace the sample values with your own Jenkins job, build number, and model.
-
-This request shape is used directly in the tests:
-
-```json
-{
-  "job_name": "test",
-  "build_number": 123,
-  "tests_repo_url": "https://github.com/example/repo"
-}
-```
-
-If you want optional multi-AI consensus on that same request, add `peer_ai_configs` and, if you want something other than the default, `peer_analysis_max_rounds`:
-
-```json
-{
-  "job_name": "test",
-  "build_number": 123,
-  "ai_provider": "claude",
-  "ai_model": "test-model",
-  "peer_ai_configs": [
-    {
-      "ai_provider": "gemini",
-      "ai_model": "pro"
-    }
-  ],
-  "peer_analysis_max_rounds": 5
-}
-```
-
-> **Tip:** `peer_ai_configs` is optional. Omit it to keep the server default; if the server is not configured with `PEER_AI_CONFIGS`, that means the normal single-AI flow. Send `"peer_ai_configs": []` to disable peer analysis for one request while keeping the server default in place. When you do use peers, `peer_analysis_max_rounds` defaults to `3` and accepts `1` through `10`.
-
-Send it to `POST /analyze`:
-
-```bash
-curl -X POST "http://localhost:8000/analyze" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "job_name": "test",
-    "build_number": 123,
-    "tests_repo_url": "https://github.com/example/repo"
-  }'
-```
-
-`POST /analyze` returns `202 Accepted` right away. The response gives you:
-
-- `status`, which starts as `queued`
-- `job_id`, the analysis identifier
-- `message`, which tells you to poll the stored result
-- `result_url`, the canonical URL for both the JSON result and the browser UI
-- `base_url`, which is either the configured `PUBLIC_BASE_URL` or an empty string
-
-A queued response looks like this:
-
-```json
-{
-  "status": "queued",
-  "job_id": "<job_id>",
-  "message": "Analysis job queued. Poll /results/<job_id> for status.",
-  "base_url": "",
-  "result_url": "/results/<job_id>"
-}
-```
-
-Poll `result_url` until the stored job reaches `completed` or `failed`. If you submit a build that is still running and leave the default `"wait_for_completion": true`, the stored job may move through `waiting` before analysis starts. To opt out for one request, include:
-
-```json
-{
-  "wait_for_completion": false
-}
-```
-
-> **Note:** `job_name` can include Jenkins folders, such as `folder/job-name`.
-
-> **Tip:** If `AI_PROVIDER` and `AI_MODEL` are already configured in the server environment, you do not need to send `ai_provider` or `ai_model` in each request.
-
-> **Tip:** If you want absolute `result_url` values in API responses, set `PUBLIC_BASE_URL` on the server. Otherwise the API returns relative URLs such as `/results/<job_id>`.
-
-## Read the returned JSON
-
-A completed analysis result contains the Jenkins build identity, a summary, the AI provider/model used, and one `failures[]` entry per analyzed failure.
-
-The test fixtures include this complete example:
-
-```json
-{
-  "job_id": "test-job-123",
-  "job_name": "my-job",
-  "build_number": 123,
-  "jenkins_url": "https://jenkins.example.com/job/my-job/123/",
-  "status": "completed",
-  "summary": "1 failure analyzed: 1 product bug found",
-  "ai_provider": "claude",
-  "ai_model": "test-model",
-  "failures": [
-    {
-      "test_name": "test_login_success",
-      "error": "AssertionError: Expected 200, got 500",
-      "analysis": {
-        "classification": "PRODUCT BUG",
-        "affected_tests": [
-          "test_login_success"
-        ],
-        "details": "The authentication service is returning an error.",
-        "product_bug_report": {
-          "title": "Login fails with valid credentials",
-          "severity": "high",
-          "component": "auth",
-          "description": "Users cannot log in even with correct username and password",
-          "evidence": "Error: Authentication service returned 500"
-        }
-      }
-    }
-  ]
-}
-```
-
-The fields most people read first are:
-
-- `summary`: the shortest human-readable answer.
-- `failures[].test_name`: which test failed.
-- `failures[].error`: the raw failure text the analysis is based on.
-- `failures[].analysis.classification`: `CODE ISSUE` or `PRODUCT BUG`.
-- `failures[].analysis.details`: the main explanation.
-- `failures[].analysis.code_fix`: present for `CODE ISSUE` results.
-- `failures[].analysis.product_bug_report`: present for `PRODUCT BUG` results.
-- `failures[].error_signature`: the deduplication key used to group identical failures.
-- `failures[].peer_debate`: present when peer analysis was used; it records whether the peer AIs reached consensus, how many rounds were used, which AI configs participated, and the round-by-round debate trail.
-- `child_job_analyses`: present when a pipeline failed because child jobs failed.
-
-If the summary says something like `2 failure(s) analyzed (1 unique error type(s))`, multiple failing tests shared the same underlying error and were analyzed as one root cause.
-
-## Use the `result_url`
-
-The returned `result_url` is the stored-result endpoint you poll until the job finishes:
-
-```bash
-curl "http://localhost:8000/results/<job_id>"
-```
-
-This endpoint returns a wrapper object with top-level metadata such as:
-
-- `job_id`
-- `jenkins_url`
-- `status`
-- `created_at`
-- `base_url`
-- `result_url`
-
-Once analysis is complete, the full analysis JSON appears inside the `result` field. `GET /results/{job_id}` is the shape to expect when you poll: the wrapper stays at the top level, and the completed analysis lives under `result`.
-
-The `status` value can move through this lifecycle:
-
-- `waiting`: the request was accepted and the service is waiting for Jenkins to finish the build
-- `pending`: the request was accepted and queued for analysis
-- `running`: analysis is in progress
-- `completed`: the final JSON is ready
-- `failed`: the analysis did not finish successfully
-
-While the job is still in progress, `GET /results/{job_id}` returns HTTP `202`. Keep polling the same `result_url` until the status becomes `completed` or `failed`.
-
-> **Tip:** `result_url` is absolute only when `PUBLIC_BASE_URL` is configured. Otherwise the API intentionally returns relative URLs such as `/results/<job_id>` and does not trust forwarded host headers.
-
-## Open the report page
-
-Open the same `result_url` in a browser. There is no separate `html_report_url`: the React web app uses `/results/{job_id}` for completed analyses and `/status/{job_id}` while work is still in progress.
-
-A few details matter on a first run:
-
-- Once you are registered, a browser request to `/results/{job_id}` redirects to `/status/{job_id}` whenever the stored job is `pending`, `waiting`, or `running`
-- The status page polls automatically every 10 seconds and returns you to `/results/{job_id}` when the job completes
-- API clients can call that same `result_url` and get JSON instead of HTML
-
-Once the analysis is complete, the report page shows:
-
-- the job name, build number, status, AI provider/model, and failure counts
-- grouped failures and child-job analyses
-- a `Peer Analysis` summary and round-by-round debate trail when peer analysis is enabled
-- comments and reviewed toggles
-- classification overrides
-- `Open GitHub Issue` or `Open Jira Bug` actions when those integrations are configured
-
-> **Warning:** If opening the report sends you to `/register`, enter a username once and reopen the result. The username is stored as a browser cookie; no account or password is required.
-
-> **Note:** In the Docker Compose setup, `./data` is mounted to `/data`, and the SQLite database lives at `/data/results.db`.
-
-## Use the CLI instead
-
-The repo also ships a `jji` CLI that talks to the same API.
-
-Set the server URL once:
-
-```bash
 export JJI_SERVER=http://localhost:8000
+export JJI_USERNAME=jdoe
+
+jji health
 ```
 
-Queue an analysis:
+Use the same `JJI_USERNAME` you plan to save in the browser so future comments and review actions line up under one name. When the service is ready, `jji health` returns `healthy`.
+
+3. Register your browser profile.
+
+Open `http://localhost:8000/`. On a first visit, the app sends you to `/register`.
+
+Enter a username and click **Save**. For a normal first run, leave the API key, GitHub token, Jira email, and Jira token fields empty.
+
+> **Note:** You do not need an admin API key or tracker tokens to run your first analysis. A username is enough.
+
+4. Queue the analysis from the CLI.
 
 ```bash
 jji analyze --job-name test --build-number 123
-
-jji analyze --job-name test --build-number 123 --peers "cursor:gpt-5.4-xhigh,gemini:gemini-2.5-pro" --peer-analysis-max-rounds 5
 ```
 
-> **Tip:** `--peers` uses the same `provider:model,provider:model` format as `PEER_AI_CONFIGS`.
+Replace `test` and `123` with a real Jenkins job and build number. Because Jenkins and AI defaults are already in `.env`, this first command only needs the job name and build number.
 
-Check its status:
+The CLI prints three important lines:
+- `Job queued`: the new `job_id`
+- `Status`: the current stored status, starting as `queued`
+- `Poll`: the stored result URL for this run
+
+If the Jenkins build is still running, the stored job can stay in `waiting` before JJI starts the AI analysis.
+
+5. Inspect the run from the CLI.
 
 ```bash
 jji status <job_id>
+jji results show <job_id>
+jji results dashboard
 ```
 
-Show the stored result as JSON:
+Use `jji status` while the run is still moving through `waiting`, `pending`, or `running`. Use `jji results show` for a one-run summary, and `jji results dashboard` when you want the recent-analysis list with failure counts and review progress.
+
+6. Inspect the same run in the web UI.
+
+Open the `Poll:` URL from `jji analyze`, or go back to `http://localhost:8000/` and click the row on the dashboard. The UI handles the rest:
+- in-progress work opens the status page
+- completed work opens the report page
+- the status page refreshes every 10 seconds and switches to the final report automatically
+
+Once the run is complete, the report page shows the summary, AI provider/model, grouped failures, and a direct link back to the Jenkins build.
+
+## Advanced Usage
+
+### Save your CLI server profile
+
+If you do not want to export `JJI_SERVER` and `JJI_USERNAME` in every shell, create `~/.config/jji/config.toml`:
+
+```toml
+[default]
+server = "local"
+
+[servers.local]
+url = "http://localhost:8000"
+username = "jdoe"
+```
+
+After that, `jji health` and `jji analyze ...` use that profile automatically. The same file can also hold Jenkins, AI, and other per-server defaults when you want the CLI to supply them.
+
+### Override Jenkins or AI settings on one run
 
 ```bash
-jji results show <job_id> --full --json
+jji analyze \
+  --job-name test \
+  --build-number 123 \
+  --jenkins-url https://jenkins.example.com \
+  --jenkins-user your-username \
+  --jenkins-password your-api-token \
+  --provider claude \
+  --model your-model-name
 ```
 
-If Jenkins is not configured on the server, add `--jenkins-url`, `--jenkins-user`, and `--jenkins-password` to the `jji analyze` command. If you do not want to export `JJI_SERVER`, pass `--server http://localhost:8000` on each command instead. If you already have `~/.config/jji/config.toml`, `jji` can use the default server profile from that file. That config can also carry `peers` and `peer_analysis_max_rounds` defaults if you want peer consensus enabled by default.
+Use this when you do not want to keep Jenkins credentials or AI defaults in the server environment.
 
-## What a first successful run looks like
+### Switch AI providers
 
-A good first run usually ends with three things:
+Use one provider at a time and set the matching authentication variable.
 
-1. A queued response from `POST /analyze` containing `job_id` and `result_url`.
-2. A completed JSON result at `GET /results/{job_id}`.
-3. A readable browser report at the same `result_url`, with `/status/{job_id}` handling the in-progress view until the report is ready.
+| Provider | Example `.env` values |
+| --- | --- |
+| `claude` | `AI_PROVIDER=claude`, `AI_MODEL=opus-4`, `ANTHROPIC_API_KEY=...` |
+| `gemini` | `AI_PROVIDER=gemini`, `AI_MODEL=gemini-2.5-pro`, `GEMINI_API_KEY=...` |
+| `cursor` | `AI_PROVIDER=cursor`, `AI_MODEL=gpt-5.4-xhigh`, `CURSOR_API_KEY=...` |
 
-Once you have that working, the next natural step is to open `http://localhost:8000/` after registering once to browse the dashboard, or use `POST /analyze-failures` if you already have raw failures or JUnit XML instead of a Jenkins build.
+If you want multi-model peer review after your first successful run, see [Adding Peer Review with Multiple AI Models](adding-peer-review-with-multiple-ai-models.html) for details.
 
+### Run from a source checkout instead of Docker
+
+```bash
+uv sync
+cd frontend && npm install && npm run build
+uv run jenkins-job-insight
+```
+
+Use this when you want a local process instead of a container. Build the web UI before starting the server, or browser routes will not load.
+
+If you want to analyze JUnit XML or raw failures without Jenkins, see [Analyzing JUnit XML and Raw Failures](analyzing-junit-xml-and-raw-failures.html) for details.
+
+### Make generated links absolute
+
+Set `PUBLIC_BASE_URL` on the server if you want `Poll:` and other generated links to use a full public URL instead of `/results/<job_id>`.
+
+## Troubleshooting
+
+- `Error: No server specified`: export `JJI_SERVER=http://localhost:8000`, pass `--server http://localhost:8000`, or save a CLI server profile.
+- The browser keeps sending you to `/register`: save a username first. A normal user does not need a password or API key.
+- The browser shows `Frontend not built`: this only happens on a local source checkout. Run `cd frontend && npm install && npm run build`, then restart the server.
+- Jenkins certificate errors on the first run: set `JENKINS_SSL_VERIFY=false` in `.env`, or pass `--no-jenkins-ssl-verify` on the CLI.
+- The run stays in `waiting`: JJI is still watching Jenkins finish the build. If you do not want that behavior, re-run with `--no-wait`.
 
 ## Related Pages
 
-- [Installation](installation.html)
-- [Run Locally](run-locally.html)
-- [Analyze Jenkins Jobs](analyze-jenkins-jobs.html)
-- [Analyze Raw Failures and JUnit XML](direct-failure-analysis.html)
-- [HTML Reports and Dashboard](html-reports-and-dashboard.html)
+- [Analyzing Jenkins Jobs](analyzing-jenkins-jobs.html)
+- [Analyzing JUnit XML and Raw Failures](analyzing-junit-xml-and-raw-failures.html)
+- [Monitoring and Re-Running Analyses](monitoring-and-rerunning-analyses.html)
+- [CLI Command Reference](cli-command-reference.html)
+- [Configuration and Environment Reference](configuration-and-environment-reference.html)

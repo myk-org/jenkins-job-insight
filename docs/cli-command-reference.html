@@ -1,0 +1,2328 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLI Command Reference - jenkins-job-insight</title>
+    <meta name="description" content="Turn Jenkins failures into actionable analysis, team review, and ready-to-file bugs.">
+    <link rel="stylesheet" href="assets/style.css">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">jenkins-job-insight</a>
+            <p class="sidebar-tagline">Turn Jenkins failures into actionable analysis, team review, and ready-to-file bugs.</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+            
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+                    
+                    <li>
+                        <a href="quickstart.html"
+                           class="nav-link">
+                            Running Your First Analysis
+                        </a>
+                    </li>
+                    
+                </ul>
+            </div>
+            
+            <div class="nav-group">
+                <h3 class="nav-group-title">User Guides</h3>
+                <ul class="nav-group-pages">
+                    
+                    <li>
+                        <a href="analyzing-jenkins-jobs.html"
+                           class="nav-link">
+                            Analyzing Jenkins Jobs
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="analyzing-junit-xml-and-raw-failures.html"
+                           class="nav-link">
+                            Analyzing JUnit XML and Raw Failures
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="monitoring-and-rerunning-analyses.html"
+                           class="nav-link">
+                            Monitoring and Re-Running Analyses
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="reviewing-commenting-and-reclassifying-failures.html"
+                           class="nav-link">
+                            Reviewing, Commenting, and Reclassifying Failures
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="managing-your-profile-and-personal-tokens.html"
+                           class="nav-link">
+                            Managing Your Profile and Personal Tokens
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="tracking-failure-history.html"
+                           class="nav-link">
+                            Tracking Failure History
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="creating-github-issues-and-jira-bugs.html"
+                           class="nav-link">
+                            Creating GitHub Issues and Jira Bugs
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="improving-analysis-with-repository-context.html"
+                           class="nav-link">
+                            Improving Analysis with Repository Context
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="adding-peer-review-with-multiple-ai-models.html"
+                           class="nav-link">
+                            Adding Peer Review with Multiple AI Models
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="pushing-classifications-to-report-portal.html"
+                           class="nav-link">
+                            Pushing Classifications to Report Portal
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="managing-admin-users-and-api-keys.html"
+                           class="nav-link">
+                            Managing Admin Users and API Keys
+                        </a>
+                    </li>
+                    
+                </ul>
+            </div>
+            
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+                    
+                    <li>
+                        <a href="cli-command-reference.html"
+                           class="nav-link active" aria-current="page">
+                            CLI Command Reference
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="rest-api-reference.html"
+                           class="nav-link">
+                            REST API Reference
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="configuration-and-environment-reference.html"
+                           class="nav-link">
+                            Configuration and Environment Reference
+                        </a>
+                    </li>
+                    
+                </ul>
+            </div>
+            
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">jenkins-job-insight</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+                
+                <a href="https://github.com/myk-org/jenkins-job-insight.git" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/myk-org/jenkins-job-insight.git">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
+                </a>
+                
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="cli-command-reference">CLI Command Reference</h1>
+<h2 id="global-options">Global Options</h2>
+<p>These options apply to every command. <code>jji config ...</code> commands do not require a server connection.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--server</code>, <code>-s</code></td>
+<td>string</td>
+<td><code>JJI_SERVER</code>, then <code>[default].server</code></td>
+<td>Server profile name or full <code>http://</code>/<code>https://</code> URL. A full URL does not load any other profile keys.</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>flag</td>
+<td><code>false</code></td>
+<td>Pretty-print JSON instead of text or table output.</td>
+</tr>
+<tr>
+<td><code>--user</code></td>
+<td>string</td>
+<td><code>JJI_USERNAME</code>, then profile <code>username</code>, else empty</td>
+<td>Username cookie used for comment and review attribution.</td>
+</tr>
+<tr>
+<td><code>--api-key</code></td>
+<td>string</td>
+<td><code>JJI_API_KEY</code>, then profile <code>api_key</code>, else empty</td>
+<td>Bearer token used for admin and other protected API calls.</td>
+</tr>
+<tr>
+<td><code>--no-verify-ssl</code></td>
+<td>flag</td>
+<td><code>JJI_NO_VERIFY_SSL</code>, then profile <code>no_verify_ssl</code>, else <code>false</code></td>
+<td>Disable HTTPS certificate verification for the server connection.</td>
+</tr>
+<tr>
+<td><code>--verify-ssl</code></td>
+<td>flag</td>
+<td>unset</td>
+<td>Force HTTPS certificate verification on, overriding profile <code>no_verify_ssl</code>.</td>
+</tr>
+<tr>
+<td><code>--insecure</code></td>
+<td>flag</td>
+<td><code>false</code></td>
+<td>Alias for <code>--no-verify-ssl</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>--server<span class="w"> </span>prod<span class="w"> </span>--api-key<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JJI_API_KEY</span><span class="s2">&quot;</span><span class="w"> </span>results<span class="w"> </span>list<span class="w"> </span>--json
+jji<span class="w"> </span>--server<span class="w"> </span>https://jji.example.com<span class="w"> </span>--insecure<span class="w"> </span>health
+</code></pre></div>
+
+<p>Effect: The CLI resolves the server, username, SSL behavior, and admin API key before running the selected command.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>--json</code> works both before the command and after the leaf command, for example <code>jji --json results list</code> and <code>jji results list --json</code>.</p>
+<p><strong>Warning:</strong> <code>--verify-ssl</code> and <code>--insecure</code> are mutually exclusive.</p>
+<p><strong>Note:</strong> When the server returns <code>401</code> or <code>403</code>, the CLI prints a hint to use <code>--api-key</code> or <code>JJI_API_KEY</code>.</p>
+</blockquote>
+<h2 id="output-modes">Output Modes</h2>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Syntax</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Text / table</td>
+<td>default</td>
+<td>Commands print aligned tables or command-specific summary text. Generic table output preserves full values and prints <code>No results.</code> for empty datasets.</td>
+</tr>
+<tr>
+<td>JSON</td>
+<td><code>--json</code></td>
+<td>Commands print pretty-formatted JSON with 2-space indentation.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>results<span class="w"> </span>list<span class="w"> </span>--json
+jji<span class="w"> </span>--json<span class="w"> </span><span class="nb">history</span><span class="w"> </span><span class="nb">test</span><span class="w"> </span>tests.TestA.test_one
+</code></pre></div>
+
+<p>Effect: JSON mode returns the raw response body for the command. Text mode may show a summary instead of every field.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>jji capabilities</code> prints JSON even without <code>--json</code>.</p>
+<p><strong>Note:</strong> <code>jji results show --full</code> also prints the full stored result document as JSON.</p>
+</blockquote>
+<h2 id="config-file">Config File</h2>
+<p><code>jji</code> reads its local config file from <code>$XDG_CONFIG_HOME/jji/config.toml</code>. When <code>XDG_CONFIG_HOME</code> is unset, the path is <code>~/.config/jji/config.toml</code>.</p>
+<h3 id="top-level-sections">Top-Level Sections</h3>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Keys</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>[default]</code></td>
+<td><code>server</code></td>
+<td>Name of the default server profile used when <code>--server</code> and <code>JJI_SERVER</code> are unset.</td>
+</tr>
+<tr>
+<td><code>[defaults]</code></td>
+<td>any server-profile keys except <code>server</code></td>
+<td>Shared values merged into every <code>[servers.&lt;name&gt;]</code> entry.</td>
+</tr>
+<tr>
+<td><code>[servers.&lt;name&gt;]</code></td>
+<td><code>url</code> plus optional profile keys</td>
+<td>Named server profile.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><span class="k">[default]</span>
+<span class="n">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;dev&quot;</span>
+
+<span class="k">[defaults]</span>
+<span class="n">username</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;alice&quot;</span>
+<span class="n">tests_repo_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/example/tests&quot;</span>
+<span class="n">ai_provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;claude&quot;</span>
+<span class="n">ai_model</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;opus-4&quot;</span>
+
+<span class="k">[servers.dev]</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000&quot;</span>
+<span class="n">no_verify_ssl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+
+<span class="k">[servers.prod]</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://jji.example.com&quot;</span>
+<span class="n">api_key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;jji_admin_...&quot;</span>
+<span class="n">jira_token</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;jira-token&quot;</span>
+<span class="n">jira_email</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;alice@example.com&quot;</span>
+<span class="n">github_repo_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/example/repo&quot;</span>
+</code></pre></div>
+
+<p>Effect: The selected profile provides default values for shared connection settings and for commands such as <code>analyze</code>, <code>preview-issue</code>, <code>create-issue</code>, <code>jira-projects</code>, and <code>jira-security-levels</code>.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>[defaults].server</code> is invalid. Put the default profile name in <code>[default].server</code>.</p>
+</blockquote>
+<h3 id="resolution-rules">Resolution Rules</h3>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Source</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>CLI flags and bound environment variables</td>
+<td>Highest precedence.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Selected <code>[servers.&lt;name&gt;]</code> entry</td>
+<td>Loaded when <code>--server NAME</code> or <code>[default].server</code> selects a profile.</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>[defaults]</code> section</td>
+<td>Merged into the selected server entry before command-specific overrides.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Omitted</td>
+<td>Unset fields are not sent by the CLI.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>--server<span class="w"> </span>prod<span class="w"> </span>health
+<span class="nv">JJI_SERVER</span><span class="o">=</span>prod<span class="w"> </span>jji<span class="w"> </span>health
+jji<span class="w"> </span>--server<span class="w"> </span>https://jji.example.com<span class="w"> </span>health
+</code></pre></div>
+
+<p>Effect: A concrete <code>http://</code> or <code>https://</code> value for <code>--server</code> or <code>JJI_SERVER</code> is self-contained; no other profile fields are inherited.</p>
+<h3 id="profile-keys">Profile Keys</h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Used by</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>url</code></td>
+<td>string</td>
+<td>required</td>
+<td>all non-<code>config</code> commands</td>
+<td>Base URL of the JJI server. Must be a non-empty trimmed string.</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>shared global option</td>
+<td>Default username cookie for comment and review actions.</td>
+</tr>
+<tr>
+<td><code>no_verify_ssl</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>shared global option</td>
+<td>Default TLS verification behavior for the server connection.</td>
+</tr>
+<tr>
+<td><code>api_key</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>shared global option</td>
+<td>Default Bearer token for admin and protected commands.</td>
+</tr>
+<tr>
+<td><code>jenkins_url</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default Jenkins server URL.</td>
+</tr>
+<tr>
+<td><code>jenkins_user</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default Jenkins username.</td>
+</tr>
+<tr>
+<td><code>jenkins_password</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default Jenkins password or API token.</td>
+</tr>
+<tr>
+<td><code>jenkins_ssl_verify</code></td>
+<td>boolean</td>
+<td>unset</td>
+<td><code>analyze</code></td>
+<td>Default Jenkins TLS verification flag.</td>
+</tr>
+<tr>
+<td><code>tests_repo_url</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default tests repository URL.</td>
+</tr>
+<tr>
+<td><code>ai_provider</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default AI provider.</td>
+</tr>
+<tr>
+<td><code>ai_model</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default AI model.</td>
+</tr>
+<tr>
+<td><code>ai_cli_timeout</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td><code>analyze</code></td>
+<td>Default AI CLI timeout in minutes. <code>0</code> means unset in the CLI config.</td>
+</tr>
+<tr>
+<td><code>jira_url</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default Jira instance URL.</td>
+</tr>
+<tr>
+<td><code>jira_email</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code>, <code>jira-projects</code>, <code>jira-security-levels</code>, Jira issue preview/create</td>
+<td>Default Jira Cloud email.</td>
+</tr>
+<tr>
+<td><code>jira_api_token</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default Jira Cloud API token for analysis-time Jira lookup.</td>
+</tr>
+<tr>
+<td><code>jira_pat</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default Jira Server / Data Center personal access token for analysis-time Jira lookup.</td>
+</tr>
+<tr>
+<td><code>jira_token</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>jira-projects</code>, <code>jira-security-levels</code>, Jira issue preview/create</td>
+<td>Default Jira token for Jira utility and Jira issue commands.</td>
+</tr>
+<tr>
+<td><code>jira_project_key</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code>, Jira issue preview/create</td>
+<td>Default Jira project key.</td>
+</tr>
+<tr>
+<td><code>jira_security_level</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Jira issue preview/create</td>
+<td>Default Jira security level name.</td>
+</tr>
+<tr>
+<td><code>jira_ssl_verify</code></td>
+<td>boolean</td>
+<td>unset</td>
+<td><code>analyze</code></td>
+<td>Default Jira TLS verification flag.</td>
+</tr>
+<tr>
+<td><code>jira_max_results</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td><code>analyze</code></td>
+<td>Default Jira search result limit. <code>0</code> means unset in the CLI config.</td>
+</tr>
+<tr>
+<td><code>enable_jira</code></td>
+<td>boolean</td>
+<td>unset</td>
+<td><code>analyze</code></td>
+<td>Default Jira integration toggle.</td>
+</tr>
+<tr>
+<td><code>github_token</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code>, GitHub issue preview/create</td>
+<td>Default GitHub token.</td>
+</tr>
+<tr>
+<td><code>github_repo_url</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>GitHub issue preview/create</td>
+<td>Default GitHub repository URL override.</td>
+</tr>
+<tr>
+<td><code>peers</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default peer-review list in <code>provider:model[,provider:model...]</code> format.</td>
+</tr>
+<tr>
+<td><code>peer_analysis_max_rounds</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td><code>analyze</code></td>
+<td>Default peer review round limit. <code>0</code> means unset in the CLI config.</td>
+</tr>
+<tr>
+<td><code>additional_repos</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td><code>analyze</code></td>
+<td>Default additional repository list in <code>name:url[,name:url...]</code> format. Each URL may append <code>:ref</code>.</td>
+</tr>
+<tr>
+<td><code>wait_for_completion</code></td>
+<td>boolean</td>
+<td>unset</td>
+<td><code>analyze</code></td>
+<td>Default wait behavior before analysis starts.</td>
+</tr>
+<tr>
+<td><code>poll_interval_minutes</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td><code>analyze</code></td>
+<td>Default Jenkins polling interval. <code>0</code> means unset in the CLI config.</td>
+</tr>
+<tr>
+<td><code>max_wait_minutes</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td><code>analyze</code></td>
+<td>Default maximum wait time. <code>0</code> means unset in the CLI config.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><span class="k">[servers.dev]</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000&quot;</span>
+<span class="n">username</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;alice&quot;</span>
+<span class="n">jenkins_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://jenkins.example.com&quot;</span>
+<span class="n">jira_token</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;jira-token&quot;</span>
+<span class="n">github_repo_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/example/repo&quot;</span>
+<span class="n">peers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;claude:opus-4,gemini:2.5-pro&quot;</span>
+<span class="n">additional_repos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;infra:https://github.com/example/infra:main&quot;</span>
+</code></pre></div>
+
+<p>Effect: These keys are read only when a named server profile is selected.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>jira_token</code> is separate from <code>jira_api_token</code> and <code>jira_pat</code>. <code>analyze</code> reads <code>jira_api_token</code> / <code>jira_pat</code>; Jira utility and Jira issue commands read <code>jira_token</code>.</p>
+<p><strong>Note:</strong> <code>peers</code>, <code>jira_token</code>, <code>jira_security_level</code>, <code>github_repo_url</code>, and <code>additional_repos</code> must be strings. <code>peer_analysis_max_rounds</code> must be an integer.</p>
+</blockquote>
+<h2 id="command-groups">Command Groups</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Effect with no leaf subcommand</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jji</code></td>
+<td>Prints top-level help.</td>
+</tr>
+<tr>
+<td><code>jji results</code></td>
+<td>Prints <code>results</code> group help.</td>
+</tr>
+<tr>
+<td><code>jji history</code></td>
+<td>Prints <code>history</code> group help.</td>
+</tr>
+<tr>
+<td><code>jji comments</code></td>
+<td>Prints <code>comments</code> group help.</td>
+</tr>
+<tr>
+<td><code>jji classifications</code></td>
+<td>Prints <code>classifications</code> group help.</td>
+</tr>
+<tr>
+<td><code>jji auth</code></td>
+<td>Prints <code>auth</code> group help.</td>
+</tr>
+<tr>
+<td><code>jji admin</code></td>
+<td>Prints <code>admin</code> group help.</td>
+</tr>
+<tr>
+<td><code>jji admin users</code></td>
+<td>Prints <code>admin users</code> group help.</td>
+</tr>
+<tr>
+<td><code>jji config</code></td>
+<td>Runs <code>jji config show</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>--help
+jji<span class="w"> </span>results<span class="w"> </span>--help
+jji<span class="w"> </span>config
+</code></pre></div>
+
+<p>Effect: Group commands are navigation points; the executable work happens in the leaf commands below.</p>
+<blockquote>
+<p><strong>Tip:</strong> <code>--help</code> is available on the root command, every command group, and every leaf command.</p>
+</blockquote>
+<h2 id="core-commands">Core Commands</h2>
+<h3 id="jji-health"><code>jji health</code></h3>
+<p>Checks server health.</p>
+<p>Parameters/options: shared global options only.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>health
+</code></pre></div>
+
+<p>Effect: Default output is a one-row status table. <code>--json</code> returns the raw health object.</p>
+<h3 id="jji-analyze"><code>jji analyze</code></h3>
+<p>Queues a Jenkins build for analysis.</p>
+<h4 id="required-parameters">Required parameters</h4>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--job-name</code>, <code>-j</code></td>
+<td>string</td>
+<td>required</td>
+<td>Jenkins job name.</td>
+</tr>
+<tr>
+<td><code>--build-number</code>, <code>-b</code></td>
+<td>integer</td>
+<td>required</td>
+<td>Build number to analyze. Must be greater than <code>0</code>.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="analysis-selection-and-ai-options">Analysis selection and AI options</h4>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--provider</code></td>
+<td>string</td>
+<td>profile <code>ai_provider</code>, else unset</td>
+<td>AI provider name.</td>
+</tr>
+<tr>
+<td><code>--model</code></td>
+<td>string</td>
+<td>profile <code>ai_model</code>, else unset</td>
+<td>AI model name.</td>
+</tr>
+<tr>
+<td><code>--jira</code> / <code>--no-jira</code></td>
+<td>flag pair</td>
+<td>profile <code>enable_jira</code>, else unset</td>
+<td>Enable or disable Jira integration for this request.</td>
+</tr>
+<tr>
+<td><code>--raw-prompt</code></td>
+<td>string</td>
+<td>unset</td>
+<td>Extra instructions appended to the AI prompt.</td>
+</tr>
+<tr>
+<td><code>--peers</code></td>
+<td>string</td>
+<td>profile <code>peers</code>, else unset</td>
+<td>Peer-review list in <code>provider:model[,provider:model...]</code> format.</td>
+</tr>
+<tr>
+<td><code>--peer-analysis-max-rounds</code></td>
+<td>integer</td>
+<td>profile <code>peer_analysis_max_rounds</code>, else unset</td>
+<td>Peer-review round limit. Must be between <code>1</code> and <code>10</code>.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="jenkins-repository-jira-and-github-options">Jenkins, repository, Jira, and GitHub options</h4>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--jenkins-url</code></td>
+<td>string</td>
+<td><code>JENKINS_URL</code>, then profile <code>jenkins_url</code>, else unset</td>
+<td>Jenkins server URL.</td>
+</tr>
+<tr>
+<td><code>--jenkins-user</code></td>
+<td>string</td>
+<td><code>JENKINS_USER</code>, then profile <code>jenkins_user</code>, else unset</td>
+<td>Jenkins username.</td>
+</tr>
+<tr>
+<td><code>--jenkins-password</code></td>
+<td>string</td>
+<td><code>JENKINS_PASSWORD</code>, then profile <code>jenkins_password</code>, else unset</td>
+<td>Jenkins password or API token.</td>
+</tr>
+<tr>
+<td><code>--jenkins-ssl-verify</code> / <code>--no-jenkins-ssl-verify</code></td>
+<td>flag pair</td>
+<td>profile <code>jenkins_ssl_verify</code>, else unset</td>
+<td>Jenkins TLS verification flag.</td>
+</tr>
+<tr>
+<td><code>--jenkins-artifacts-max-size-mb</code></td>
+<td>integer</td>
+<td>unset</td>
+<td>Maximum Jenkins artifact size in MB. Must be greater than <code>0</code>.</td>
+</tr>
+<tr>
+<td><code>--get-job-artifacts</code> / <code>--no-get-job-artifacts</code></td>
+<td>flag pair</td>
+<td>unset</td>
+<td>Download or skip downloading all build artifacts for AI context.</td>
+</tr>
+<tr>
+<td><code>--tests-repo-url</code></td>
+<td>string</td>
+<td><code>TESTS_REPO_URL</code>, then profile <code>tests_repo_url</code>, else unset</td>
+<td>Tests repository URL.</td>
+</tr>
+<tr>
+<td><code>--jira-url</code></td>
+<td>string</td>
+<td><code>JIRA_URL</code>, then profile <code>jira_url</code>, else unset</td>
+<td>Jira instance URL.</td>
+</tr>
+<tr>
+<td><code>--jira-email</code></td>
+<td>string</td>
+<td><code>JIRA_EMAIL</code>, then profile <code>jira_email</code>, else unset</td>
+<td>Jira Cloud email.</td>
+</tr>
+<tr>
+<td><code>--jira-api-token</code></td>
+<td>string</td>
+<td><code>JIRA_API_TOKEN</code>, then profile <code>jira_api_token</code>, else unset</td>
+<td>Jira Cloud API token for analysis-time lookup.</td>
+</tr>
+<tr>
+<td><code>--jira-pat</code></td>
+<td>string</td>
+<td><code>JIRA_PAT</code>, then profile <code>jira_pat</code>, else unset</td>
+<td>Jira Server / Data Center personal access token for analysis-time lookup.</td>
+</tr>
+<tr>
+<td><code>--jira-project-key</code></td>
+<td>string</td>
+<td><code>JIRA_PROJECT_KEY</code>, then profile <code>jira_project_key</code>, else unset</td>
+<td>Jira project key.</td>
+</tr>
+<tr>
+<td><code>--jira-ssl-verify</code> / <code>--no-jira-ssl-verify</code></td>
+<td>flag pair</td>
+<td>profile <code>jira_ssl_verify</code>, else unset</td>
+<td>Jira TLS verification flag.</td>
+</tr>
+<tr>
+<td><code>--jira-max-results</code></td>
+<td>integer</td>
+<td>profile <code>jira_max_results</code>, else unset</td>
+<td>Maximum Jira search results. Must be greater than <code>0</code>.</td>
+</tr>
+<tr>
+<td><code>--github-token</code></td>
+<td>string</td>
+<td><code>GITHUB_TOKEN</code>, then profile <code>github_token</code>, else unset</td>
+<td>GitHub token.</td>
+</tr>
+<tr>
+<td><code>--additional-repos</code></td>
+<td>string</td>
+<td>profile <code>additional_repos</code>, else unset</td>
+<td>Additional repositories in <code>name:url[,name:url...]</code> format. Each URL may append <code>:ref</code>.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="monitoring-options">Monitoring options</h4>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--wait</code> / <code>--no-wait</code></td>
+<td>flag pair</td>
+<td>profile <code>wait_for_completion</code>, else unset</td>
+<td>Wait or do not wait for Jenkins completion before analysis begins.</td>
+</tr>
+<tr>
+<td><code>--poll-interval</code></td>
+<td>integer</td>
+<td>profile <code>poll_interval_minutes</code>, else unset</td>
+<td>Jenkins polling interval in minutes. Must be greater than <code>0</code>.</td>
+</tr>
+<tr>
+<td><code>--max-wait</code></td>
+<td>integer</td>
+<td>profile <code>max_wait_minutes</code>, else unset</td>
+<td>Maximum wait time in minutes. Must be <code>0</code> or greater.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>analyze<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--job-name<span class="w"> </span>ocp-e2e<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--build-number<span class="w"> </span><span class="m">142</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--provider<span class="w"> </span>claude<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--model<span class="w"> </span>opus-4<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--jenkins-url<span class="w"> </span>https://jenkins.example.com<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tests-repo-url<span class="w"> </span>https://github.com/example/tests<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--wait<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--poll-interval<span class="w"> </span><span class="m">5</span>
+</code></pre></div>
+
+<p>Effect: Queues an analysis request. Default output prints <code>Job queued</code>, <code>Status</code>, and <code>Poll</code>; <code>--json</code> returns the queued response, including <code>job_id</code> and <code>result_url</code>.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>--peers</code> accepts <code>provider:model[,provider:model...]</code>. <code>--additional-repos</code> accepts <code>name:url[,name:url...]</code>, and each URL may append <code>:ref</code> after the repository path.</p>
+<p><strong>Warning:</strong> Invalid <code>--peers</code>, invalid <code>--additional-repos</code>, out-of-range <code>--peer-analysis-max-rounds</code>, or invalid numeric bounds exit with status <code>1</code>.</p>
+</blockquote>
+<h3 id="jji-re-analyze-job_id"><code>jji re-analyze JOB_ID</code></h3>
+<p>Re-runs a stored analysis with the same settings.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id to re-run.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>re-analyze<span class="w"> </span>old-job-1
+</code></pre></div>
+
+<p>Effect: Queues a new analysis. Default output prints the new <code>job_id</code>, <code>status</code>, and poll URL; <code>--json</code> returns the queued response.</p>
+<h3 id="jji-status-job_id"><code>jji status JOB_ID</code></h3>
+<p>Checks the current status of an analysis job.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>status<span class="w"> </span>abc-123
+</code></pre></div>
+
+<p>Effect: Default output prints only <code>job_id</code> and <code>status</code>. <code>--json</code> returns the full stored result object when available.</p>
+<h2 id="results-commands">Results Commands</h2>
+<h3 id="jji-results-list"><code>jji results list</code></h3>
+<p>Lists recent analyzed jobs.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--limit</code>, <code>-l</code></td>
+<td>integer</td>
+<td><code>50</code></td>
+<td>Maximum number of jobs to return.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>results<span class="w"> </span>list<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span>
+</code></pre></div>
+
+<p>Effect: Default output shows <code>job_id</code>, <code>status</code>, <code>jenkins_url</code>, and <code>created_at</code>. <code>--json</code> returns the raw list.</p>
+<h3 id="jji-results-dashboard"><code>jji results dashboard</code></h3>
+<p>Lists jobs with dashboard metadata.</p>
+<p>Parameters/options: shared global options only.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>results<span class="w"> </span>dashboard
+</code></pre></div>
+
+<p>Effect: Default output shows <code>job_id</code>, <code>job_name</code>, <code>build_number</code>, <code>status</code>, <code>failure_count</code>, <code>reviewed_count</code>, <code>comment_count</code>, and <code>created_at</code>. <code>--json</code> returns the raw list.</p>
+<h3 id="jji-results-show-job_id"><code>jji results show JOB_ID</code></h3>
+<p>Shows a stored analysis result.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+<tr>
+<td><code>--full</code>, <code>-f</code></td>
+<td>flag</td>
+<td><code>false</code></td>
+<td>Print the full stored result document as JSON.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>results<span class="w"> </span>show<span class="w"> </span>abc-123
+jji<span class="w"> </span>results<span class="w"> </span>show<span class="w"> </span>abc-123<span class="w"> </span>--full
+</code></pre></div>
+
+<p>Effect: Default output is a summary row with <code>job_id</code>, <code>status</code>, <code>summary</code>, <code>failures</code>, <code>children</code>, <code>ai_provider</code>, and <code>created_at</code>. <code>--full</code> or <code>--json</code> prints the full stored result document.</p>
+<h3 id="jji-results-delete-job_id"><code>jji results delete JOB_ID</code></h3>
+<p>Deletes a stored job and related data.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id to delete.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>results<span class="w"> </span>delete<span class="w"> </span>abc-123
+</code></pre></div>
+
+<p>Effect: Default output prints <code>Deleted job &lt;job_id&gt;</code>. <code>--json</code> returns the API response.</p>
+<h3 id="jji-results-review-status-job_id"><code>jji results review-status JOB_ID</code></h3>
+<p>Shows review progress for a stored analysis.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>results<span class="w"> </span>review-status<span class="w"> </span>job-1
+</code></pre></div>
+
+<p>Effect: Default output is a one-row table with <code>total_failures</code>, <code>reviewed_count</code>, and <code>comment_count</code>. <code>--json</code> returns the raw response object.</p>
+<h3 id="jji-results-set-reviewed-job_id"><code>jji results set-reviewed JOB_ID</code></h3>
+<p>Sets or clears the reviewed state for a test failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+<tr>
+<td><code>--test</code>, <code>-t</code></td>
+<td>string</td>
+<td>required</td>
+<td>Fully qualified test name.</td>
+</tr>
+<tr>
+<td><code>--reviewed</code> / <code>--not-reviewed</code></td>
+<td>flag pair</td>
+<td>required</td>
+<td>Choose the reviewed state to apply.</td>
+</tr>
+<tr>
+<td><code>--child-job</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Optional child job name.</td>
+</tr>
+<tr>
+<td><code>--child-build</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>Optional child build number. Must be non-negative. Values greater than <code>0</code> require <code>--child-job</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>results<span class="w"> </span>set-reviewed<span class="w"> </span>job-1<span class="w"> </span>--test<span class="w"> </span>tests.TestA.test_one<span class="w"> </span>--reviewed
+</code></pre></div>
+
+<p>Effect: Default output prints <code>Marked as reviewed</code> or <code>Marked as not reviewed</code>, optionally with <code>reviewed_by</code>. <code>--json</code> returns the API response.</p>
+<h3 id="jji-results-enrich-comments-job_id"><code>jji results enrich-comments JOB_ID</code></h3>
+<p>Refreshes comment metadata such as live PR or ticket status.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>results<span class="w"> </span>enrich-comments<span class="w"> </span>job-1
+</code></pre></div>
+
+<p>Effect: Default output prints <code>Enriched N comment(s).</code> <code>--json</code> returns the raw response object.</p>
+<h2 id="history-commands">History Commands</h2>
+<h3 id="jji-history-test-test_name"><code>jji history test TEST_NAME</code></h3>
+<p>Shows failure history for one test.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TEST_NAME</code></td>
+<td>string</td>
+<td>required</td>
+<td>Fully qualified test name.</td>
+</tr>
+<tr>
+<td><code>--limit</code>, <code>-l</code></td>
+<td>integer</td>
+<td><code>20</code></td>
+<td>Maximum number of recent runs to include.</td>
+</tr>
+<tr>
+<td><code>--job-name</code>, <code>-j</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Restrict history to one Jenkins job name.</td>
+</tr>
+<tr>
+<td><code>--exclude-job-id</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Exclude one stored analysis job id from the history query.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span><span class="nb">test</span><span class="w"> </span>tests.TestA.test_one<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span>
+</code></pre></div>
+
+<p>Effect: Default output prints summary fields plus optional <code>Recent runs</code> and <code>Comments</code> tables. <code>--json</code> returns the full history document.</p>
+<h3 id="jji-history-search"><code>jji history search</code></h3>
+<p>Finds tests that share an error signature.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--signature</code>, <code>-s</code></td>
+<td>string</td>
+<td>required</td>
+<td>Error signature hash.</td>
+</tr>
+<tr>
+<td><code>--exclude-job-id</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Exclude one stored analysis job id from the search.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span>search<span class="w"> </span>--signature<span class="w"> </span>sig-abc123
+</code></pre></div>
+
+<p>Effect: Default output prints signature totals and a test occurrence table. <code>--json</code> returns the full search response.</p>
+<h3 id="jji-history-stats-job_name"><code>jji history stats JOB_NAME</code></h3>
+<p>Shows aggregate statistics for one Jenkins job.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_NAME</code></td>
+<td>string</td>
+<td>required</td>
+<td>Jenkins job name.</td>
+</tr>
+<tr>
+<td><code>--exclude-job-id</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Exclude one stored analysis job id from the stats query.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span>stats<span class="w"> </span>ocp-e2e
+</code></pre></div>
+
+<p>Effect: Default output prints aggregate counts plus an optional <code>Most common failures</code> table. <code>--json</code> returns the full stats object.</p>
+<h3 id="jji-history-failures"><code>jji history failures</code></h3>
+<p>Lists paginated failure history.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--limit</code>, <code>-l</code></td>
+<td>integer</td>
+<td><code>50</code></td>
+<td>Page size.</td>
+</tr>
+<tr>
+<td><code>--offset</code>, <code>-o</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>Page offset.</td>
+</tr>
+<tr>
+<td><code>--search</code>, <code>-s</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Test-name search text.</td>
+</tr>
+<tr>
+<td><code>--classification</code>, <code>-c</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Classification filter.</td>
+</tr>
+<tr>
+<td><code>--job-name</code>, <code>-j</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Jenkins job-name filter.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span>failures<span class="w"> </span>--classification<span class="w"> </span><span class="s2">&quot;PRODUCT BUG&quot;</span><span class="w"> </span>--job-name<span class="w"> </span>ocp-e2e<span class="w"> </span>--limit<span class="w"> </span><span class="m">25</span>
+</code></pre></div>
+
+<p>Effect: Default output prints a <code>Total:</code> line and a failure table. <code>--json</code> returns the paginated response object.</p>
+<h2 id="classification-commands">Classification Commands</h2>
+<h3 id="jji-classify-test_name"><code>jji classify TEST_NAME</code></h3>
+<p>Creates a manual classification for a failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TEST_NAME</code></td>
+<td>string</td>
+<td>required</td>
+<td>Fully qualified test name.</td>
+</tr>
+<tr>
+<td><code>--type</code>, <code>-t</code></td>
+<td>string</td>
+<td>required</td>
+<td>Manual classification. The CLI uppercases the value before sending it. CLI help lists <code>FLAKY</code>, <code>REGRESSION</code>, <code>INFRASTRUCTURE</code>, <code>KNOWN_BUG</code>, and <code>INTERMITTENT</code>.</td>
+</tr>
+<tr>
+<td><code>--job-id</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id this classification applies to.</td>
+</tr>
+<tr>
+<td><code>--reason</code>, <code>-r</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Free-form reason text.</td>
+</tr>
+<tr>
+<td><code>--job-name</code>, <code>-j</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Parent job name when no child job is supplied.</td>
+</tr>
+<tr>
+<td><code>--references</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Bug URLs or ticket keys.</td>
+</tr>
+<tr>
+<td><code>--child-job</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Optional child job name.</td>
+</tr>
+<tr>
+<td><code>--child-build</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>Optional child build number.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>classify<span class="w"> </span>tests.TestA.test_one<span class="w"> </span>--type<span class="w"> </span>FLAKY<span class="w"> </span>--job-id<span class="w"> </span>job-123<span class="w"> </span>--reason<span class="w"> </span><span class="s2">&quot;intermittent DNS&quot;</span>
+</code></pre></div>
+
+<p>Effect: Default output prints the created record id. <code>--json</code> returns the created classification object.</p>
+<h3 id="jji-classifications-list"><code>jji classifications list</code></h3>
+<p>Lists stored manual classifications.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--job-id</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Filter by stored analysis job id.</td>
+</tr>
+<tr>
+<td><code>--test-name</code>, <code>-t</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Filter by fully qualified test name.</td>
+</tr>
+<tr>
+<td><code>--type</code>, <code>-c</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Classification filter. The CLI uppercases the value before sending it.</td>
+</tr>
+<tr>
+<td><code>--job-name</code>, <code>-j</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Filter by job name.</td>
+</tr>
+<tr>
+<td><code>--parent-job-name</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Filter by parent job name.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>classifications<span class="w"> </span>list<span class="w"> </span>--type<span class="w"> </span>flaky<span class="w"> </span>--parent-job-name<span class="w"> </span>pipeline-parent
+</code></pre></div>
+
+<p>Effect: Default output prints classification rows or <code>No classifications found.</code> <code>--json</code> returns the full <code>{classifications:[...]}</code> payload.</p>
+<h3 id="jji-override-classification-job_id"><code>jji override-classification JOB_ID</code></h3>
+<p>Overrides a failure classification in a stored result.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+<tr>
+<td><code>--test</code>, <code>-t</code></td>
+<td>string</td>
+<td>required</td>
+<td>Fully qualified test name.</td>
+</tr>
+<tr>
+<td><code>--classification</code>, <code>-c</code></td>
+<td>string</td>
+<td>required</td>
+<td>Override value. CLI help lists <code>CODE ISSUE</code>, <code>PRODUCT BUG</code>, and <code>INFRASTRUCTURE</code>.</td>
+</tr>
+<tr>
+<td><code>--child-job</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Optional child job name.</td>
+</tr>
+<tr>
+<td><code>--child-build</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>Optional child build number.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>override-classification<span class="w"> </span>job-1<span class="w"> </span>--test<span class="w"> </span>tests.TestA.test_one<span class="w"> </span>--classification<span class="w"> </span><span class="s2">&quot;PRODUCT BUG&quot;</span>
+</code></pre></div>
+
+<p>Effect: Default output prints the new classification. <code>--json</code> returns the API response.</p>
+<h2 id="comment-commands">Comment Commands</h2>
+<blockquote>
+<p><strong>Note:</strong> Comment and review commands use the shared <code>--user</code> option or the selected profile <code>username</code> for attribution.</p>
+</blockquote>
+<h3 id="jji-comments-list-job_id"><code>jji comments list JOB_ID</code></h3>
+<p>Lists comments for one stored analysis job.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>comments<span class="w"> </span>list<span class="w"> </span>job-1
+</code></pre></div>
+
+<p>Effect: Default output prints comment rows or <code>No comments for this job.</code> <code>--json</code> returns the full response, including <code>comments</code> and <code>reviews</code>.</p>
+<h3 id="jji-comments-add-job_id"><code>jji comments add JOB_ID</code></h3>
+<p>Adds a comment to one failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+<tr>
+<td><code>--test</code>, <code>-t</code></td>
+<td>string</td>
+<td>required</td>
+<td>Fully qualified test name.</td>
+</tr>
+<tr>
+<td><code>--message</code>, <code>-m</code></td>
+<td>string</td>
+<td>required</td>
+<td>Comment text.</td>
+</tr>
+<tr>
+<td><code>--child-job</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Optional child job name.</td>
+</tr>
+<tr>
+<td><code>--child-build</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>Optional child build number.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>comments<span class="w"> </span>add<span class="w"> </span>job-1<span class="w"> </span>--test<span class="w"> </span>tests.TestA.test_one<span class="w"> </span>--message<span class="w"> </span><span class="s2">&quot;Opened JIRA-123&quot;</span>
+</code></pre></div>
+
+<p>Effect: Default output prints <code>Comment added (id: ...)</code>. <code>--json</code> returns the created comment object.</p>
+<h3 id="jji-comments-delete-job_id-comment_id"><code>jji comments delete JOB_ID COMMENT_ID</code></h3>
+<p>Deletes a comment.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+<tr>
+<td><code>COMMENT_ID</code></td>
+<td>integer</td>
+<td>required</td>
+<td>Comment id to delete.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>comments<span class="w"> </span>delete<span class="w"> </span>job-1<span class="w"> </span><span class="m">42</span>
+</code></pre></div>
+
+<p>Effect: Default output prints <code>Comment deleted.</code> <code>--json</code> returns the API response.</p>
+<h2 id="tracker-and-automation-commands">Tracker and Automation Commands</h2>
+<blockquote>
+<p><strong>Note:</strong> <code>preview-issue</code> and <code>create-issue</code> send only the credentials for the selected <code>--type</code>. GitHub runs ignore Jira credentials; Jira runs ignore GitHub credentials.</p>
+</blockquote>
+<h3 id="jji-capabilities"><code>jji capabilities</code></h3>
+<p>Shows server-supported post-analysis automation features.</p>
+<p>Parameters/options: shared global options only.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>capabilities
+</code></pre></div>
+
+<p>Effect: Prints the capability object. Text mode and JSON mode both emit JSON, including fields such as <code>github_issues_enabled</code> and <code>jira_issues_enabled</code>.</p>
+<h3 id="jji-jira-projects"><code>jji jira-projects</code></h3>
+<p>Lists available Jira projects.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--query</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Optional search text used to filter projects.</td>
+</tr>
+<tr>
+<td><code>--jira-token</code></td>
+<td>string</td>
+<td>profile <code>jira_token</code>, else unset</td>
+<td>Jira token.</td>
+</tr>
+<tr>
+<td><code>--jira-email</code></td>
+<td>string</td>
+<td>profile <code>jira_email</code>, else unset</td>
+<td>Jira Cloud email.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>jira-projects<span class="w"> </span>--query<span class="w"> </span>platform
+</code></pre></div>
+
+<p>Effect: Default output prints <code>key</code> / <code>name</code> rows or <code>No Jira projects found.</code> <code>--json</code> returns the raw list.</p>
+<h3 id="jji-jira-security-levels-project_key"><code>jji jira-security-levels PROJECT_KEY</code></h3>
+<p>Lists Jira security levels for one project.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PROJECT_KEY</code></td>
+<td>string</td>
+<td>required</td>
+<td>Jira project key.</td>
+</tr>
+<tr>
+<td><code>--jira-token</code></td>
+<td>string</td>
+<td>profile <code>jira_token</code>, else unset</td>
+<td>Jira token.</td>
+</tr>
+<tr>
+<td><code>--jira-email</code></td>
+<td>string</td>
+<td>profile <code>jira_email</code>, else unset</td>
+<td>Jira Cloud email.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>jira-security-levels<span class="w"> </span>PROJ
+</code></pre></div>
+
+<p>Effect: Default output prints <code>name</code> / <code>description</code> rows or <code>No security levels found.</code> <code>--json</code> returns the raw list.</p>
+<h3 id="jji-ai-configs"><code>jji ai-configs</code></h3>
+<p>Lists known AI provider/model pairs from completed analyses.</p>
+<p>Parameters/options: shared global options only.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>ai-configs
+</code></pre></div>
+
+<p>Effect: Default output prints <code>ai_provider</code> and <code>ai_model</code> rows. If no completed analyses exist, the CLI prints <code>No AI configurations found from completed analyses.</code> and exits successfully. <code>--json</code> returns the raw list.</p>
+<h3 id="jji-preview-issue-job_id"><code>jji preview-issue JOB_ID</code></h3>
+<p>Previews generated issue content for GitHub or Jira.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+<tr>
+<td><code>--test</code>, <code>-t</code></td>
+<td>string</td>
+<td>required</td>
+<td>Fully qualified test name.</td>
+</tr>
+<tr>
+<td><code>--type</code></td>
+<td>string</td>
+<td>required</td>
+<td>Target tracker. Allowed values: <code>github</code>, <code>jira</code>.</td>
+</tr>
+<tr>
+<td><code>--child-job</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Optional child job name.</td>
+</tr>
+<tr>
+<td><code>--child-build</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>Optional child build number.</td>
+</tr>
+<tr>
+<td><code>--include-links</code></td>
+<td>flag</td>
+<td><code>false</code></td>
+<td>Include clickable URLs in the generated body.</td>
+</tr>
+<tr>
+<td><code>--ai-provider</code></td>
+<td>string</td>
+<td>unset</td>
+<td>AI provider override for issue-content generation.</td>
+</tr>
+<tr>
+<td><code>--ai-model</code></td>
+<td>string</td>
+<td>unset</td>
+<td>AI model override for issue-content generation.</td>
+</tr>
+<tr>
+<td><code>--github-token</code></td>
+<td>string</td>
+<td>profile <code>github_token</code>, else unset</td>
+<td>GitHub token for GitHub issue preview.</td>
+</tr>
+<tr>
+<td><code>--github-repo-url</code></td>
+<td>string</td>
+<td>profile <code>github_repo_url</code>, else unset</td>
+<td>GitHub repository URL override.</td>
+</tr>
+<tr>
+<td><code>--jira-token</code></td>
+<td>string</td>
+<td>profile <code>jira_token</code>, else unset</td>
+<td>Jira token for Jira bug preview.</td>
+</tr>
+<tr>
+<td><code>--jira-email</code></td>
+<td>string</td>
+<td>profile <code>jira_email</code>, else unset</td>
+<td>Jira Cloud email for Jira bug preview.</td>
+</tr>
+<tr>
+<td><code>--jira-project-key</code></td>
+<td>string</td>
+<td>profile <code>jira_project_key</code>, else unset</td>
+<td>Jira project key override.</td>
+</tr>
+<tr>
+<td><code>--jira-security-level</code></td>
+<td>string</td>
+<td>profile <code>jira_security_level</code>, else unset</td>
+<td>Jira security level name.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>preview-issue<span class="w"> </span>job-1<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--test<span class="w"> </span>tests.TestA.test_one<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--type<span class="w"> </span>github<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--include-links<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--ai-provider<span class="w"> </span>claude<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--ai-model<span class="w"> </span>opus-4
+</code></pre></div>
+
+<p>Effect: Default output prints <code>Title</code>, <code>Body</code>, and any <code>Similar issues</code>. <code>--json</code> returns the preview object.</p>
+<h3 id="jji-create-issue-job_id"><code>jji create-issue JOB_ID</code></h3>
+<p>Creates a GitHub issue or Jira bug from a stored failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+<tr>
+<td><code>--test</code>, <code>-t</code></td>
+<td>string</td>
+<td>required</td>
+<td>Fully qualified test name.</td>
+</tr>
+<tr>
+<td><code>--type</code></td>
+<td>string</td>
+<td>required</td>
+<td>Target tracker. Allowed values: <code>github</code>, <code>jira</code>.</td>
+</tr>
+<tr>
+<td><code>--title</code></td>
+<td>string</td>
+<td>required</td>
+<td>Final issue title.</td>
+</tr>
+<tr>
+<td><code>--body</code></td>
+<td>string</td>
+<td>required</td>
+<td>Final issue body.</td>
+</tr>
+<tr>
+<td><code>--child-job</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Optional child job name.</td>
+</tr>
+<tr>
+<td><code>--child-build</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>Optional child build number.</td>
+</tr>
+<tr>
+<td><code>--github-token</code></td>
+<td>string</td>
+<td>profile <code>github_token</code>, else unset</td>
+<td>GitHub token for GitHub issue creation.</td>
+</tr>
+<tr>
+<td><code>--github-repo-url</code></td>
+<td>string</td>
+<td>profile <code>github_repo_url</code>, else unset</td>
+<td>GitHub repository URL override.</td>
+</tr>
+<tr>
+<td><code>--jira-token</code></td>
+<td>string</td>
+<td>profile <code>jira_token</code>, else unset</td>
+<td>Jira token for Jira bug creation.</td>
+</tr>
+<tr>
+<td><code>--jira-email</code></td>
+<td>string</td>
+<td>profile <code>jira_email</code>, else unset</td>
+<td>Jira Cloud email for Jira bug creation.</td>
+</tr>
+<tr>
+<td><code>--jira-project-key</code></td>
+<td>string</td>
+<td>profile <code>jira_project_key</code>, else unset</td>
+<td>Jira project key override.</td>
+</tr>
+<tr>
+<td><code>--jira-security-level</code></td>
+<td>string</td>
+<td>profile <code>jira_security_level</code>, else unset</td>
+<td>Jira security level name.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>create-issue<span class="w"> </span>job-1<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--test<span class="w"> </span>tests.TestA.test_one<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--type<span class="w"> </span>jira<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--title<span class="w"> </span><span class="s2">&quot;DNS timeout in ocp-e2e&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--body<span class="w"> </span><span class="s2">&quot;Reproduced in multiple runs.&quot;</span>
+</code></pre></div>
+
+<p>Effect: Default output prints the created issue key or number, the URL, and any <code>comment_id</code> added to the JJI record. <code>--json</code> returns the created issue object.</p>
+<h3 id="jji-validate-token-githubjira"><code>jji validate-token {github|jira}</code></h3>
+<p>Validates a tracker token.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>{github\|jira}</code></td>
+<td>string</td>
+<td>required</td>
+<td>Token type. Allowed values: <code>github</code>, <code>jira</code>.</td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>string</td>
+<td>interactive prompt</td>
+<td>Token value to validate. Input is hidden when prompted.</td>
+</tr>
+<tr>
+<td><code>--email</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Jira Cloud email. Used only for Jira validation.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>validate-token<span class="w"> </span>jira<span class="w"> </span>--token<span class="w"> </span>jira-token<span class="w"> </span>--email<span class="w"> </span>user@example.com
+</code></pre></div>
+
+<p>Effect: Valid tokens exit with status <code>0</code> and print <code>Valid</code>; invalid tokens exit with status <code>1</code> and print <code>Invalid</code>. <code>--json</code> returns the validation object.</p>
+<h3 id="jji-push-reportportal-job_id-jji-push-rp-job_id"><code>jji push-reportportal JOB_ID</code> / <code>jji push-rp JOB_ID</code></h3>
+<p>Pushes stored classifications into Report Portal. <code>push-rp</code> is a hidden alias.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOB_ID</code></td>
+<td>string</td>
+<td>required</td>
+<td>Stored analysis job id.</td>
+</tr>
+<tr>
+<td><code>--child-job-name</code></td>
+<td>string</td>
+<td>unset</td>
+<td>Optional child job name for pipeline child pushes.</td>
+</tr>
+<tr>
+<td><code>--child-build-number</code></td>
+<td>integer</td>
+<td>unset</td>
+<td>Optional child build number for pipeline child pushes.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>push-rp<span class="w"> </span>job-123
+</code></pre></div>
+
+<p>Effect: Default output prints the pushed count, optional launch id, unmatched tests, and any errors. <code>--json</code> returns the raw response object.</p>
+<h2 id="auth-and-admin-commands">Auth and Admin Commands</h2>
+<blockquote>
+<p><strong>Note:</strong> <code>jji auth login</code> validates credentials only. It does not persist authentication between CLI invocations. For later commands, use the shared <code>--api-key</code>, <code>JJI_API_KEY</code>, or profile <code>api_key</code>.</p>
+<p><strong>Warning:</strong> <code>jji admin users create</code>, <code>jji admin users rotate-key</code>, and <code>jji admin users change-role USER admin</code> may print API keys only once.</p>
+</blockquote>
+<h3 id="jji-auth-login"><code>jji auth login</code></h3>
+<p>Validates admin credentials.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--username</code>, <code>-u</code></td>
+<td>string</td>
+<td>required</td>
+<td>Admin username.</td>
+</tr>
+<tr>
+<td><code>--api-key</code>, <code>-k</code></td>
+<td>string</td>
+<td>required</td>
+<td>Admin API key to validate.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>auth<span class="w"> </span>login<span class="w"> </span>--username<span class="w"> </span>admin<span class="w"> </span>--api-key<span class="w"> </span>jji_admin_key
+</code></pre></div>
+
+<p>Effect: Default output prints <code>username</code>, <code>role</code>, and <code>admin</code> status. <code>--json</code> returns the auth object.</p>
+<h3 id="jji-auth-logout"><code>jji auth logout</code></h3>
+<p>Sends the logout request.</p>
+<p>Parameters/options: shared global options only.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>auth<span class="w"> </span><span class="nb">logout</span><span class="w"> </span>--json
+</code></pre></div>
+
+<p>Effect: Sends the logout request. Use <code>--json</code> to inspect returned fields.</p>
+<h3 id="jji-auth-whoami"><code>jji auth whoami</code></h3>
+<p>Shows current authenticated user info.</p>
+<p>Parameters/options: shared global options only.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>auth<span class="w"> </span>whoami
+</code></pre></div>
+
+<p>Effect: Default output prints <code>username</code>, <code>role</code>, and <code>is_admin</code>. <code>--json</code> returns the same fields as a JSON object.</p>
+<h3 id="jji-admin-users-list"><code>jji admin users list</code></h3>
+<p>Lists all users.</p>
+<p>Parameters/options: shared global options only.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>admin<span class="w"> </span>users<span class="w"> </span>list
+</code></pre></div>
+
+<p>Effect: Default output prints user rows or <code>No users found.</code> <code>--json</code> returns <code>{users:[...]}</code>.</p>
+<h3 id="jji-admin-users-create-username"><code>jji admin users create USERNAME</code></h3>
+<p>Creates a new admin user.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>USERNAME</code></td>
+<td>string</td>
+<td>required</td>
+<td>Username for the new admin user.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>admin<span class="w"> </span>users<span class="w"> </span>create<span class="w"> </span>newadmin
+</code></pre></div>
+
+<p>Effect: Default output prints the created username and the new API key once. <code>--json</code> returns the same response object.</p>
+<h3 id="jji-admin-users-delete-username"><code>jji admin users delete USERNAME</code></h3>
+<p>Deletes an admin user.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>USERNAME</code></td>
+<td>string</td>
+<td>required</td>
+<td>Username to delete.</td>
+</tr>
+<tr>
+<td><code>--force</code>, <code>-f</code></td>
+<td>flag</td>
+<td><code>false</code></td>
+<td>Skip the confirmation prompt.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>admin<span class="w"> </span>users<span class="w"> </span>delete<span class="w"> </span>oldadmin<span class="w"> </span>--force
+</code></pre></div>
+
+<p>Effect: Prompts for confirmation unless <code>--force</code> is set. Default output prints <code>Deleted admin user: &lt;name&gt;</code>; <code>--json</code> returns the API response.</p>
+<h3 id="jji-admin-users-rotate-key-username"><code>jji admin users rotate-key USERNAME</code></h3>
+<p>Rotates an admin user's API key.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>USERNAME</code></td>
+<td>string</td>
+<td>required</td>
+<td>Username whose key should be rotated.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>admin<span class="w"> </span>users<span class="w"> </span>rotate-key<span class="w"> </span>myuser
+</code></pre></div>
+
+<p>Effect: Default output prints the username and the new API key once. <code>--json</code> returns the same response object.</p>
+<h3 id="jji-admin-users-change-role-username-role"><code>jji admin users change-role USERNAME ROLE</code></h3>
+<p>Changes a user's role.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>USERNAME</code></td>
+<td>string</td>
+<td>required</td>
+<td>Username to update.</td>
+</tr>
+<tr>
+<td><code>ROLE</code></td>
+<td>string</td>
+<td>required</td>
+<td>New role. CLI help lists <code>admin</code> and <code>user</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>admin<span class="w"> </span>users<span class="w"> </span>change-role<span class="w"> </span>myuser<span class="w"> </span>admin
+</code></pre></div>
+
+<p>Effect: Default output prints the new role. If the API returns a new key during promotion to <code>admin</code>, the CLI prints it once. <code>--json</code> returns the same response object.</p>
+<h2 id="config-commands">Config Commands</h2>
+<p>Config commands use the local config file only and do not contact the server.</p>
+<h3 id="jji-config-jji-config-show"><code>jji config</code> / <code>jji config show</code></h3>
+<p>Shows the current local config file summary. <code>jji config</code> is the same command as <code>jji config show</code>.</p>
+<p>Parameters/options: none.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>config
+</code></pre></div>
+
+<p>Effect: If the config file exists, the CLI prints the resolved file path, the selected default server, and one summary line per server. If the file is missing, the CLI prints the resolved path and a bootstrap snippet.</p>
+<h3 id="jji-config-completion-shell"><code>jji config completion [SHELL]</code></h3>
+<p>Prints shell-completion setup instructions.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default / source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SHELL</code></td>
+<td>string</td>
+<td><code>zsh</code></td>
+<td>Shell type. Allowed values: <code>bash</code>, <code>zsh</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>config<span class="w"> </span>completion<span class="w"> </span>bash
+</code></pre></div>
+
+<p>Effect: Prints shell setup instructions that call <code>jji --show-completion bash</code> or <code>jji --show-completion zsh</code>. Unsupported shell values exit with status <code>1</code>.</p>
+<h3 id="jji-config-servers"><code>jji config servers</code></h3>
+<p>Lists configured server profiles.</p>
+<p>Parameters/options: shared <code>--json</code> only.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>config<span class="w"> </span>servers
+jji<span class="w"> </span>config<span class="w"> </span>servers<span class="w"> </span>--json
+</code></pre></div>
+
+<p>Effect: Default output prints a table with <code>name</code>, <code>url</code>, <code>username</code>, <code>no_verify_ssl</code>, and a <code>*</code> marker for the default server. <code>--json</code> returns an object keyed by server name with <code>url</code>, <code>username</code>, <code>no_verify_ssl</code>, and <code>default</code>.</p>
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a></li>
+<li><a href="rest-api-reference.html">REST API Reference</a></li>
+<li><a href="quickstart.html">Running Your First Analysis</a></li>
+<li><a href="analyzing-jenkins-jobs.html">Analyzing Jenkins Jobs</a></li>
+<li><a href="managing-admin-users-and-api-keys.html">Managing Admin Users and API Keys</a></li>
+</ul>
+                </div>
+            </article>
+            <nav class="page-nav">
+                
+                <a href="managing-admin-users-and-api-keys.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Managing Admin Users and API Keys</span>
+                </a>
+                
+                
+                <a href="rest-api-reference.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">REST API Reference</span>
+                </a>
+                
+            </nav>
+            
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#global-options">Global Options</a></li>
+<li><a href="#output-modes">Output Modes</a></li>
+<li><a href="#config-file">Config File</a><ul>
+<li><a href="#top-level-sections">Top-Level Sections</a></li>
+<li><a href="#resolution-rules">Resolution Rules</a></li>
+<li><a href="#profile-keys">Profile Keys</a></li>
+</ul>
+</li>
+<li><a href="#command-groups">Command Groups</a></li>
+<li><a href="#core-commands">Core Commands</a><ul>
+<li><a href="#jji-health">jji health</a></li>
+<li><a href="#jji-analyze">jji analyze</a></li>
+<li><a href="#jji-re-analyze-job_id">jji re-analyze JOB_ID</a></li>
+<li><a href="#jji-status-job_id">jji status JOB_ID</a></li>
+</ul>
+</li>
+<li><a href="#results-commands">Results Commands</a><ul>
+<li><a href="#jji-results-list">jji results list</a></li>
+<li><a href="#jji-results-dashboard">jji results dashboard</a></li>
+<li><a href="#jji-results-show-job_id">jji results show JOB_ID</a></li>
+<li><a href="#jji-results-delete-job_id">jji results delete JOB_ID</a></li>
+<li><a href="#jji-results-review-status-job_id">jji results review-status JOB_ID</a></li>
+<li><a href="#jji-results-set-reviewed-job_id">jji results set-reviewed JOB_ID</a></li>
+<li><a href="#jji-results-enrich-comments-job_id">jji results enrich-comments JOB_ID</a></li>
+</ul>
+</li>
+<li><a href="#history-commands">History Commands</a><ul>
+<li><a href="#jji-history-test-test_name">jji history test TEST_NAME</a></li>
+<li><a href="#jji-history-search">jji history search</a></li>
+<li><a href="#jji-history-stats-job_name">jji history stats JOB_NAME</a></li>
+<li><a href="#jji-history-failures">jji history failures</a></li>
+</ul>
+</li>
+<li><a href="#classification-commands">Classification Commands</a><ul>
+<li><a href="#jji-classify-test_name">jji classify TEST_NAME</a></li>
+<li><a href="#jji-classifications-list">jji classifications list</a></li>
+<li><a href="#jji-override-classification-job_id">jji override-classification JOB_ID</a></li>
+</ul>
+</li>
+<li><a href="#comment-commands">Comment Commands</a><ul>
+<li><a href="#jji-comments-list-job_id">jji comments list JOB_ID</a></li>
+<li><a href="#jji-comments-add-job_id">jji comments add JOB_ID</a></li>
+<li><a href="#jji-comments-delete-job_id-comment_id">jji comments delete JOB_ID COMMENT_ID</a></li>
+</ul>
+</li>
+<li><a href="#tracker-and-automation-commands">Tracker and Automation Commands</a><ul>
+<li><a href="#jji-capabilities">jji capabilities</a></li>
+<li><a href="#jji-jira-projects">jji jira-projects</a></li>
+<li><a href="#jji-jira-security-levels-project_key">jji jira-security-levels PROJECT_KEY</a></li>
+<li><a href="#jji-ai-configs">jji ai-configs</a></li>
+<li><a href="#jji-preview-issue-job_id">jji preview-issue JOB_ID</a></li>
+<li><a href="#jji-create-issue-job_id">jji create-issue JOB_ID</a></li>
+<li><a href="#jji-validate-token-githubjira">jji validate-token {github|jira}</a></li>
+<li><a href="#jji-push-reportportal-job_id-jji-push-rp-job_id">jji push-reportportal JOB_ID / jji push-rp JOB_ID</a></li>
+</ul>
+</li>
+<li><a href="#auth-and-admin-commands">Auth and Admin Commands</a><ul>
+<li><a href="#jji-auth-login">jji auth login</a></li>
+<li><a href="#jji-auth-logout">jji auth logout</a></li>
+<li><a href="#jji-auth-whoami">jji auth whoami</a></li>
+<li><a href="#jji-admin-users-list">jji admin users list</a></li>
+<li><a href="#jji-admin-users-create-username">jji admin users create USERNAME</a></li>
+<li><a href="#jji-admin-users-delete-username">jji admin users delete USERNAME</a></li>
+<li><a href="#jji-admin-users-rotate-key-username">jji admin users rotate-key USERNAME</a></li>
+<li><a href="#jji-admin-users-change-role-username-role">jji admin users change-role USERNAME ROLE</a></li>
+</ul>
+</li>
+<li><a href="#config-commands">Config Commands</a><ul>
+<li><a href="#jji-config-jji-config-show">jji config / jji config show</a></li>
+<li><a href="#jji-config-completion-shell">jji config completion [SHELL]</a></li>
+<li><a href="#jji-config-servers">jji config servers</a></li>
+</ul>
+</li>
+<li><a href="#related-pages">Related Pages</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+            
+
+        </main>
+
+        <footer class="page-footer">
+            
+            <span class="footer-version">Generated from version 3.0.0</span>
+            <span class="footer-sep">&middot;</span>
+            
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>

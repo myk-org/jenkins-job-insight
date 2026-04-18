@@ -1,0 +1,3615 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REST API Reference - jenkins-job-insight</title>
+    <meta name="description" content="Turn Jenkins failures into actionable analysis, team review, and ready-to-file bugs.">
+    <link rel="stylesheet" href="assets/style.css">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">jenkins-job-insight</a>
+            <p class="sidebar-tagline">Turn Jenkins failures into actionable analysis, team review, and ready-to-file bugs.</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+            
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+                    
+                    <li>
+                        <a href="quickstart.html"
+                           class="nav-link">
+                            Running Your First Analysis
+                        </a>
+                    </li>
+                    
+                </ul>
+            </div>
+            
+            <div class="nav-group">
+                <h3 class="nav-group-title">User Guides</h3>
+                <ul class="nav-group-pages">
+                    
+                    <li>
+                        <a href="analyzing-jenkins-jobs.html"
+                           class="nav-link">
+                            Analyzing Jenkins Jobs
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="analyzing-junit-xml-and-raw-failures.html"
+                           class="nav-link">
+                            Analyzing JUnit XML and Raw Failures
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="monitoring-and-rerunning-analyses.html"
+                           class="nav-link">
+                            Monitoring and Re-Running Analyses
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="reviewing-commenting-and-reclassifying-failures.html"
+                           class="nav-link">
+                            Reviewing, Commenting, and Reclassifying Failures
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="managing-your-profile-and-personal-tokens.html"
+                           class="nav-link">
+                            Managing Your Profile and Personal Tokens
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="tracking-failure-history.html"
+                           class="nav-link">
+                            Tracking Failure History
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="creating-github-issues-and-jira-bugs.html"
+                           class="nav-link">
+                            Creating GitHub Issues and Jira Bugs
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="improving-analysis-with-repository-context.html"
+                           class="nav-link">
+                            Improving Analysis with Repository Context
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="adding-peer-review-with-multiple-ai-models.html"
+                           class="nav-link">
+                            Adding Peer Review with Multiple AI Models
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="pushing-classifications-to-report-portal.html"
+                           class="nav-link">
+                            Pushing Classifications to Report Portal
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="managing-admin-users-and-api-keys.html"
+                           class="nav-link">
+                            Managing Admin Users and API Keys
+                        </a>
+                    </li>
+                    
+                </ul>
+            </div>
+            
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+                    
+                    <li>
+                        <a href="cli-command-reference.html"
+                           class="nav-link">
+                            CLI Command Reference
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="rest-api-reference.html"
+                           class="nav-link active" aria-current="page">
+                            REST API Reference
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="configuration-and-environment-reference.html"
+                           class="nav-link">
+                            Configuration and Environment Reference
+                        </a>
+                    </li>
+                    
+                </ul>
+            </div>
+            
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">jenkins-job-insight</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+                
+                <a href="https://github.com/myk-org/jenkins-job-insight.git" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/myk-org/jenkins-job-insight.git">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
+                </a>
+                
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="rest-api-reference">REST API Reference</h1>
+<blockquote>
+<p><strong>Note:</strong> <code>server default</code> in request tables means the field inherits the running server configuration when omitted. See <a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a> for the exact defaults and feature flags.</p>
+<p><strong>Tip:</strong> CLI wrappers for these endpoints are documented in <a href="cli-command-reference.html">CLI Command Reference</a>.</p>
+</blockquote>
+<h2 id="conventions">Conventions</h2>
+<h3 id="authentication-inputs">Authentication Inputs</h3>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Authorization</code></td>
+<td><code>Bearer &lt;token&gt;</code> header</td>
+<td>none</td>
+<td>Admin bootstrap key or admin user API key.</td>
+</tr>
+<tr>
+<td><code>jji_session</code></td>
+<td>cookie</td>
+<td>none</td>
+<td>Admin session cookie set by <code>POST /api/auth/login</code>.</td>
+</tr>
+<tr>
+<td><code>jji_username</code></td>
+<td>cookie</td>
+<td>none</td>
+<td>Username context used for token storage, comments, reviews, and issue attribution.</td>
+</tr>
+</tbody>
+</table>
+<p>Most read and analysis endpoints are accessible without authentication. Admin-only endpoints are under <code>/api/admin/*</code> and <code>DELETE /results/{job_id}</code>.</p>
+<h3 id="common-status-codes">Common Status Codes</h3>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code></td>
+<td>Success</td>
+<td>Some integration endpoints also use <code>200</code> for partial/soft failures and put details in the JSON body.</td>
+</tr>
+<tr>
+<td><code>201</code></td>
+<td>Created</td>
+<td>Used for comments, classifications, and issue creation.</td>
+</tr>
+<tr>
+<td><code>202</code></td>
+<td>Accepted / in progress</td>
+<td>Returned when a job is queued or when a referenced analysis is still pending, waiting, or running.</td>
+</tr>
+<tr>
+<td><code>400</code></td>
+<td>Invalid request</td>
+<td>Used for invalid JSON, missing required fields in object-parsed endpoints, or invalid integration/config state.</td>
+</tr>
+<tr>
+<td><code>401</code></td>
+<td>Authentication failed</td>
+<td>Used for invalid tracker credentials or missing username on user-token endpoints.</td>
+</tr>
+<tr>
+<td><code>403</code></td>
+<td>Forbidden</td>
+<td>Used for admin-only or disabled feature endpoints.</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>Not found</td>
+<td>Missing job, comment, user, or admin account.</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>Conflict</td>
+<td>Used when an endpoint targets a stored analysis that finished with <code>status="failed"</code>.</td>
+</tr>
+<tr>
+<td><code>422</code></td>
+<td>Validation failed</td>
+<td>FastAPI/Pydantic body or query validation error.</td>
+</tr>
+<tr>
+<td><code>502</code></td>
+<td>Upstream tracker failure</td>
+<td>GitHub or Jira API error/unreachable response during issue creation.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="child-failure-targeting">Child Failure Targeting</h3>
+<p>Many failure-targeting request bodies accept <code>child_job_name</code> and <code>child_build_number</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>child_job_name</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Child pipeline job name. Empty string targets top-level failures.</td>
+</tr>
+<tr>
+<td><code>child_build_number</code></td>
+<td><code>integer &gt;= 0</code></td>
+<td><code>0</code></td>
+<td>Child build number. <code>0</code> means “no specific build” and works as a wildcard for lookup-oriented endpoints.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Note:</strong> <code>PUT /results/{job_id}/override-classification</code> is stricter than the shared validator: when <code>child_job_name</code> is set, it requires a non-zero <code>child_build_number</code>.</p>
+</blockquote>
+<h3 id="progress-phases">Progress Phases</h3>
+<p><code>GET /results/{job_id}</code> may expose <code>result.progress_phase</code> and <code>result.progress_log</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>waiting_for_jenkins</code></td>
+<td>Waiting for the Jenkins build to finish before analysis starts.</td>
+</tr>
+<tr>
+<td><code>analyzing</code></td>
+<td>AI analysis is running.</td>
+</tr>
+<tr>
+<td><code>enriching_jira</code></td>
+<td>Jira post-processing is running for <code>PRODUCT BUG</code> results.</td>
+</tr>
+<tr>
+<td><code>saving</code></td>
+<td>Final result persistence is running.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sensitive-stored-request-fields">Sensitive Stored Request Fields</h3>
+<p>Public result responses strip secret values from <code>result.request_params</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Stripped key</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jenkins_password</code></td>
+</tr>
+<tr>
+<td><code>jenkins_user</code></td>
+</tr>
+<tr>
+<td><code>jira_api_token</code></td>
+</tr>
+<tr>
+<td><code>jira_pat</code></td>
+</tr>
+<tr>
+<td><code>jira_email</code></td>
+</tr>
+<tr>
+<td><code>jira_token</code></td>
+</tr>
+<tr>
+<td><code>github_token</code></td>
+</tr>
+<tr>
+<td><code>reportportal_api_token</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="shared-schemas">Shared Schemas</h2>
+<h3 id="aiconfigentry"><code>AiConfigEntry</code></h3>
+<p>One peer-review AI configuration.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ai_provider</code></td>
+<td><code>claude \| gemini \| cursor</code></td>
+<td>required</td>
+<td>Peer AI provider.</td>
+</tr>
+<tr>
+<td><code>ai_model</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Peer AI model identifier. Blank values are rejected.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: one entry in <code>peer_ai_configs</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gemini&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gemini-2.5-pro&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="additionalrepo"><code>AdditionalRepo</code></h3>
+<p>Additional repository cloned into the analysis workspace.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Directory name used for the clone. Must be non-blank, must not contain <code>/</code>, <code>\</code>, <code>..</code>, or start with <code>.</code>, and must not use reserved names.</td>
+</tr>
+<tr>
+<td><code>url</code></td>
+<td><code>string (URL)</code></td>
+<td>required</td>
+<td>Repository URL.</td>
+</tr>
+<tr>
+<td><code>ref</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Branch or tag to check out. Empty string uses the remote default branch.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: adds extra repository context for AI analysis.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;product-repo&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/acme/product.git&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;main&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="testfailure"><code>TestFailure</code></h3>
+<p>Raw failure input for direct analysis.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_name</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Fully qualified test name.</td>
+</tr>
+<tr>
+<td><code>error_message</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Failure message.</td>
+</tr>
+<tr>
+<td><code>stack_trace</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Full stack trace.</td>
+</tr>
+<tr>
+<td><code>duration</code></td>
+<td><code>number</code></td>
+<td><code>0.0</code></td>
+<td>Test duration in seconds.</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>string</code></td>
+<td><code>"FAILED"</code></td>
+<td>Original test status label.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: one input failure for <code>POST /analyze-failures</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;test_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tests.api.test_login.test_admin_login&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;error_message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;AssertionError: expected 200 got 500&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;stack_trace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Traceback...&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;duration&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.24</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;FAILED&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="baseanalysisrequest"><code>BaseAnalysisRequest</code></h3>
+<p>Fields shared by Jenkins-backed and direct-failure analysis.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tests_repo_url</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Tests repository URL override. A <code>:ref</code> suffix is parsed and later exposed as <code>tests_repo_ref</code> in stored <code>request_params</code>.</td>
+</tr>
+<tr>
+<td><code>ai_provider</code></td>
+<td><code>claude \| gemini \| cursor \| null</code></td>
+<td><code>null</code></td>
+<td>Main AI provider override.</td>
+</tr>
+<tr>
+<td><code>ai_model</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Main AI model override.</td>
+</tr>
+<tr>
+<td><code>enable_jira</code></td>
+<td><code>boolean \| null</code></td>
+<td><code>null</code></td>
+<td>Enable Jira bug search during analysis.</td>
+</tr>
+<tr>
+<td><code>ai_cli_timeout</code></td>
+<td><code>integer &gt; 0 \| null</code></td>
+<td><code>null</code></td>
+<td>AI CLI timeout in minutes.</td>
+</tr>
+<tr>
+<td><code>jira_url</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Jira base URL override.</td>
+</tr>
+<tr>
+<td><code>jira_email</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Jira Cloud email override.</td>
+</tr>
+<tr>
+<td><code>jira_api_token</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Jira Cloud API token override.</td>
+</tr>
+<tr>
+<td><code>jira_pat</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Jira Server/Data Center PAT override.</td>
+</tr>
+<tr>
+<td><code>jira_project_key</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Jira project key override.</td>
+</tr>
+<tr>
+<td><code>jira_ssl_verify</code></td>
+<td><code>boolean \| null</code></td>
+<td><code>null</code></td>
+<td>Jira SSL verification override.</td>
+</tr>
+<tr>
+<td><code>jira_max_results</code></td>
+<td><code>integer &gt; 0 \| null</code></td>
+<td><code>null</code></td>
+<td>Maximum Jira search matches per failure.</td>
+</tr>
+<tr>
+<td><code>raw_prompt</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Extra prompt text appended to the analysis prompt.</td>
+</tr>
+<tr>
+<td><code>github_token</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>GitHub token override for private-repo enrichment.</td>
+</tr>
+<tr>
+<td><code>peer_ai_configs</code></td>
+<td><code>array&lt;AiConfigEntry&gt; \| null</code></td>
+<td><code>null</code></td>
+<td>Peer-review configs. Omit to inherit the server setting; send <code>[]</code> to disable peer review for this request.</td>
+</tr>
+<tr>
+<td><code>peer_analysis_max_rounds</code></td>
+<td><code>integer 1-10</code></td>
+<td><code>server default (schema default: 3)</code></td>
+<td>Maximum peer debate rounds.</td>
+</tr>
+<tr>
+<td><code>additional_repos</code></td>
+<td><code>array&lt;AdditionalRepo&gt; \| null</code></td>
+<td><code>null</code></td>
+<td>Additional repositories for analysis context. Omit to inherit the server setting; send <code>[]</code> to disable.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: baseline analysis configuration persisted into <code>result.request_params</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;claude&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sonnet&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;tests_repo_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/acme/tests.git:main&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;peer_ai_configs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gemini&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gemini-2.5-pro&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;additional_repos&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;product-repo&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/acme/product.git&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;main&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="analyzerequest"><code>AnalyzeRequest</code></h3>
+<p>Jenkins-backed analysis request. Includes all <code>BaseAnalysisRequest</code> fields plus the fields below.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_name</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Jenkins job name. Folder paths are allowed.</td>
+</tr>
+<tr>
+<td><code>build_number</code></td>
+<td><code>integer</code></td>
+<td>required</td>
+<td>Jenkins build number.</td>
+</tr>
+<tr>
+<td><code>wait_for_completion</code></td>
+<td><code>boolean</code></td>
+<td><code>server default (schema default: true)</code></td>
+<td>Wait for Jenkins completion before analysis.</td>
+</tr>
+<tr>
+<td><code>poll_interval_minutes</code></td>
+<td><code>integer &gt; 0</code></td>
+<td><code>server default (schema default: 2)</code></td>
+<td>Jenkins polling interval while waiting.</td>
+</tr>
+<tr>
+<td><code>max_wait_minutes</code></td>
+<td><code>integer &gt;= 0</code></td>
+<td><code>server default (schema default: 0)</code></td>
+<td>Maximum wait time. <code>0</code> means no limit.</td>
+</tr>
+<tr>
+<td><code>jenkins_url</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Jenkins base URL override.</td>
+</tr>
+<tr>
+<td><code>jenkins_user</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Jenkins username override.</td>
+</tr>
+<tr>
+<td><code>jenkins_password</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Jenkins password or API token override.</td>
+</tr>
+<tr>
+<td><code>jenkins_ssl_verify</code></td>
+<td><code>boolean \| null</code></td>
+<td><code>null</code></td>
+<td>Jenkins SSL verification override.</td>
+</tr>
+<tr>
+<td><code>jenkins_artifacts_max_size_mb</code></td>
+<td><code>integer &gt; 0 \| null</code></td>
+<td><code>null</code></td>
+<td>Artifact download size cap in MB.</td>
+</tr>
+<tr>
+<td><code>get_job_artifacts</code></td>
+<td><code>boolean \| null</code></td>
+<td><code>null</code></td>
+<td>Download build artifacts for AI context.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: request body for <code>POST /analyze</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;job_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;folder/job-name&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;build_number&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;wait_for_completion&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;poll_interval_minutes&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;tests_repo_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/acme/tests.git:main&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;claude&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sonnet&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="analyzefailuresrequest"><code>AnalyzeFailuresRequest</code></h3>
+<p>Direct failure-analysis request. Includes all <code>BaseAnalysisRequest</code> fields plus the fields below.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>failures</code></td>
+<td><code>array&lt;TestFailure&gt; \| null</code></td>
+<td><code>null</code></td>
+<td>Raw failures to analyze.</td>
+</tr>
+<tr>
+<td><code>raw_xml</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Raw JUnit XML. Maximum length: <code>50000000</code> characters.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: exactly one of <code>failures</code> or <code>raw_xml</code> must be provided.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;failures&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;test_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tests.api.test_login.test_admin_login&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;error_message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;AssertionError: expected 200 got 500&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;stack_trace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Traceback...&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;claude&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sonnet&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="previewissuerequest"><code>PreviewIssueRequest</code></h3>
+<p>Preview body for GitHub or Jira issue content.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_name</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Failure test name to preview.</td>
+</tr>
+<tr>
+<td><code>child_job_name</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Child pipeline job name.</td>
+</tr>
+<tr>
+<td><code>child_build_number</code></td>
+<td><code>integer &gt;= 0</code></td>
+<td><code>0</code></td>
+<td>Child build number.</td>
+</tr>
+<tr>
+<td><code>include_links</code></td>
+<td><code>boolean</code></td>
+<td><code>false</code></td>
+<td>Include report and Jenkins links when <code>PUBLIC_BASE_URL</code> is configured.</td>
+</tr>
+<tr>
+<td><code>ai_provider</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Issue-content generation provider override. Empty string uses the current server default.</td>
+</tr>
+<tr>
+<td><code>ai_model</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Issue-content generation model override. Empty string uses the current server default.</td>
+</tr>
+<tr>
+<td><code>github_token</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>GitHub token used for duplicate search.</td>
+</tr>
+<tr>
+<td><code>jira_token</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira token used for duplicate search.</td>
+</tr>
+<tr>
+<td><code>jira_email</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira Cloud email paired with <code>jira_token</code>.</td>
+</tr>
+<tr>
+<td><code>jira_project_key</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira project override for duplicate search.</td>
+</tr>
+<tr>
+<td><code>jira_security_level</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira security level name. Not used by preview generation.</td>
+</tr>
+<tr>
+<td><code>github_repo_url</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>GitHub repository override for duplicate search.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: selects the target failure and optional tracker credentials used during preview.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;test_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tests.api.test_login.test_admin_login&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;include_links&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;github_repo_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/acme/tests&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;github_token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ghp_example&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="createissuerequest"><code>CreateIssueRequest</code></h3>
+<p>Create body for GitHub or Jira issue creation.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_name</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Failure test name to file.</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Final issue title. Blank values are rejected.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Final issue body text.</td>
+</tr>
+<tr>
+<td><code>child_job_name</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Child pipeline job name.</td>
+</tr>
+<tr>
+<td><code>child_build_number</code></td>
+<td><code>integer &gt;= 0</code></td>
+<td><code>0</code></td>
+<td>Child build number.</td>
+</tr>
+<tr>
+<td><code>github_token</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>GitHub token used for issue creation.</td>
+</tr>
+<tr>
+<td><code>jira_token</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira token used for bug creation.</td>
+</tr>
+<tr>
+<td><code>jira_email</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira Cloud email paired with <code>jira_token</code>.</td>
+</tr>
+<tr>
+<td><code>jira_project_key</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira project override.</td>
+</tr>
+<tr>
+<td><code>jira_security_level</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira security level name.</td>
+</tr>
+<tr>
+<td><code>github_repo_url</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>GitHub repository override.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: final payload for <code>POST /results/{job_id}/create-github-issue</code> and <code>POST /results/{job_id}/create-jira-bug</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;test_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tests.api.test_login.test_admin_login&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Admin login fails with HTTP 500&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;## Failure\n`tests.api.test_login.test_admin_login`\n\n## Observed error\nAssertionError: expected 200 got 500&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;github_repo_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/acme/tests&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;github_token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ghp_example&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="analysisdetail"><code>AnalysisDetail</code></h3>
+<p>Structured AI output inside each failure result.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>classification</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td><code>CODE ISSUE</code>, <code>PRODUCT BUG</code>, or <code>INFRASTRUCTURE</code>.</td>
+</tr>
+<tr>
+<td><code>affected_tests</code></td>
+<td><code>array&lt;string&gt;</code></td>
+<td><code>[]</code></td>
+<td>Related test names.</td>
+</tr>
+<tr>
+<td><code>details</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Main analysis text.</td>
+</tr>
+<tr>
+<td><code>artifacts_evidence</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Verbatim artifact evidence.</td>
+</tr>
+<tr>
+<td><code>code_fix</code></td>
+<td><code>object \| false \| null</code></td>
+<td><code>false</code></td>
+<td>Present for <code>CODE ISSUE</code>. Shape: <code>{file, line, change}</code>.</td>
+</tr>
+<tr>
+<td><code>product_bug_report</code></td>
+<td><code>object \| false \| null</code></td>
+<td><code>false</code></td>
+<td>Present for <code>PRODUCT BUG</code>. Shape: <code>{title, severity, component, description, evidence, jira_search_keywords, jira_matches}</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Nested object shapes:</p>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>Fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>code_fix</code></td>
+<td><code>file</code>, <code>line</code>, <code>change</code></td>
+</tr>
+<tr>
+<td><code>product_bug_report</code></td>
+<td><code>title</code>, <code>severity</code>, <code>component</code>, <code>description</code>, <code>evidence</code>, <code>jira_search_keywords[]</code>, <code>jira_matches[]</code></td>
+</tr>
+<tr>
+<td><code>jira_matches[]</code> item</td>
+<td><code>key</code>, <code>summary</code>, <code>status</code>, <code>priority</code>, <code>url</code>, <code>score</code></td>
+</tr>
+</tbody>
+</table>
+<p>Effect: the core classification and evidence payload returned by analysis endpoints.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;classification&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CODE ISSUE&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;affected_tests&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;tests.api.test_login.test_admin_login&quot;</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;details&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The failure is caused by a missing null-check in the auth handler.&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;artifacts_evidence&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ERROR auth/login.py:42 NoneType has no attribute &#39;id&#39;&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;code_fix&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;auth/login.py&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;line&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;42&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;change&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Guard the user lookup before reading user.id.&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="peerdebate"><code>PeerDebate</code></h3>
+<p>Optional peer-review trail attached to a failure result.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>consensus_reached</code></td>
+<td><code>boolean</code></td>
+<td>required</td>
+<td>Whether the debate converged.</td>
+</tr>
+<tr>
+<td><code>rounds_used</code></td>
+<td><code>integer</code></td>
+<td>required</td>
+<td>Number of rounds actually used.</td>
+</tr>
+<tr>
+<td><code>max_rounds</code></td>
+<td><code>integer</code></td>
+<td>required</td>
+<td>Maximum rounds allowed for the debate.</td>
+</tr>
+<tr>
+<td><code>ai_configs</code></td>
+<td><code>array&lt;AiConfigEntry&gt;</code></td>
+<td>required</td>
+<td>Peer configs that participated.</td>
+</tr>
+<tr>
+<td><code>rounds</code></td>
+<td><code>array&lt;object&gt;</code></td>
+<td>required</td>
+<td>Debate contributions. Each item has <code>round</code>, <code>ai_provider</code>, <code>ai_model</code>, <code>role</code>, <code>classification</code>, <code>details</code>, and <code>agrees_with_orchestrator</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: present in <code>FailureAnalysis.peer_debate</code> only when peer analysis was used.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;consensus_reached&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;rounds_used&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;max_rounds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_configs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gemini&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gemini-2.5-pro&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;rounds&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;round&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;claude&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sonnet&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;orchestrator&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;classification&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CODE ISSUE&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;details&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Primary analysis.&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;agrees_with_orchestrator&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;round&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gemini&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gemini-2.5-pro&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;peer&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;classification&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CODE ISSUE&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;details&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Agrees with the null-check diagnosis.&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;agrees_with_orchestrator&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="failureanalysis"><code>FailureAnalysis</code></h3>
+<p>One analyzed failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_name</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Failed test name.</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Failure message or exception text.</td>
+</tr>
+<tr>
+<td><code>analysis</code></td>
+<td><code>AnalysisDetail</code></td>
+<td>required</td>
+<td>Structured AI output.</td>
+</tr>
+<tr>
+<td><code>error_signature</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>SHA-256 deduplication signature.</td>
+</tr>
+<tr>
+<td><code>peer_debate</code></td>
+<td><code>PeerDebate \| null</code></td>
+<td><code>null</code></td>
+<td>Peer-review trail when enabled.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: repeated in <code>AnalysisResult.failures</code>, <code>ChildJobAnalysis.failures</code>, and <code>FailureAnalysisResult.failures</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;test_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tests.api.test_login.test_admin_login&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;AssertionError: expected 200 got 500&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;analysis&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;classification&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CODE ISSUE&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;details&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The auth handler dereferences a null user.&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;error_signature&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;4f9f8a0f...&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="childjobanalysis"><code>ChildJobAnalysis</code></h3>
+<p>Recursive pipeline child-job result.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_name</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Child job name.</td>
+</tr>
+<tr>
+<td><code>build_number</code></td>
+<td><code>integer</code></td>
+<td>required</td>
+<td>Child build number.</td>
+</tr>
+<tr>
+<td><code>jenkins_url</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Child build URL.</td>
+</tr>
+<tr>
+<td><code>summary</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Child summary text.</td>
+</tr>
+<tr>
+<td><code>failures</code></td>
+<td><code>array&lt;FailureAnalysis&gt;</code></td>
+<td><code>[]</code></td>
+<td>Failures for this child.</td>
+</tr>
+<tr>
+<td><code>failed_children</code></td>
+<td><code>array&lt;ChildJobAnalysis&gt;</code></td>
+<td><code>[]</code></td>
+<td>Nested failed child jobs.</td>
+</tr>
+<tr>
+<td><code>note</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Extra note such as recursion depth limits.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: appears inside <code>AnalysisResult.child_job_analyses</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;job_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pipeline/component-tests&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;build_number&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;jenkins_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://jenkins.example.com/job/pipeline/job/component-tests/42/&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;summary&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1 PRODUCT BUG in child job&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;failures&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;test_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tests.component.test_ui.test_checkout&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;TimeoutError&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;analysis&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;classification&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PRODUCT BUG&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;details&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Checkout API never responds.&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;error_signature&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;a1b2c3...&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;failed_children&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="analysisresult"><code>AnalysisResult</code></h3>
+<p>Completed Jenkins-backed analysis result.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>job_name</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jenkins job name.</td>
+</tr>
+<tr>
+<td><code>build_number</code></td>
+<td><code>integer</code></td>
+<td><code>0</code></td>
+<td>Jenkins build number.</td>
+</tr>
+<tr>
+<td><code>jenkins_url</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Jenkins build URL.</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>pending \| waiting \| running \| completed \| failed</code></td>
+<td>required</td>
+<td>Analysis state stored in the result body.</td>
+</tr>
+<tr>
+<td><code>summary</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Result summary.</td>
+</tr>
+<tr>
+<td><code>ai_provider</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>AI provider used.</td>
+</tr>
+<tr>
+<td><code>ai_model</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>AI model used.</td>
+</tr>
+<tr>
+<td><code>failures</code></td>
+<td><code>array&lt;FailureAnalysis&gt;</code></td>
+<td><code>[]</code></td>
+<td>Top-level analyzed failures.</td>
+</tr>
+<tr>
+<td><code>child_job_analyses</code></td>
+<td><code>array&lt;ChildJobAnalysis&gt;</code></td>
+<td><code>[]</code></td>
+<td>Recursive child-job analyses.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: returned in <code>ResultEnvelope.result</code> for completed Jenkins-backed analyses.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;job_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;9f5d0a0c-32c0-4f3f-b5c4-3a5c3d35d4d0&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;job_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;folder/job-name&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;build_number&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;jenkins_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://jenkins.example.com/job/folder/job-name/123/&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;completed&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;summary&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1 CODE ISSUE&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;claude&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sonnet&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;failures&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;test_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tests.api.test_login.test_admin_login&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;AssertionError: expected 200 got 500&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;analysis&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;classification&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CODE ISSUE&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;details&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Null-check missing in auth handler.&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;error_signature&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;4f9f8a0f...&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;child_job_analyses&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="failureanalysisresult"><code>FailureAnalysisResult</code></h3>
+<p>Completed direct-failure analysis result.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>completed \| failed</code></td>
+<td>required</td>
+<td>Direct-analysis status.</td>
+</tr>
+<tr>
+<td><code>summary</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Result summary.</td>
+</tr>
+<tr>
+<td><code>ai_provider</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>AI provider used.</td>
+</tr>
+<tr>
+<td><code>ai_model</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>AI model used.</td>
+</tr>
+<tr>
+<td><code>failures</code></td>
+<td><code>array&lt;FailureAnalysis&gt;</code></td>
+<td><code>[]</code></td>
+<td>Analyzed failures.</td>
+</tr>
+<tr>
+<td><code>enriched_xml</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Enriched JUnit XML when <code>raw_xml</code> input was used.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: returned directly by <code>POST /analyze-failures</code> and via <code>GET /results/{job_id}</code> for completed direct analyses.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;job_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;14a2b5d1-3d67-4d4d-92f8-8b2bc0d1a8a0&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;completed&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;summary&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1 CODE ISSUE&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;claude&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sonnet&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;failures&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;test_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tests.api.test_login.test_admin_login&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;AssertionError: expected 200 got 500&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;analysis&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;classification&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CODE ISSUE&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;details&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Null-check missing in auth handler.&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;error_signature&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;4f9f8a0f...&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;enriched_xml&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;testsuite&gt;...&lt;/testsuite&gt;&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="resultenvelope"><code>ResultEnvelope</code></h3>
+<p>Stored result wrapper returned by <code>GET /results/{job_id}</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>jenkins_url</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Stored Jenkins URL or empty string for direct-failure analyses.</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Top-level persisted job status.</td>
+</tr>
+<tr>
+<td><code>result</code></td>
+<td><code>object</code></td>
+<td>required</td>
+<td>Result payload. Completed Jenkins analyses use <code>AnalysisResult</code>; completed direct analyses use <code>FailureAnalysisResult</code>; in-progress and failed rows return partial objects.</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Row creation timestamp.</td>
+</tr>
+<tr>
+<td><code>completed_at</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Completion timestamp when available.</td>
+</tr>
+<tr>
+<td><code>analysis_started_at</code></td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Analysis start timestamp when available.</td>
+</tr>
+<tr>
+<td><code>capabilities</code></td>
+<td><code>object</code></td>
+<td>required</td>
+<td>Same shape as <code>GET /api/capabilities</code>.</td>
+</tr>
+<tr>
+<td><code>base_url</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td><code>PUBLIC_BASE_URL</code> when configured, otherwise <code>""</code>.</td>
+</tr>
+<tr>
+<td><code>result_url</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Absolute URL when <code>base_url</code> is set, otherwise a relative <code>/results/{job_id}</code> path.</td>
+</tr>
+</tbody>
+</table>
+<p>Additional <code>result</code> fields seen in stored rows:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>request_params</code></td>
+<td><code>object</code></td>
+<td>Effective request settings used for the analysis. Mirrors the applicable request schema plus derived <code>tests_repo_ref</code>; public responses redact secret keys.</td>
+</tr>
+<tr>
+<td><code>progress_phase</code></td>
+<td><code>string</code></td>
+<td>Current progress phase for in-flight work.</td>
+</tr>
+<tr>
+<td><code>progress_log</code></td>
+<td><code>array&lt;object&gt;</code></td>
+<td>Phase history entries shaped like <code>{phase, timestamp}</code>.</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td><code>string</code></td>
+<td>Failure message for <code>status="failed"</code> rows.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: canonical polling and retrieval response for stored jobs.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;job_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;9f5d0a0c-32c0-4f3f-b5c4-3a5c3d35d4d0&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;jenkins_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://jenkins.example.com/job/folder/job-name/123/&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;completed&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;result&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;job_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;9f5d0a0c-32c0-4f3f-b5c4-3a5c3d35d4d0&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;job_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;folder/job-name&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;build_number&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;completed&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;summary&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1 CODE ISSUE&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;claude&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sonnet&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;failures&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">    </span><span class="nt">&quot;child_job_analyses&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">    </span><span class="nt">&quot;request_params&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;ai_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;claude&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ai_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sonnet&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;tests_repo_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/acme/tests.git&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;tests_repo_ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;peer_ai_configs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">      </span><span class="nt">&quot;additional_repos&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;progress_phase&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;saving&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;progress_log&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;phase&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;analyzing&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1711111111.0</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-04-18 10:20:30&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;completed_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-04-18 10:22:01&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;analysis_started_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-04-18 10:20:31&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;github_issues_enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;jira_issues_enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;server_github_token&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;server_jira_token&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;server_jira_email&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;server_jira_project_key&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PROJ&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;reportportal&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;reportportal_project&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://jji.example.com&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;result_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://jji.example.com/results/9f5d0a0c-32c0-4f3f-b5c4-3a5c3d35d4d0&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="previewissueresponse"><code>PreviewIssueResponse</code></h3>
+<p>Preview response for GitHub and Jira issue content.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>title</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Generated title.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Generated markdown/body text.</td>
+</tr>
+<tr>
+<td><code>similar_issues</code></td>
+<td><code>array&lt;object&gt;</code></td>
+<td><code>[]</code></td>
+<td>Best-effort duplicate matches. Each item may include <code>number</code>, <code>key</code>, <code>title</code>, <code>url</code>, and <code>status</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: returned by the preview endpoints.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Admin login fails with HTTP 500&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;## Summary\nThe auth handler dereferences a null user.\n&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;similar_issues&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;number&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;key&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Login API returns 500 on missing user&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/acme/tests/issues/42&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;open&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="createissueresponse"><code>CreateIssueResponse</code></h3>
+<p>Issue creation response for GitHub and Jira.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>url</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Created issue URL.</td>
+</tr>
+<tr>
+<td><code>key</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira issue key. Empty for GitHub.</td>
+</tr>
+<tr>
+<td><code>number</code></td>
+<td><code>integer</code></td>
+<td><code>0</code></td>
+<td>GitHub issue number. <code>0</code> for Jira.</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Created issue title.</td>
+</tr>
+<tr>
+<td><code>comment_id</code></td>
+<td><code>integer</code></td>
+<td><code>0</code></td>
+<td>Auto-created comment linking the issue back to the analysis.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: returned by both creation endpoints.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/acme/tests/issues/57&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;key&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;number&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">57</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Admin login fails with HTTP 500&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;comment_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="reportportalpushresult"><code>ReportPortalPushResult</code></h3>
+<p>Report Portal push result.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pushed</code></td>
+<td><code>integer</code></td>
+<td>required</td>
+<td>Number of Report Portal items updated.</td>
+</tr>
+<tr>
+<td><code>unmatched</code></td>
+<td><code>array&lt;string&gt;</code></td>
+<td><code>[]</code></td>
+<td>Report Portal item names that were not matched or could not be mapped.</td>
+</tr>
+<tr>
+<td><code>errors</code></td>
+<td><code>array&lt;string&gt;</code></td>
+<td><code>[]</code></td>
+<td>User-facing integration errors.</td>
+</tr>
+<tr>
+<td><code>launch_id</code></td>
+<td><code>integer \| null</code></td>
+<td><code>null</code></td>
+<td>Matched Report Portal launch ID when found.</td>
+</tr>
+</tbody>
+</table>
+<p>Effect: returned by <code>POST /results/{job_id}/push-reportportal</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;pushed&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;unmatched&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;tests.api.test_misc.test_unmapped&quot;</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">&quot;launch_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1042</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h2 id="analysis-endpoints">Analysis Endpoints</h2>
+<h3 id="post-analyze"><code>POST /analyze</code></h3>
+<p>Queue a Jenkins build for analysis.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>body</code></td>
+<td>body</td>
+<td><code>AnalyzeRequest</code></td>
+<td>required</td>
+<td>Jenkins-backed analysis request.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: queues a background analysis job and returns <code>{status, job_id, message, base_url, result_url}</code>.</p>
+<p>Status codes: <code>202</code> queued; <code>400</code> invalid AI or peer configuration; <code>422</code> request validation failed.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/analyze&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;job_name&quot;: &quot;folder/job-name&quot;,</span>
+<span class="s1">    &quot;build_number&quot;: 123,</span>
+<span class="s1">    &quot;wait_for_completion&quot;: true,</span>
+<span class="s1">    &quot;ai_provider&quot;: &quot;claude&quot;,</span>
+<span class="s1">    &quot;ai_model&quot;: &quot;sonnet&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-analyze-failures"><code>POST /analyze-failures</code></h3>
+<p>Analyze raw failures or raw JUnit XML without Jenkins.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>body</code></td>
+<td>body</td>
+<td><code>AnalyzeFailuresRequest</code></td>
+<td>required</td>
+<td>Direct-failure analysis request.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns a stored <code>FailureAnalysisResult</code>. When <code>raw_xml</code> is supplied, <code>enriched_xml</code> is included in the response.</p>
+<p>Status codes: <code>200</code> result returned; <code>400</code> invalid XML or invalid analysis configuration; <code>422</code> request validation failed.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/analyze-failures&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;failures&quot;: [</span>
+<span class="s1">      {</span>
+<span class="s1">        &quot;test_name&quot;: &quot;tests.api.test_login.test_admin_login&quot;,</span>
+<span class="s1">        &quot;error_message&quot;: &quot;AssertionError: expected 200 got 500&quot;,</span>
+<span class="s1">        &quot;stack_trace&quot;: &quot;Traceback...&quot;</span>
+<span class="s1">      }</span>
+<span class="s1">    ],</span>
+<span class="s1">    &quot;ai_provider&quot;: &quot;claude&quot;,</span>
+<span class="s1">    &quot;ai_model&quot;: &quot;sonnet&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-re-analyzejob_id"><code>POST /re-analyze/{job_id}</code></h3>
+<p>Queue a new Jenkins-backed analysis using a previous job’s stored request parameters, optionally overriding selected analysis fields.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Existing stored result to reconstruct from.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>body</td>
+<td><code>BaseAnalysisRequest</code></td>
+<td>required</td>
+<td>Override fields to apply on top of the stored request parameters.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: reconstructs the original Jenkins request, applies only the fields explicitly present in the body, and queues a new job with a fresh <code>job_id</code>.</p>
+<p>Status codes: <code>202</code> queued; <code>400</code> stored request parameters cannot be reconstructed or original job has no <code>request_params</code>; <code>404</code> source result not found; <code>422</code> validation failed.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/re-analyze/</span><span class="nv">$JOB_ID</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;ai_provider&quot;: &quot;gemini&quot;,</span>
+<span class="s1">    &quot;ai_model&quot;: &quot;gemini-2.5-pro&quot;,</span>
+<span class="s1">    &quot;peer_ai_configs&quot;: []</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h2 id="result-endpoints">Result Endpoints</h2>
+<h3 id="get-resultsjob_id"><code>GET /results/{job_id}</code></h3>
+<p>Get the stored result for an analysis job.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns a <code>ResultEnvelope</code>.</p>
+<p>Status codes: <code>200</code> completed or failed result; <code>202</code> job is still pending, waiting, or running; <code>404</code> job not found.</p>
+<blockquote>
+<p><strong>Note:</strong> Use <code>Accept: application/json</code> for API reads. Browser-style HTML requests are handled by the frontend and can redirect in-progress jobs to <code>/status/{job_id}</code>.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Accept: application/json&quot;</span>
+</code></pre></div>
+
+<h3 id="get-results"><code>GET /results</code></h3>
+<p>List recent analysis jobs.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>limit</code></td>
+<td>query</td>
+<td><code>integer &lt;= 100</code></td>
+<td><code>50</code></td>
+<td>Maximum number of rows to return.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns an array of summary objects shaped like <code>{job_id, jenkins_url, status, created_at}</code>, ordered newest first.</p>
+<p>Status codes: <code>200</code> success; <code>422</code> invalid query value.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results?limit=25&quot;</span>
+</code></pre></div>
+
+<h3 id="get-apidashboard"><code>GET /api/dashboard</code></h3>
+<p>Get dashboard-ready result summaries.</p>
+<p>Parameters: none.</p>
+<p>Return value/effect: returns up to 500 newest rows. Each row always includes <code>job_id</code>, <code>jenkins_url</code>, <code>status</code>, <code>created_at</code>, <code>completed_at</code>, <code>analysis_started_at</code>, <code>reviewed_count</code>, and <code>comment_count</code>. When parsed result data exists, rows also include <code>job_name</code>, <code>build_number</code>, <code>failure_count</code>, optional <code>child_job_count</code>, optional <code>summary</code>, and optional <code>error</code>.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/dashboard&quot;</span>
+</code></pre></div>
+
+<h3 id="delete-resultsjob_id"><code>DELETE /results/{job_id}</code></h3>
+<p>Delete an analysis job and all related stored data.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: admin-only delete. Removes the result row plus comments, failure reviews, failure history, and test classifications for the job.</p>
+<p>Status codes: <code>200</code> deleted; <code>403</code> admin access required; <code>404</code> job not found.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$ADMIN_TOKEN</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<h3 id="get-resultsjob_idcomments"><code>GET /results/{job_id}/comments</code></h3>
+<p>Get all comments and review states for a stored job.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{"comments": [...], "reviews": {...}}</code>.</p>
+<p>Comment item shape:</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>integer</code></td>
+<td>required</td>
+<td>Comment ID.</td>
+</tr>
+<tr>
+<td><code>job_id</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>test_name</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Failure test name.</td>
+</tr>
+<tr>
+<td><code>child_job_name</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Child job scope.</td>
+</tr>
+<tr>
+<td><code>child_build_number</code></td>
+<td><code>integer</code></td>
+<td><code>0</code></td>
+<td>Child build scope.</td>
+</tr>
+<tr>
+<td><code>comment</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Comment text.</td>
+</tr>
+<tr>
+<td><code>error_signature</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Deduplication signature copied from the stored failure when available.</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Username context stored with the comment.</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Comment timestamp.</td>
+</tr>
+</tbody>
+</table>
+<p>Review map value shape:</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>reviewed</code></td>
+<td><code>boolean</code></td>
+<td>required</td>
+<td>Current reviewed state.</td>
+</tr>
+<tr>
+<td><code>username</code></td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Username that last updated the review state.</td>
+</tr>
+<tr>
+<td><code>updated_at</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Last update timestamp.</td>
+</tr>
+</tbody>
+</table>
+<p>Review map keys use <code>test_name</code> for top-level failures and <code>child_job_name#child_build_number::test_name</code> for child failures.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/comments&quot;</span>
+</code></pre></div>
+
+<h3 id="post-resultsjob_idcomments"><code>POST /results/{job_id}/comments</code></h3>
+<p>Add a comment to a failure in a stored result.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>test_name</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Failure test name.</td>
+</tr>
+<tr>
+<td><code>comment</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Comment text.</td>
+</tr>
+<tr>
+<td><code>child_job_name</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Child job scope.</td>
+</tr>
+<tr>
+<td><code>child_build_number</code></td>
+<td>body</td>
+<td><code>integer &gt;= 0</code></td>
+<td><code>0</code></td>
+<td>Child build scope.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: creates a comment row and returns <code>{"id": &lt;comment_id&gt;}</code>. The server looks up <code>error_signature</code> from the stored result and stores the current username when available.</p>
+<p>Status codes: <code>201</code> created; <code>202</code> target job still pending/waiting/running; <code>400</code> invalid child scope; <code>404</code> job or failure not found; <code>409</code> target job failed; <code>422</code> validation failed.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/comments&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;test_name&quot;: &quot;tests.api.test_login.test_admin_login&quot;,</span>
+<span class="s1">    &quot;comment&quot;: &quot;Fails only when the auth fixture runs after cache warm-up.&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="delete-resultsjob_idcommentscomment_id"><code>DELETE /results/{job_id}/comments/{comment_id}</code></h3>
+<p>Delete a comment.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>comment_id</code></td>
+<td>path</td>
+<td><code>integer</code></td>
+<td>required</td>
+<td>Comment identifier.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{"status": "deleted"}</code>. Admins can delete any comment; non-admin users can delete only their own comments.</p>
+<p>Status codes: <code>200</code> deleted; <code>401</code> username required; <code>404</code> comment not found or not owned by the caller.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/comments/12&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span>
+</code></pre></div>
+
+<h3 id="put-resultsjob_idreviewed"><code>PUT /results/{job_id}/reviewed</code></h3>
+<p>Set the reviewed state for a failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>test_name</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Failure test name.</td>
+</tr>
+<tr>
+<td><code>reviewed</code></td>
+<td>body</td>
+<td><code>boolean</code></td>
+<td>required</td>
+<td>New reviewed state.</td>
+</tr>
+<tr>
+<td><code>child_job_name</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Child job scope.</td>
+</tr>
+<tr>
+<td><code>child_build_number</code></td>
+<td>body</td>
+<td><code>integer &gt;= 0</code></td>
+<td><code>0</code></td>
+<td>Child build scope.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{"status": "ok", "reviewed_by": "&lt;username-or-empty&gt;"}</code>.</p>
+<p>Status codes: <code>200</code> updated; <code>202</code> target job still pending/waiting/running; <code>400</code> invalid child scope; <code>404</code> job or failure not found; <code>409</code> target job failed; <code>422</code> validation failed.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/reviewed&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;test_name&quot;: &quot;tests.api.test_login.test_admin_login&quot;,</span>
+<span class="s1">    &quot;reviewed&quot;: true</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="get-resultsjob_idreview-status"><code>GET /results/{job_id}/review-status</code></h3>
+<p>Get review counters for a job.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{total_failures, reviewed_count, comment_count}</code>.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/review-status&quot;</span>
+</code></pre></div>
+
+<h3 id="post-resultsjob_idenrich-comments"><code>POST /results/{job_id}/enrich-comments</code></h3>
+<p>Resolve live GitHub and Jira statuses mentioned in stored comments.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{"enrichments": {...}}</code>, where each key is a comment ID string and each value is an array of objects shaped like <code>{type, key, status}</code>. <code>type</code> is <code>github_pr</code>, <code>github_issue</code>, or <code>jira</code>.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/enrich-comments&quot;</span>
+</code></pre></div>
+
+<h3 id="put-resultsjob_idoverride-classification"><code>PUT /results/{job_id}/override-classification</code></h3>
+<p>Override a stored failure classification.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>test_name</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Representative test in the signature group to override.</td>
+</tr>
+<tr>
+<td><code>classification</code></td>
+<td>body</td>
+<td><code>CODE ISSUE \| PRODUCT BUG \| INFRASTRUCTURE</code></td>
+<td>required</td>
+<td>New classification.</td>
+</tr>
+<tr>
+<td><code>child_job_name</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Child job scope.</td>
+</tr>
+<tr>
+<td><code>child_build_number</code></td>
+<td>body</td>
+<td><code>integer &gt;= 0</code></td>
+<td><code>0</code></td>
+<td>Child build scope. Must be non-zero when <code>child_job_name</code> is set.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{"status": "ok", "classification": "&lt;new value&gt;"}</code>. The override is mirrored into stored history, applied to the matching failure group within the same job, and patched into stored <code>result_json</code> for future reads.</p>
+<p>Status codes: <code>200</code> updated; <code>202</code> target job still pending/waiting/running; <code>400</code> invalid child scope; <code>404</code> job or failure not found; <code>409</code> target job failed; <code>422</code> validation failed.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/override-classification&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;test_name&quot;: &quot;tests.api.test_login.test_admin_login&quot;,</span>
+<span class="s1">    &quot;classification&quot;: &quot;CODE ISSUE&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h2 id="history-endpoints">History Endpoints</h2>
+<h3 id="get-historyfailures"><code>GET /history/failures</code></h3>
+<p>Get paginated failure history.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>search</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Free-text search across <code>test_name</code>, <code>error_message</code>, and <code>job_name</code>.</td>
+</tr>
+<tr>
+<td><code>job_name</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exact top-level job-name filter.</td>
+</tr>
+<tr>
+<td><code>classification</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exact classification filter.</td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td>query</td>
+<td><code>integer &lt;= 200</code></td>
+<td><code>50</code></td>
+<td>Maximum rows to return.</td>
+</tr>
+<tr>
+<td><code>offset</code></td>
+<td>query</td>
+<td><code>integer &gt;= 0</code></td>
+<td><code>0</code></td>
+<td>Pagination offset.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{"failures": [...], "total": &lt;int&gt;}</code>. Each row includes <code>id</code>, <code>job_id</code>, <code>job_name</code>, <code>build_number</code>, <code>test_name</code>, <code>error_message</code>, <code>error_signature</code>, <code>classification</code>, <code>child_job_name</code>, <code>child_build_number</code>, and <code>analyzed_at</code>.</p>
+<p>Status codes: <code>200</code> success; <code>422</code> invalid query value.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/history/failures?job_name=folder/job-name&amp;classification=CODE%20ISSUE&amp;limit=20&quot;</span>
+</code></pre></div>
+
+<h3 id="get-historytesttest_namepath"><code>GET /history/test/{test_name:path}</code></h3>
+<p>Get recent history for one test.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_name</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Full test name. Path form allows embedded slashes.</td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td>query</td>
+<td><code>integer &lt;= 100</code></td>
+<td><code>20</code></td>
+<td>Maximum <code>recent_runs</code> rows to return.</td>
+</tr>
+<tr>
+<td><code>job_name</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exact top-level job-name filter.</td>
+</tr>
+<tr>
+<td><code>exclude_job_id</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exclude one analysis job from the result.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns an object with <code>test_name</code>, <code>total_runs</code>, <code>failures</code>, <code>passes</code>, <code>failure_rate</code>, <code>first_seen</code>, <code>last_seen</code>, <code>last_classification</code>, <code>classifications</code>, <code>recent_runs</code>, <code>comments</code>, <code>consecutive_failures</code>, and <code>note</code>.</p>
+<p>Field notes:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>classifications</code></td>
+<td><code>object</code></td>
+<td>Count map keyed by classification.</td>
+</tr>
+<tr>
+<td><code>recent_runs</code></td>
+<td><code>array&lt;object&gt;</code></td>
+<td>Rows with <code>job_id</code>, <code>job_name</code>, <code>build_number</code>, <code>error_message</code>, <code>error_signature</code>, <code>classification</code>, <code>child_job_name</code>, <code>child_build_number</code>, and <code>analyzed_at</code>.</td>
+</tr>
+<tr>
+<td><code>comments</code></td>
+<td><code>array&lt;object&gt;</code></td>
+<td>Related comments shaped like <code>{comment, username, created_at}</code>.</td>
+</tr>
+<tr>
+<td><code>passes</code></td>
+<td><code>integer \| null</code></td>
+<td><code>null</code> when <code>job_name</code> is omitted, because only failures are stored.</td>
+</tr>
+<tr>
+<td><code>failure_rate</code></td>
+<td><code>number \| null</code></td>
+<td><code>null</code> when <code>job_name</code> is omitted.</td>
+</tr>
+</tbody>
+</table>
+<p>Status codes: <code>200</code> success; <code>422</code> invalid query value.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/history/test/tests.api.test_login.test_admin_login?limit=10&amp;job_name=folder/job-name&quot;</span>
+</code></pre></div>
+
+<h3 id="get-historysearch"><code>GET /history/search</code></h3>
+<p>Find tests sharing an error signature.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>signature</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Error signature hash to search for.</td>
+</tr>
+<tr>
+<td><code>exclude_job_id</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exclude one analysis job from the result.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{signature, total_occurrences, unique_tests, tests, last_classification, comments}</code>. <code>tests</code> items are <code>{test_name, occurrences}</code>. <code>comments</code> items are <code>{comment, username, created_at}</code>.</p>
+<p>Status codes: <code>200</code> success; <code>422</code> missing or invalid query value.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/history/search?signature=4f9f8a0f...&quot;</span>
+</code></pre></div>
+
+<h3 id="get-historystatsjob_namepath"><code>GET /history/stats/{job_name:path}</code></h3>
+<p>Get aggregate statistics for a top-level job.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_name</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Top-level Jenkins job name. Path form allows embedded slashes.</td>
+</tr>
+<tr>
+<td><code>exclude_job_id</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exclude one analysis job from the calculation.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{job_name, total_builds_analyzed, builds_with_failures, overall_failure_rate, most_common_failures, recent_trend}</code>. <code>most_common_failures</code> items are <code>{test_name, count, classification}</code>. <code>recent_trend</code> is <code>improving</code>, <code>worsening</code>, or <code>stable</code>.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/history/stats/folder/job-name&quot;</span>
+</code></pre></div>
+
+<h3 id="post-historyclassify"><code>POST /history/classify</code></h3>
+<p>Store a history-domain classification for a test.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_name</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Test name to classify. Blank-after-trim is rejected.</td>
+</tr>
+<tr>
+<td><code>classification</code></td>
+<td>body</td>
+<td><code>FLAKY \| REGRESSION \| INFRASTRUCTURE \| KNOWN_BUG \| INTERMITTENT</code></td>
+<td>required</td>
+<td>History classification. Input is normalized to uppercase.</td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Free-text reasoning.</td>
+</tr>
+<tr>
+<td><code>job_name</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Child job name context. Empty string means top-level.</td>
+</tr>
+<tr>
+<td><code>references</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>External references. Required for <code>KNOWN_BUG</code>.</td>
+</tr>
+<tr>
+<td><code>job_id</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier used to scope the classification.</td>
+</tr>
+<tr>
+<td><code>child_build_number</code></td>
+<td>body</td>
+<td><code>integer &gt;= 0</code></td>
+<td><code>0</code></td>
+<td>Child build scope.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: creates a classification row and returns <code>{"id": &lt;classification_id&gt;}</code>.</p>
+<p>Status codes: <code>201</code> created; <code>400</code> invalid business rule such as blank <code>test_name</code> or missing <code>references</code> for <code>KNOWN_BUG</code>; <code>422</code> validation failed.</p>
+<blockquote>
+<p><strong>Note:</strong> Requests with a username context are stored as human-authored and immediately visible. Requests without a username context are stored as <code>created_by="ai"</code> and remain hidden until the related analysis makes them visible.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/history/classify&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;test_name&quot;: &quot;tests.api.test_login.test_admin_login&quot;,</span>
+<span class="s1">    &quot;classification&quot;: &quot;FLAKY&quot;,</span>
+<span class="s1">    &quot;reason&quot;: &quot;Intermittent timeout in shared CI&quot;,</span>
+<span class="s1">    &quot;job_id&quot;: &quot;&#39;</span><span class="s2">&quot;</span><span class="nv">$JOB_ID</span><span class="s2">&quot;</span><span class="s1">&#39;&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="get-historyclassifications"><code>GET /history/classifications</code></h3>
+<p>Read visible primary override classifications.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_name</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exact test-name filter.</td>
+</tr>
+<tr>
+<td><code>classification</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exact primary classification filter.</td>
+</tr>
+<tr>
+<td><code>job_name</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exact child-job-name filter stored with the classification.</td>
+</tr>
+<tr>
+<td><code>parent_job_name</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exact top-level job-name filter.</td>
+</tr>
+<tr>
+<td><code>job_id</code></td>
+<td>query</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Exact analysis job filter.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{"classifications": [...]}</code>. Each row includes <code>id</code>, <code>test_name</code>, <code>job_name</code>, <code>parent_job_name</code>, <code>classification</code>, <code>reason</code>, <code>references_info</code>, <code>created_by</code>, <code>job_id</code>, <code>child_build_number</code>, and <code>created_at</code>.</p>
+<p>Status codes: <code>200</code> success.</p>
+<blockquote>
+<p><strong>Note:</strong> This reader intentionally returns only visible primary classifications (<code>CODE ISSUE</code>, <code>PRODUCT BUG</code>, <code>INFRASTRUCTURE</code>). History labels from <code>POST /history/classify</code> are not returned here.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/history/classifications?test_name=tests.api.test_login.test_admin_login&quot;</span>
+</code></pre></div>
+
+<h2 id="issue-and-integration-endpoints">Issue and Integration Endpoints</h2>
+<h3 id="post-resultsjob_idpreview-github-issue"><code>POST /results/{job_id}/preview-github-issue</code></h3>
+<p>Generate GitHub issue content for a stored failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>body</td>
+<td><code>PreviewIssueRequest</code></td>
+<td>required</td>
+<td>Preview request.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>PreviewIssueResponse</code>. The server resolves the effective stored classification first, so manual overrides affect the generated content. Duplicate search is best-effort and only runs when a target repo URL and GitHub token are available.</p>
+<p>Status codes: <code>200</code> preview returned; <code>202</code> target job still pending/waiting/running; <code>400</code> target repository URL cannot be resolved or test lookup is invalid; <code>403</code> GitHub issue creation disabled; <code>404</code> job or failure not found; <code>409</code> target job failed; <code>422</code> validation failed.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/preview-github-issue&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;test_name&quot;: &quot;tests.api.test_login.test_admin_login&quot;,</span>
+<span class="s1">    &quot;include_links&quot;: true,</span>
+<span class="s1">    &quot;github_repo_url&quot;: &quot;https://github.com/acme/tests&quot;,</span>
+<span class="s1">    &quot;github_token&quot;: &quot;ghp_example&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-resultsjob_idpreview-jira-bug"><code>POST /results/{job_id}/preview-jira-bug</code></h3>
+<p>Generate Jira bug content for a stored failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>body</td>
+<td><code>PreviewIssueRequest</code></td>
+<td>required</td>
+<td>Preview request.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>PreviewIssueResponse</code>. Duplicate search is best-effort and runs only when usable Jira credentials and a Jira project key are available.</p>
+<p>Status codes: <code>200</code> preview returned; <code>202</code> target job still pending/waiting/running; <code>400</code> Jira URL not configured or target lookup invalid; <code>403</code> Jira issue creation disabled; <code>404</code> job or failure not found; <code>409</code> target job failed; <code>422</code> validation failed.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/preview-jira-bug&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;test_name&quot;: &quot;tests.api.test_login.test_admin_login&quot;,</span>
+<span class="s1">    &quot;include_links&quot;: true,</span>
+<span class="s1">    &quot;jira_token&quot;: &quot;jira_example&quot;,</span>
+<span class="s1">    &quot;jira_email&quot;: &quot;alice@example.com&quot;,</span>
+<span class="s1">    &quot;jira_project_key&quot;: &quot;PROJ&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-resultsjob_idcreate-github-issue"><code>POST /results/{job_id}/create-github-issue</code></h3>
+<p>Create a GitHub issue for a stored failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>body</td>
+<td><code>CreateIssueRequest</code></td>
+<td>required</td>
+<td>Final issue payload and optional tracker overrides.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>CreateIssueResponse</code>. When a username context exists, the server appends reporter attribution to the issue body and creates a matching comment on the analysis report.</p>
+<p>Status codes: <code>201</code> created; <code>202</code> target job still pending/waiting/running; <code>400</code> missing GitHub token or target repository URL, or invalid repository URL; <code>401</code> GitHub token invalid or expired; <code>403</code> GitHub issue creation disabled; <code>404</code> job or failure not found; <code>409</code> target job failed; <code>422</code> validation failed; <code>502</code> GitHub API error or unreachable response.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/create-github-issue&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;test_name&quot;: &quot;tests.api.test_login.test_admin_login&quot;,</span>
+<span class="s1">    &quot;title&quot;: &quot;Admin login fails with HTTP 500&quot;,</span>
+<span class="s1">    &quot;body&quot;: &quot;## Failure\n`tests.api.test_login.test_admin_login`\n\n## Error\nAssertionError: expected 200 got 500&quot;,</span>
+<span class="s1">    &quot;github_repo_url&quot;: &quot;https://github.com/acme/tests&quot;,</span>
+<span class="s1">    &quot;github_token&quot;: &quot;ghp_example&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-resultsjob_idcreate-jira-bug"><code>POST /results/{job_id}/create-jira-bug</code></h3>
+<p>Create a Jira bug for a stored failure.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>body</td>
+<td><code>CreateIssueRequest</code></td>
+<td>required</td>
+<td>Final bug payload and optional tracker overrides.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>CreateIssueResponse</code>. When a username context exists, the server appends reporter attribution to the Jira description and creates a matching comment on the analysis report.</p>
+<p>Status codes: <code>201</code> created; <code>202</code> target job still pending/waiting/running; <code>400</code> Jira URL not configured, missing Jira project key, or missing Jira credentials; <code>401</code> Jira token invalid or expired; <code>403</code> Jira issue creation disabled; <code>404</code> job or failure not found; <code>409</code> target job failed; <code>422</code> validation failed; <code>502</code> Jira API error or unreachable response.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/create-jira-bug&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;test_name&quot;: &quot;tests.api.test_login.test_admin_login&quot;,</span>
+<span class="s1">    &quot;title&quot;: &quot;Admin login fails with HTTP 500&quot;,</span>
+<span class="s1">    &quot;body&quot;: &quot;Failure observed in CI pipeline build 123.&quot;,</span>
+<span class="s1">    &quot;jira_token&quot;: &quot;jira_example&quot;,</span>
+<span class="s1">    &quot;jira_email&quot;: &quot;alice@example.com&quot;,</span>
+<span class="s1">    &quot;jira_project_key&quot;: &quot;PROJ&quot;,</span>
+<span class="s1">    &quot;jira_security_level&quot;: &quot;Internal&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-resultsjob_idpush-reportportal"><code>POST /results/{job_id}/push-reportportal</code></h3>
+<p>Push stored classifications into Report Portal.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>job_id</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Analysis job identifier.</td>
+</tr>
+<tr>
+<td><code>child_job_name</code></td>
+<td>query</td>
+<td><code>string \| null</code></td>
+<td><code>null</code></td>
+<td>Child job name for a scoped push.</td>
+</tr>
+<tr>
+<td><code>child_build_number</code></td>
+<td>query</td>
+<td><code>integer \| null</code></td>
+<td><code>null</code></td>
+<td>Child build number for a scoped push. Required when <code>child_job_name</code> is supplied.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>ReportPortalPushResult</code>.</p>
+<p>Status codes: <code>200</code> result returned; <code>400</code> Report Portal disabled/not configured, invalid child scope, or <code>PUBLIC_BASE_URL</code> missing; <code>404</code> job not found; <code>422</code> validation failed.</p>
+<blockquote>
+<p><strong>Note:</strong> Many integration problems remain HTTP <code>200</code> and are reported in <code>errors[]</code>. Use the body, not only the status code, to determine success.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/results/</span><span class="nv">$JOB_ID</span><span class="s2">/push-reportportal&quot;</span>
+</code></pre></div>
+
+<h3 id="get-apicapabilities"><code>GET /api/capabilities</code></h3>
+<p>Get server feature toggles and credential availability.</p>
+<p>Parameters: none.</p>
+<p>Return value/effect: returns an object with the fields below.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>github_issues_enabled</code></td>
+<td><code>boolean</code></td>
+<td>required</td>
+<td>Whether GitHub issue creation is enabled.</td>
+</tr>
+<tr>
+<td><code>jira_issues_enabled</code></td>
+<td><code>boolean</code></td>
+<td>required</td>
+<td>Whether Jira issue creation is enabled.</td>
+</tr>
+<tr>
+<td><code>server_github_token</code></td>
+<td><code>boolean</code></td>
+<td>required</td>
+<td>Whether the server has its own GitHub token configured.</td>
+</tr>
+<tr>
+<td><code>server_jira_token</code></td>
+<td><code>boolean</code></td>
+<td>required</td>
+<td>Whether the server has Jira credentials configured.</td>
+</tr>
+<tr>
+<td><code>server_jira_email</code></td>
+<td><code>boolean</code></td>
+<td>required</td>
+<td>Whether the server has a Jira Cloud email configured.</td>
+</tr>
+<tr>
+<td><code>server_jira_project_key</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Configured default Jira project key, or <code>""</code>.</td>
+</tr>
+<tr>
+<td><code>reportportal</code></td>
+<td><code>boolean</code></td>
+<td>required</td>
+<td>Whether Report Portal integration is enabled and configured.</td>
+</tr>
+<tr>
+<td><code>reportportal_project</code></td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Configured Report Portal project, or <code>""</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/capabilities&quot;</span>
+</code></pre></div>
+
+<h3 id="post-apijira-projects"><code>POST /api/jira-projects</code></h3>
+<p>List Jira projects visible to the supplied Jira credentials.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jira_token</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira token.</td>
+</tr>
+<tr>
+<td><code>jira_email</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira Cloud email.</td>
+</tr>
+<tr>
+<td><code>query</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Free-text project filter.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns an array of <code>{key, name}</code> objects. If no user token is supplied, the endpoint returns only the server-configured project key when available.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/jira-projects&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;jira_token&quot;: &quot;jira_example&quot;,</span>
+<span class="s1">    &quot;jira_email&quot;: &quot;alice@example.com&quot;,</span>
+<span class="s1">    &quot;query&quot;: &quot;PROJ&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-apijira-security-levels"><code>POST /api/jira-security-levels</code></h3>
+<p>List Jira security levels for a project.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jira_token</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira token.</td>
+</tr>
+<tr>
+<td><code>jira_email</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira Cloud email.</td>
+</tr>
+<tr>
+<td><code>project_key</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Jira project key.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns an array of <code>{id, name, description}</code> objects. Failures are swallowed and returned as <code>[]</code>.</p>
+<p>Status codes: <code>200</code> success; <code>422</code> validation failed.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/jira-security-levels&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;jira_token&quot;: &quot;jira_example&quot;,</span>
+<span class="s1">    &quot;jira_email&quot;: &quot;alice@example.com&quot;,</span>
+<span class="s1">    &quot;project_key&quot;: &quot;PROJ&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-apivalidate-token"><code>POST /api/validate-token</code></h3>
+<p>Validate a GitHub or Jira token.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>token_type</code></td>
+<td>body</td>
+<td><code>github \| jira</code></td>
+<td>required</td>
+<td>Tracker type to validate.</td>
+</tr>
+<tr>
+<td><code>token</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Tracker token.</td>
+</tr>
+<tr>
+<td><code>email</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td><code>""</code></td>
+<td>Jira Cloud email. Ignored for GitHub.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{valid, username, message}</code>. For GitHub, <code>username</code> is the GitHub login. For Jira, <code>username</code> is the display name.</p>
+<p>Status codes: <code>200</code> validation result; <code>422</code> validation failed.</p>
+<blockquote>
+<p><strong>Note:</strong> Invalid tokens, missing tokens, and unreachable trackers still return HTTP <code>200</code>; inspect <code>valid</code> and <code>message</code>.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/validate-token&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;token_type&quot;: &quot;github&quot;,</span>
+<span class="s1">    &quot;token&quot;: &quot;ghp_example&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h2 id="authentication-and-user-endpoints">Authentication and User Endpoints</h2>
+<h3 id="post-apiauthlogin"><code>POST /api/auth/login</code></h3>
+<p>Authenticate using the bootstrap admin key or an admin user API key.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>username</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Login username. Use literal <code>admin</code> when authenticating with the bootstrap admin key.</td>
+</tr>
+<tr>
+<td><code>api_key</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Bootstrap admin key or stored admin user API key.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{username, role, is_admin}</code> and sets <code>jji_session</code> plus <code>jji_username</code> cookies.</p>
+<p>Status codes: <code>200</code> logged in; <code>400</code> invalid JSON body or missing fields; <code>401</code> invalid credentials.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-i<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/auth/login&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;username&quot;: &quot;admin&quot;,</span>
+<span class="s1">    &quot;api_key&quot;: &quot;&#39;</span><span class="s2">&quot;</span><span class="nv">$ADMIN_KEY</span><span class="s2">&quot;</span><span class="s1">&#39;&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-apiauthlogout"><code>POST /api/auth/logout</code></h3>
+<p>Log out the current admin session.</p>
+<p>Parameters: none.</p>
+<p>Return value/effect: returns <code>{"ok": true}</code> and clears the <code>jji_session</code> cookie. The <code>jji_username</code> cookie is not removed.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/auth/logout&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_session=</span><span class="nv">$SESSION_TOKEN</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<h3 id="get-apiauthme"><code>GET /api/auth/me</code></h3>
+<p>Get the current request identity.</p>
+<p>Parameters: none.</p>
+<p>Return value/effect: returns <code>{username, role, is_admin}</code>. Unauthenticated requests return <code>{"username": "", "role": "user", "is_admin": false}</code>.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/auth/me&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span>
+</code></pre></div>
+
+<h3 id="get-apiusertokens"><code>GET /api/user/tokens</code></h3>
+<p>Get the saved personal GitHub and Jira tokens for the current username context.</p>
+<p>Parameters: none.</p>
+<p>Return value/effect: returns <code>{github_token, jira_email, jira_token}</code> and sends <code>Cache-Control: no-store</code>. If the current username is not tracked in the local user table, all values are returned as empty strings.</p>
+<p>Status codes: <code>200</code> success; <code>401</code> username required.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/user/tokens&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span>
+</code></pre></div>
+
+<h3 id="put-apiusertokens"><code>PUT /api/user/tokens</code></h3>
+<p>Save personal tracker credentials for the current username context.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>github_token</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>omitted</td>
+<td>GitHub token. Empty string clears the stored value.</td>
+</tr>
+<tr>
+<td><code>jira_email</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>omitted</td>
+<td>Jira Cloud email. Empty string clears the stored value.</td>
+</tr>
+<tr>
+<td><code>jira_token</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>omitted</td>
+<td>Jira token. Empty string clears the stored value.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: updates only the fields present in the JSON object. Omitted fields are left unchanged. Returns <code>{"ok": true}</code>.</p>
+<p>Status codes: <code>200</code> saved; <code>400</code> invalid JSON body or non-object body; <code>401</code> username required; <code>404</code> user not found.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/user/tokens&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Cookie: jji_username=alice&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;github_token&quot;: &quot;ghp_example&quot;,</span>
+<span class="s1">    &quot;jira_email&quot;: &quot;alice@example.com&quot;,</span>
+<span class="s1">    &quot;jira_token&quot;: &quot;jira_example&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h2 id="admin-endpoints">Admin Endpoints</h2>
+<h3 id="post-apiadminusers"><code>POST /api/admin/users</code></h3>
+<p>Create a new admin user.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>username</code></td>
+<td>body</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>New admin username. Must be 2-50 characters, start alphanumeric, and then use only alphanumerics, <code>.</code>, <code>_</code>, or <code>-</code>. <code>admin</code> is reserved.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{username, api_key, role}</code> with <code>role="admin"</code> and sends <code>Cache-Control: no-store</code>.</p>
+<p>Status codes: <code>200</code> created; <code>400</code> invalid JSON, invalid username, or duplicate username; <code>403</code> admin access required.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/admin/users&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$ADMIN_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;username&quot;: &quot;release-manager&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="get-apiadminusers"><code>GET /api/admin/users</code></h3>
+<p>List all tracked users.</p>
+<p>Parameters: none.</p>
+<p>Return value/effect: returns <code>{"users": [...]}</code>. Each user row includes <code>id</code>, <code>username</code>, <code>role</code>, <code>created_at</code>, and <code>last_seen</code>.</p>
+<p>Status codes: <code>200</code> success; <code>403</code> admin access required.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/admin/users&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$ADMIN_TOKEN</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<h3 id="delete-apiadminusersusername"><code>DELETE /api/admin/users/{username}</code></h3>
+<p>Delete an admin user.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>username</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Admin username to delete.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{"deleted": "&lt;username&gt;"}</code>. Active sessions for that user are removed.</p>
+<p>Status codes: <code>200</code> deleted; <code>400</code> cannot delete your own account or the last admin; <code>403</code> admin access required; <code>404</code> admin user not found.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/admin/users/release-manager&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$ADMIN_TOKEN</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<h3 id="put-apiadminusersusernamerole"><code>PUT /api/admin/users/{username}/role</code></h3>
+<p>Change a user’s role.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>username</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Username to update.</td>
+</tr>
+<tr>
+<td><code>role</code></td>
+<td>body</td>
+<td><code>admin \| user</code></td>
+<td>required</td>
+<td>New role.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{username, role}</code> and, when promoting to admin, also returns <code>api_key</code>. Responses use <code>Cache-Control: no-store</code>. Demotion removes the stored API key and invalidates that user’s sessions.</p>
+<p>Status codes: <code>200</code> updated; <code>400</code> invalid JSON, invalid role, same role, self-change, reserved <code>admin</code>, or last-admin demotion; <code>403</code> admin access required; <code>404</code> user not found.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/admin/users/alice/role&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$ADMIN_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;role&quot;: &quot;admin&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h3 id="post-apiadminusersusernamerotate-key"><code>POST /api/admin/users/{username}/rotate-key</code></h3>
+<p>Rotate an admin user API key.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>In</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>username</code></td>
+<td>path</td>
+<td><code>string</code></td>
+<td>required</td>
+<td>Admin username whose key will be rotated.</td>
+</tr>
+<tr>
+<td><code>new_key</code></td>
+<td>body</td>
+<td><code>string \| omitted</code></td>
+<td>omitted</td>
+<td>Optional replacement API key. Must be at least 16 characters when supplied. If omitted, the server generates a new key.</td>
+</tr>
+</tbody>
+</table>
+<p>Return value/effect: returns <code>{username, new_api_key}</code> and sends <code>Cache-Control: no-store</code>. Existing sessions for that user are invalidated.</p>
+<p>Status codes: <code>200</code> rotated; <code>400</code> invalid JSON, non-object body, or invalid custom key; <code>403</code> admin access required; <code>404</code> admin user not found.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/api/admin/users/alice/rotate-key&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$ADMIN_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<span class="s1">    &quot;new_key&quot;: &quot;jji_custom_admin_key_123456&quot;</span>
+<span class="s1">  }&#39;</span>
+</code></pre></div>
+
+<h2 id="service-endpoints">Service Endpoints</h2>
+<h3 id="get-ai-configs"><code>GET /ai-configs</code></h3>
+<p>List distinct AI provider/model pairs found in completed stored analyses.</p>
+<p>Parameters: none.</p>
+<p>Return value/effect: returns an array of objects shaped like <code>{ai_provider, ai_model}</code>.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/ai-configs&quot;</span>
+</code></pre></div>
+
+<h3 id="get-health"><code>GET /health</code></h3>
+<p>Basic health check.</p>
+<p>Parameters: none.</p>
+<p>Return value/effect: returns <code>{"status": "healthy"}</code>.</p>
+<p>Status codes: <code>200</code> success.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE_URL</span><span class="s2">/health&quot;</span>
+</code></pre></div>
+
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="cli-command-reference.html">CLI Command Reference</a></li>
+<li><a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a></li>
+<li><a href="analyzing-jenkins-jobs.html">Analyzing Jenkins Jobs</a></li>
+<li><a href="analyzing-junit-xml-and-raw-failures.html">Analyzing JUnit XML and Raw Failures</a></li>
+<li><a href="managing-admin-users-and-api-keys.html">Managing Admin Users and API Keys</a></li>
+</ul>
+                </div>
+            </article>
+            <nav class="page-nav">
+                
+                <a href="cli-command-reference.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">CLI Command Reference</span>
+                </a>
+                
+                
+                <a href="configuration-and-environment-reference.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Configuration and Environment Reference</span>
+                </a>
+                
+            </nav>
+            
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#conventions">Conventions</a><ul>
+<li><a href="#authentication-inputs">Authentication Inputs</a></li>
+<li><a href="#common-status-codes">Common Status Codes</a></li>
+<li><a href="#child-failure-targeting">Child Failure Targeting</a></li>
+<li><a href="#progress-phases">Progress Phases</a></li>
+<li><a href="#sensitive-stored-request-fields">Sensitive Stored Request Fields</a></li>
+</ul>
+</li>
+<li><a href="#shared-schemas">Shared Schemas</a><ul>
+<li><a href="#aiconfigentry">AiConfigEntry</a></li>
+<li><a href="#additionalrepo">AdditionalRepo</a></li>
+<li><a href="#testfailure">TestFailure</a></li>
+<li><a href="#baseanalysisrequest">BaseAnalysisRequest</a></li>
+<li><a href="#analyzerequest">AnalyzeRequest</a></li>
+<li><a href="#analyzefailuresrequest">AnalyzeFailuresRequest</a></li>
+<li><a href="#previewissuerequest">PreviewIssueRequest</a></li>
+<li><a href="#createissuerequest">CreateIssueRequest</a></li>
+<li><a href="#analysisdetail">AnalysisDetail</a></li>
+<li><a href="#peerdebate">PeerDebate</a></li>
+<li><a href="#failureanalysis">FailureAnalysis</a></li>
+<li><a href="#childjobanalysis">ChildJobAnalysis</a></li>
+<li><a href="#analysisresult">AnalysisResult</a></li>
+<li><a href="#failureanalysisresult">FailureAnalysisResult</a></li>
+<li><a href="#resultenvelope">ResultEnvelope</a></li>
+<li><a href="#previewissueresponse">PreviewIssueResponse</a></li>
+<li><a href="#createissueresponse">CreateIssueResponse</a></li>
+<li><a href="#reportportalpushresult">ReportPortalPushResult</a></li>
+</ul>
+</li>
+<li><a href="#analysis-endpoints">Analysis Endpoints</a><ul>
+<li><a href="#post-analyze">POST /analyze</a></li>
+<li><a href="#post-analyze-failures">POST /analyze-failures</a></li>
+<li><a href="#post-re-analyzejob_id">POST /re-analyze/{job_id}</a></li>
+</ul>
+</li>
+<li><a href="#result-endpoints">Result Endpoints</a><ul>
+<li><a href="#get-resultsjob_id">GET /results/{job_id}</a></li>
+<li><a href="#get-results">GET /results</a></li>
+<li><a href="#get-apidashboard">GET /api/dashboard</a></li>
+<li><a href="#delete-resultsjob_id">DELETE /results/{job_id}</a></li>
+<li><a href="#get-resultsjob_idcomments">GET /results/{job_id}/comments</a></li>
+<li><a href="#post-resultsjob_idcomments">POST /results/{job_id}/comments</a></li>
+<li><a href="#delete-resultsjob_idcommentscomment_id">DELETE /results/{job_id}/comments/{comment_id}</a></li>
+<li><a href="#put-resultsjob_idreviewed">PUT /results/{job_id}/reviewed</a></li>
+<li><a href="#get-resultsjob_idreview-status">GET /results/{job_id}/review-status</a></li>
+<li><a href="#post-resultsjob_idenrich-comments">POST /results/{job_id}/enrich-comments</a></li>
+<li><a href="#put-resultsjob_idoverride-classification">PUT /results/{job_id}/override-classification</a></li>
+</ul>
+</li>
+<li><a href="#history-endpoints">History Endpoints</a><ul>
+<li><a href="#get-historyfailures">GET /history/failures</a></li>
+<li><a href="#get-historytesttest_namepath">GET /history/test/{test_name:path}</a></li>
+<li><a href="#get-historysearch">GET /history/search</a></li>
+<li><a href="#get-historystatsjob_namepath">GET /history/stats/{job_name:path}</a></li>
+<li><a href="#post-historyclassify">POST /history/classify</a></li>
+<li><a href="#get-historyclassifications">GET /history/classifications</a></li>
+</ul>
+</li>
+<li><a href="#issue-and-integration-endpoints">Issue and Integration Endpoints</a><ul>
+<li><a href="#post-resultsjob_idpreview-github-issue">POST /results/{job_id}/preview-github-issue</a></li>
+<li><a href="#post-resultsjob_idpreview-jira-bug">POST /results/{job_id}/preview-jira-bug</a></li>
+<li><a href="#post-resultsjob_idcreate-github-issue">POST /results/{job_id}/create-github-issue</a></li>
+<li><a href="#post-resultsjob_idcreate-jira-bug">POST /results/{job_id}/create-jira-bug</a></li>
+<li><a href="#post-resultsjob_idpush-reportportal">POST /results/{job_id}/push-reportportal</a></li>
+<li><a href="#get-apicapabilities">GET /api/capabilities</a></li>
+<li><a href="#post-apijira-projects">POST /api/jira-projects</a></li>
+<li><a href="#post-apijira-security-levels">POST /api/jira-security-levels</a></li>
+<li><a href="#post-apivalidate-token">POST /api/validate-token</a></li>
+</ul>
+</li>
+<li><a href="#authentication-and-user-endpoints">Authentication and User Endpoints</a><ul>
+<li><a href="#post-apiauthlogin">POST /api/auth/login</a></li>
+<li><a href="#post-apiauthlogout">POST /api/auth/logout</a></li>
+<li><a href="#get-apiauthme">GET /api/auth/me</a></li>
+<li><a href="#get-apiusertokens">GET /api/user/tokens</a></li>
+<li><a href="#put-apiusertokens">PUT /api/user/tokens</a></li>
+</ul>
+</li>
+<li><a href="#admin-endpoints">Admin Endpoints</a><ul>
+<li><a href="#post-apiadminusers">POST /api/admin/users</a></li>
+<li><a href="#get-apiadminusers">GET /api/admin/users</a></li>
+<li><a href="#delete-apiadminusersusername">DELETE /api/admin/users/{username}</a></li>
+<li><a href="#put-apiadminusersusernamerole">PUT /api/admin/users/{username}/role</a></li>
+<li><a href="#post-apiadminusersusernamerotate-key">POST /api/admin/users/{username}/rotate-key</a></li>
+</ul>
+</li>
+<li><a href="#service-endpoints">Service Endpoints</a><ul>
+<li><a href="#get-ai-configs">GET /ai-configs</a></li>
+<li><a href="#get-health">GET /health</a></li>
+</ul>
+</li>
+<li><a href="#related-pages">Related Pages</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+            
+
+        </main>
+
+        <footer class="page-footer">
+            
+            <span class="footer-version">Generated from version 3.0.0</span>
+            <span class="footer-sep">&middot;</span>
+            
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>
