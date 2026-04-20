@@ -33,7 +33,7 @@ import { Pagination } from '@/components/shared/Pagination'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { SortableHeader } from '@/components/shared/SortableHeader'
 import { useTableSort } from '@/lib/useTableSort'
-import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle, ExternalLink } from 'lucide-react'
+import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle, Github } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 
 const STATUS_FILTER_ALL = 'ALL'
@@ -228,7 +228,7 @@ export function DashboardPage() {
                 title="View GitHub issues"
                 className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-text-tertiary transition-colors duration-150 hover:bg-surface-hover hover:text-text-secondary"
               >
-                <ExternalLink className="h-3 w-3" />
+                <Github className="h-3 w-3" />
                 View Issues
               </a>
             </div>
