@@ -847,6 +847,7 @@ async def _wait_for_jenkins_completion(
     poll_interval_minutes: int,
     max_wait_minutes: int,
     jenkins_timeout: int = 30,
+    max_consecutive_failures: int = 5,
 ) -> tuple[bool, str]:
     """Poll Jenkins until the build finishes.
 
@@ -861,6 +862,8 @@ async def _wait_for_jenkins_completion(
         max_wait_minutes: Maximum minutes to wait before timing out.
             0 means no limit (poll forever until job finishes).
         jenkins_timeout: Jenkins API request timeout in seconds.
+        max_consecutive_failures: Number of consecutive transient errors
+            allowed before giving up. Defaults to 5.
 
     Returns:
         A tuple of (success, error_message). success is True if the build
@@ -890,14 +893,16 @@ async def _wait_for_jenkins_completion(
         if not is_jenkins_connectivity_error(e):
             raise
         logger.error("Cannot reach Jenkins at %s: %s", jenkins_url, e, exc_info=True)
-        return False, unreachable_error
+        return False, (
+            "Jenkins reachability check failed; please verify the Jenkins URL, "
+            "credentials, and network connectivity"
+        )
 
     if max_wait_minutes > 0:
         deadline: float | None = _time.monotonic() + max_wait_minutes * 60
     else:
         deadline = None  # No limit
 
-    max_consecutive_failures = 5
     consecutive_failures = 0
 
     while True:

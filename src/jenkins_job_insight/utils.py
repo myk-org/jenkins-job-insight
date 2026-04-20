@@ -10,13 +10,17 @@ import requests.exceptions
 #: connectivity problem (network outage, DNS failure, timeout, etc.).
 #: Used by both the polling loop in *main.py* and the pre-flight check
 #: in *analyzer.py*.
+#:
+#: Note: ``jenkins.JenkinsException`` is intentionally excluded — it is
+#: the base class for many non-transient errors (auth failures, 5xx,
+#: malformed responses).  Only ``jenkins.TimeoutException`` (a subclass)
+#: represents a true connectivity/timeout problem.
 JENKINS_CONNECTIVITY_EXCEPTIONS: tuple[type[BaseException], ...] = (
     OSError,
     TimeoutError,
     requests.exceptions.Timeout,
     requests.exceptions.ConnectionError,
     jenkins.TimeoutException,
-    jenkins.JenkinsException,
 )
 
 
