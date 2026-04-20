@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
+import { GITHUB_REPO_URL } from '@/lib/constants'
 import type { DashboardJob } from '@/types'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,7 +33,7 @@ import { Pagination } from '@/components/shared/Pagination'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { SortableHeader } from '@/components/shared/SortableHeader'
 import { useTableSort } from '@/lib/useTableSort'
-import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle } from 'lucide-react'
+import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 
 const STATUS_FILTER_ALL = 'ALL'
@@ -216,9 +217,21 @@ export function DashboardPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="font-display text-xl font-bold text-text-primary">Dashboard</h1>
-            <p className="mt-0.5 text-sm text-text-tertiary">
-              {filtered.length} analysis {filtered.length === 1 ? 'run' : 'runs'}
-            </p>
+            <div className="mt-0.5 flex items-center gap-3">
+              <p className="text-sm text-text-tertiary">
+                {filtered.length} analysis {filtered.length === 1 ? 'run' : 'runs'}
+              </p>
+              <a
+                href={`${GITHUB_REPO_URL}/issues`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="View GitHub issues"
+                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-text-tertiary transition-colors duration-150 hover:bg-surface-hover hover:text-text-secondary"
+              >
+                <ExternalLink className="h-3 w-3" />
+                View Issues
+              </a>
+            </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <SearchInput value={search} onChange={setSearch} placeholder="Filter jobs..." className="w-full sm:w-64" />
