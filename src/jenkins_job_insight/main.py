@@ -869,6 +869,7 @@ async def _wait_for_jenkins_completion(
     import jenkins
 
     from jenkins_job_insight.jenkins import JenkinsClient
+    from jenkins_job_insight.utils import is_jenkins_connectivity_error
 
     client = JenkinsClient(
         url=jenkins_url,
@@ -883,21 +884,10 @@ async def _wait_for_jenkins_completion(
         "and network connectivity"
     )
 
-    def _is_jenkins_connectivity_error(exc: Exception) -> bool:
-        return isinstance(
-            exc,
-            (
-                OSError,
-                TimeoutError,
-                jenkins.TimeoutException,
-                jenkins.JenkinsException,
-            ),
-        )
-
     try:
         await asyncio.to_thread(client.get_whoami)
     except Exception as e:
-        if not _is_jenkins_connectivity_error(e):
+        if not is_jenkins_connectivity_error(e):
             raise
         logger.error("Cannot reach Jenkins at %s: %s", jenkins_url, e, exc_info=True)
         return False, unreachable_error
@@ -934,9 +924,11 @@ async def _wait_for_jenkins_completion(
             return False, f"Jenkins job {job_name} #{build_number} not found (404)"
 
         except Exception as e:
-            if not _is_jenkins_connectivity_error(e):
-                logger.error(f"Non-transient error checking Jenkins status: {e}")
-                return False, f"Jenkins poll failed: {e}"
+            if not is_jenkins_connectivity_error(e):
+                logger.error(
+                    "Non-transient error checking Jenkins status", exc_info=True
+                )
+                return False, "Jenkins poll failed; check server logs for details"
             consecutive_failures += 1
             logger.warning(
                 "Transient error checking Jenkins status (%d/%d): %s",
@@ -1022,14 +1014,16 @@ async def process_analysis_with_id(
             )
 
             if not completed:
+                fail_data = {
+                    "job_name": body.job_name,
+                    "build_number": body.build_number,
+                    "error": wait_error,
+                }
+                await _preserve_request_params(job_id, fail_data)
                 await update_status(
                     job_id,
                     "failed",
-                    {
-                        "job_name": body.job_name,
-                        "build_number": body.build_number,
-                        "error": wait_error,
-                    },
+                    fail_data,
                 )
                 return
 
@@ -1107,13 +1101,13 @@ async def process_analysis_with_id(
     except Exception as e:
         logger.exception(f"Analysis failed for job {job_id}")
         error_detail = format_exception_with_type(e)
-        fail_data: dict = {
+        error_data: dict = {
             "job_name": body.job_name,
             "build_number": body.build_number,
             "error": error_detail,
         }
-        await _preserve_request_params(job_id, fail_data)
-        await update_status(job_id, "failed", fail_data)
+        await _preserve_request_params(job_id, error_data)
+        await update_status(job_id, "failed", error_data)
 
 
 def _build_base_request_params(
