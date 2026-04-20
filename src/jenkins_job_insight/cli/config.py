@@ -188,6 +188,13 @@ def _validated_int(data: dict, key: str) -> int:
     return value
 
 
+def _validated_non_negative_int(data: dict, key: str) -> int:
+    value = _validated_int(data, key)
+    if value < 0:
+        raise ValueError(f"Invalid config: '{key}' must be a non-negative integer")
+    return value
+
+
 def _server_config_from_dict(data: dict) -> ServerConfig:
     """Build a ServerConfig from a TOML server dict.
 
@@ -206,7 +213,7 @@ def _server_config_from_dict(data: dict) -> ServerConfig:
         jenkins_user=data.get("jenkins_user", ""),
         jenkins_password=data.get("jenkins_password", ""),
         jenkins_ssl_verify=data.get("jenkins_ssl_verify"),
-        jenkins_timeout=_validated_int(data, "jenkins_timeout"),
+        jenkins_timeout=_validated_non_negative_int(data, "jenkins_timeout"),
         # Tests
         tests_repo_url=data.get("tests_repo_url", ""),
         # AI

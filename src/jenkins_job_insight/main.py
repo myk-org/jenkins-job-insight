@@ -878,6 +878,15 @@ async def _wait_for_jenkins_completion(
         timeout=jenkins_timeout,
     )
 
+    try:
+        await asyncio.to_thread(client.get_whoami)
+    except (OSError, TimeoutError) as e:
+        logger.error("Cannot reach Jenkins at %s: %s", jenkins_url, e, exc_info=True)
+        return (
+            False,
+            "Cannot reach Jenkins; please verify the Jenkins URL and network connectivity",
+        )
+
     if max_wait_minutes > 0:
         deadline: float | None = _time.monotonic() + max_wait_minutes * 60
     else:
