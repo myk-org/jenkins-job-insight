@@ -206,7 +206,7 @@ def _server_config_from_dict(data: dict) -> ServerConfig:
         jenkins_user=data.get("jenkins_user", ""),
         jenkins_password=data.get("jenkins_password", ""),
         jenkins_ssl_verify=data.get("jenkins_ssl_verify"),
-        jenkins_timeout=data.get("jenkins_timeout", 0),
+        jenkins_timeout=_validated_int(data, "jenkins_timeout"),
         # Tests
         tests_repo_url=data.get("tests_repo_url", ""),
         # AI

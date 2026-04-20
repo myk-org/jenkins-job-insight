@@ -594,6 +594,7 @@ def analyze(
         "--jira-max-results": jira_max_results,
         "--ai-cli-timeout": ai_cli_timeout,
         "--jenkins-artifacts-max-size-mb": jenkins_artifacts_max_size_mb,
+        "--jenkins-timeout": jenkins_timeout,
     }
     for flag_name, flag_value in _positive_int_fields.items():
         if flag_value is not None and flag_value <= 0:

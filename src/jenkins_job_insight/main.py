@@ -883,11 +883,15 @@ async def _wait_for_jenkins_completion(
     else:
         deadline = None  # No limit
 
+    max_consecutive_failures = 5
+    consecutive_failures = 0
+
     while True:
         try:
             build_info = await asyncio.to_thread(
                 client.get_build_info_safe, job_name, build_number
             )
+            consecutive_failures = 0
 
             if build_info and not build_info.get("building", True):
                 logger.info(
@@ -906,7 +910,24 @@ async def _wait_for_jenkins_completion(
             return False, f"Jenkins job {job_name} #{build_number} not found (404)"
 
         except (OSError, TimeoutError) as e:
-            logger.warning(f"Transient error checking Jenkins status: {e}")
+            consecutive_failures += 1
+            logger.warning(
+                "Transient error checking Jenkins status (%d/%d): %s",
+                consecutive_failures,
+                max_consecutive_failures,
+                e,
+            )
+            if consecutive_failures >= max_consecutive_failures:
+                logger.error(
+                    "Cannot reach Jenkins at %s after %d consecutive failures",
+                    jenkins_url,
+                    consecutive_failures,
+                    exc_info=True,
+                )
+                return (
+                    False,
+                    "Cannot reach Jenkins; please verify the Jenkins URL and network connectivity",
+                )
 
         except Exception as e:
             logger.error(f"Non-transient error checking Jenkins status: {e}")
