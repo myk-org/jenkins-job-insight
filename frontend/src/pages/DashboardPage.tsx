@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { GITHUB_REPO_URL } from '@/lib/constants'
 import type { DashboardJob } from '@/types'
@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { parseApiTimestamp, isAnalysisTimeout, formatDuration, formatTimestamp } from '@/lib/utils'
+import { utcStartOfDateInput, utcEndOfDateInput } from '@/lib/dateRange'
 import { StatusChip } from '@/components/shared/StatusChip'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { Pagination } from '@/components/shared/Pagination'
@@ -107,8 +108,25 @@ export function DashboardPage() {
   const { sortKey, sortDir, handleSort } = useTableSort('dash', 'created_at', 'desc', ['created_at'])
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(20)
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dateFrom = searchParams.get('date_from') ?? ''
+  const dateTo = searchParams.get('date_to') ?? ''
+  const setDateFrom = useCallback((value: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set('date_from', value)
+      else next.delete('date_from')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+  const setDateTo = useCallback((value: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set('date_to', value)
+      else next.delete('date_to')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
   const [deleteTarget, setDeleteTarget] = useState<DashboardJob | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -146,8 +164,8 @@ export function DashboardPage() {
   useEffect(() => { setPage(1) }, [search, statusFilter, perPage, dateFrom, dateTo])
 
   const filtered = useMemo(() => {
-    const fromBound = dateFrom ? (() => { const d = new Date(dateFrom); d.setUTCHours(0, 0, 0, 0); return d })() : null
-    const toBound = dateTo ? (() => { const d = new Date(dateTo); d.setUTCHours(23, 59, 59, 999); return d })() : null
+    const fromBound = dateFrom ? utcStartOfDateInput(dateFrom) : null
+    const toBound = dateTo ? utcEndOfDateInput(dateTo) : null
 
     return jobs.filter((j) => {
       const displayStatus = isAnalysisTimeout(j.status, j.error, j.summary) ? 'timeout' : j.status
@@ -292,7 +310,9 @@ export function DashboardPage() {
         ) : pageJobs.length === 0 && (!error || jobs.length > 0) ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-border-muted bg-surface-card py-16 text-center animate-fade-in">
             <p className="text-text-secondary">
-              {search ? 'No jobs match your search.' : 'No analysis runs yet.'}
+              {search || statusFilter !== STATUS_FILTER_ALL || dateFrom || dateTo
+                ? 'No jobs match your filters.'
+                : 'No analysis runs yet.'}
             </p>
           </div>
         ) : error && jobs.length === 0 ? null : (
