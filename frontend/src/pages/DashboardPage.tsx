@@ -32,6 +32,7 @@ import { SearchInput } from '@/components/shared/SearchInput'
 import { Pagination } from '@/components/shared/Pagination'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { SortableHeader } from '@/components/shared/SortableHeader'
+import { DateRangeFilter } from '@/components/shared/DateRangeFilter'
 import { useTableSort } from '@/lib/useTableSort'
 import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle, Github } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
@@ -106,6 +107,8 @@ export function DashboardPage() {
   const { sortKey, sortDir, handleSort } = useTableSort('dash', 'created_at', 'desc', ['created_at'])
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(20)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DashboardJob | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -140,17 +143,28 @@ export function DashboardPage() {
     const interval = setInterval(fetchJobs, 10_000)
     return () => clearInterval(interval)
   }, [fetchJobs])
-  useEffect(() => { setPage(1) }, [search, statusFilter, perPage])
+  useEffect(() => { setPage(1) }, [search, statusFilter, perPage, dateFrom, dateTo])
 
   const filtered = useMemo(() => {
+    const fromBound = dateFrom ? (() => { const d = new Date(dateFrom); d.setUTCHours(0, 0, 0, 0); return d })() : null
+    const toBound = dateTo ? (() => { const d = new Date(dateTo); d.setUTCHours(23, 59, 59, 999); return d })() : null
+
     return jobs.filter((j) => {
       const displayStatus = isAnalysisTimeout(j.status, j.error, j.summary) ? 'timeout' : j.status
       if (statusFilter !== STATUS_FILTER_ALL && displayStatus !== statusFilter) return false
+
+      if (fromBound || toBound) {
+        const jobDate = parseApiTimestamp(j.created_at)
+        if (Number.isNaN(jobDate.getTime())) return false
+        if (fromBound && jobDate < fromBound) return false
+        if (toBound && jobDate > toBound) return false
+      }
+
       if (!search) return true
       const q = search.toLowerCase()
       return (j.job_name ?? '').toLowerCase().includes(q) || j.job_id.toLowerCase().includes(q)
     })
-  }, [jobs, search, statusFilter])
+  }, [jobs, search, statusFilter, dateFrom, dateTo])
 
   const sorted = useMemo(() => {
     const copy = [...filtered]
@@ -247,6 +261,7 @@ export function DashboardPage() {
                 ))}
               </SelectContent>
             </Select>
+            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
             <Select value={String(perPage)} onValueChange={(v) => setPerPage(Number(v))}>
               <SelectTrigger aria-label="Rows per page" className="w-full sm:w-20">
                 <SelectValue />
