@@ -7,6 +7,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { api } from '@/lib/api'
 import { Upload, Loader2, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import type { ReportPortalPushResult } from '@/types'
@@ -57,9 +63,10 @@ interface ReportPortalButtonProps {
   buildNumber: number
   childJobName?: string
   childBuildNumber?: number
+  hasFailures: boolean
 }
 
-export function ReportPortalButton({ jobId, jobName, buildNumber, childJobName, childBuildNumber }: ReportPortalButtonProps) {
+export function ReportPortalButton({ jobId, jobName, buildNumber, childJobName, childBuildNumber, hasFailures }: ReportPortalButtonProps) {
   const { reportportalProject } = useReportState()
   const displayJobName = childJobName ?? jobName
   const displayBuildNumber = childBuildNumber ?? buildNumber
@@ -102,20 +109,31 @@ export function ReportPortalButton({ jobId, jobName, buildNumber, childJobName, 
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="gap-1.5 text-xs"
-        onClick={() => setConfirmOpen(true)}
-        disabled={pushing}
-      >
-        {pushing ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Upload className="h-3.5 w-3.5" />
-        )}
-        {pushing ? 'Pushing...' : 'Push to Report Portal'}
-      </Button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => setConfirmOpen(true)}
+                disabled={pushing || !hasFailures}
+              >
+                {pushing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+                {pushing ? 'Pushing...' : 'Push to Report Portal'}
+              </Button>
+            </span>
+          </TooltipTrigger>
+          {!hasFailures && (
+            <TooltipContent>No failures to push</TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-[400px] bg-surface-card border-border-default">

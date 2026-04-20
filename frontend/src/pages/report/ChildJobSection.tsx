@@ -107,6 +107,7 @@ export function ChildJobSection({ child, jobId, depth = 0, activeHash, parentHas
             buildNumber={child.build_number}
             childJobName={child.job_name}
             childBuildNumber={child.build_number}
+            hasFailures={failures.length > 0}
           />
         )}
         {child.jenkins_url && (
