@@ -878,14 +878,29 @@ async def _wait_for_jenkins_completion(
         timeout=jenkins_timeout,
     )
 
+    unreachable_error = (
+        "Cannot reach Jenkins; please verify the Jenkins URL, credentials, "
+        "and network connectivity"
+    )
+
+    def _is_jenkins_connectivity_error(exc: Exception) -> bool:
+        return isinstance(
+            exc,
+            (
+                OSError,
+                TimeoutError,
+                jenkins.TimeoutException,
+                jenkins.JenkinsException,
+            ),
+        )
+
     try:
         await asyncio.to_thread(client.get_whoami)
-    except (OSError, TimeoutError) as e:
+    except Exception as e:
+        if not _is_jenkins_connectivity_error(e):
+            raise
         logger.error("Cannot reach Jenkins at %s: %s", jenkins_url, e, exc_info=True)
-        return (
-            False,
-            "Cannot reach Jenkins; please verify the Jenkins URL and network connectivity",
-        )
+        return False, unreachable_error
 
     if max_wait_minutes > 0:
         deadline: float | None = _time.monotonic() + max_wait_minutes * 60
@@ -918,7 +933,10 @@ async def _wait_for_jenkins_completion(
             )
             return False, f"Jenkins job {job_name} #{build_number} not found (404)"
 
-        except (OSError, TimeoutError) as e:
+        except Exception as e:
+            if not _is_jenkins_connectivity_error(e):
+                logger.error(f"Non-transient error checking Jenkins status: {e}")
+                return False, f"Jenkins poll failed: {e}"
             consecutive_failures += 1
             logger.warning(
                 "Transient error checking Jenkins status (%d/%d): %s",
@@ -933,14 +951,7 @@ async def _wait_for_jenkins_completion(
                     consecutive_failures,
                     exc_info=True,
                 )
-                return (
-                    False,
-                    "Cannot reach Jenkins; please verify the Jenkins URL and network connectivity",
-                )
-
-        except Exception as e:
-            logger.error(f"Non-transient error checking Jenkins status: {e}")
-            return False, f"Jenkins poll failed: {e}"
+                return False, unreachable_error
 
         if deadline is not None:
             remaining = deadline - _time.monotonic()
