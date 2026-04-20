@@ -13,7 +13,7 @@ interface ExternalNavLink {
 }
 
 const EXTERNAL_NAV_LINKS: ExternalNavLink[] = [
-  { href: `${GITHUB_REPO_URL}/blob/main/docs/user-guide.md`, label: 'User Guide', title: 'User Guide', icon: BookOpen },
+  { href: 'https://myk-org.github.io/jenkins-job-insight/', label: 'User Guide', title: 'User Guide', icon: BookOpen },
   { href: `${GITHUB_REPO_URL}/issues/new`, label: 'Report Bug', title: 'Report a bug on GitHub', icon: Bug },
 ]
 
