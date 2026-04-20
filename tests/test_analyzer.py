@@ -70,11 +70,41 @@ class TestHandleJenkinsException:
 
     def test_handle_non_jenkins_exception(self) -> None:
         """Test that non-Jenkins exceptions return 502 with connection error."""
-        exc = ConnectionError("Failed to connect")
+        exc = ValueError("Some other error")
         with pytest.raises(HTTPException) as exc_info:
             handle_jenkins_exception(exc, "my-job", 123)
         assert exc_info.value.status_code == 502
         assert "Failed to connect to Jenkins" in exc_info.value.detail
+
+    def test_handle_timeout_exception(self) -> None:
+        """Test that timeout returns 504 with generic message."""
+        import requests
+
+        exc = requests.exceptions.Timeout("Connection timed out")
+        with pytest.raises(HTTPException) as exc_info:
+            handle_jenkins_exception(exc, "my-job", 123)
+        assert exc_info.value.status_code == 504
+        assert (
+            exc_info.value.detail
+            == "Jenkins is unreachable or timed out. Check server connectivity."
+        )
+        # Raw exception message must not leak into the HTTP response
+        assert "Connection timed out" not in exc_info.value.detail
+
+    def test_handle_connection_error_exception(self) -> None:
+        """Test that connection error returns 504 with generic message."""
+        import requests
+
+        exc = requests.exceptions.ConnectionError("Connection refused")
+        with pytest.raises(HTTPException) as exc_info:
+            handle_jenkins_exception(exc, "my-job", 123)
+        assert exc_info.value.status_code == 504
+        assert (
+            exc_info.value.detail
+            == "Jenkins is unreachable or timed out. Check server connectivity."
+        )
+        # Raw exception message must not leak into the HTTP response
+        assert "Connection refused" not in exc_info.value.detail
 
 
 class TestCallAiCliWithRetry:

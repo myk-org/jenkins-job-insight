@@ -313,6 +313,7 @@ def _reconstruct_from_params(
         "jenkins_user",
         "jenkins_password",
         "jenkins_ssl_verify",
+        "jenkins_timeout",
         "wait_for_completion",
         "poll_interval_minutes",
         "max_wait_minutes",
@@ -774,6 +775,7 @@ def _merge_settings(body: BaseAnalysisRequest, settings: Settings) -> Settings:
             "jenkins_user",
             "jenkins_password",
             "jenkins_ssl_verify",
+            "jenkins_timeout",
         ]
         for field in jenkins_fields:
             value = getattr(body, field, None)
@@ -844,6 +846,7 @@ async def _wait_for_jenkins_completion(
     jenkins_ssl_verify: bool,
     poll_interval_minutes: int,
     max_wait_minutes: int,
+    jenkins_timeout: int = 30,
 ) -> tuple[bool, str]:
     """Poll Jenkins until the build finishes.
 
@@ -857,6 +860,7 @@ async def _wait_for_jenkins_completion(
         poll_interval_minutes: Minutes between polls.
         max_wait_minutes: Maximum minutes to wait before timing out.
             0 means no limit (poll forever until job finishes).
+        jenkins_timeout: Jenkins API request timeout in seconds.
 
     Returns:
         A tuple of (success, error_message). success is True if the build
@@ -871,6 +875,7 @@ async def _wait_for_jenkins_completion(
         username=jenkins_user,
         password=jenkins_password,
         ssl_verify=jenkins_ssl_verify,
+        timeout=jenkins_timeout,
     )
 
     if max_wait_minutes > 0:
@@ -972,6 +977,7 @@ async def process_analysis_with_id(
                 jenkins_ssl_verify=settings.jenkins_ssl_verify,
                 poll_interval_minutes=settings.poll_interval_minutes,
                 max_wait_minutes=settings.max_wait_minutes,
+                jenkins_timeout=settings.jenkins_timeout,
             )
 
             if not completed:
@@ -1157,6 +1163,7 @@ def _build_request_params(
             "jenkins_user": merged.jenkins_user,
             "jenkins_password": merged.jenkins_password,
             "jenkins_ssl_verify": merged.jenkins_ssl_verify,
+            "jenkins_timeout": merged.jenkins_timeout,
             "wait_for_completion": merged.wait_for_completion,
             "poll_interval_minutes": merged.poll_interval_minutes,
             "max_wait_minutes": merged.max_wait_minutes,

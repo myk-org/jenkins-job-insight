@@ -27,6 +27,7 @@ class ServerConfig:
     jenkins_user: str = ""
     jenkins_password: str = ""
     jenkins_ssl_verify: bool | None = None
+    jenkins_timeout: int = 0  # 0 means use server default
     # Tests
     tests_repo_url: str = ""
     # AI
@@ -205,6 +206,7 @@ def _server_config_from_dict(data: dict) -> ServerConfig:
         jenkins_user=data.get("jenkins_user", ""),
         jenkins_password=data.get("jenkins_password", ""),
         jenkins_ssl_verify=data.get("jenkins_ssl_verify"),
+        jenkins_timeout=data.get("jenkins_timeout", 0),
         # Tests
         tests_repo_url=data.get("tests_repo_url", ""),
         # AI

@@ -16,6 +16,7 @@ from ai_cli_runner import (
 )
 
 import jenkins
+import requests.exceptions
 from fastapi import HTTPException
 from simple_logger.logger import get_logger
 
@@ -656,6 +657,21 @@ def handle_jenkins_exception(
                 status_code=502,
                 detail=f"Jenkins error: {e!s}",
             )
+
+    if isinstance(
+        e,
+        (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+            TimeoutError,
+            ConnectionError,
+        ),
+    ):
+        logger.error(f"Jenkins unreachable for {job_name} #{build_number}: {e!s}")
+        raise HTTPException(
+            status_code=504,
+            detail="Jenkins is unreachable or timed out. Check server connectivity.",
+        )
 
     # For any other exception type
     raise HTTPException(
@@ -1459,6 +1475,7 @@ async def analyze_job(
         username=settings.jenkins_user,
         password=settings.jenkins_password,
         ssl_verify=settings.jenkins_ssl_verify,
+        timeout=settings.jenkins_timeout,
     )
 
     # Construct full Jenkins URL for the result

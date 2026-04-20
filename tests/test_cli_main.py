@@ -854,6 +854,7 @@ class TestAnalyzeAllOptions:
                 "jenkins_artifacts_max_size_mb",
                 50,
             ),
+            ("--jenkins-timeout", "60", "jenkins_timeout", 60),
         ],
     )
     def test_int_options(
@@ -1495,6 +1496,7 @@ class TestAnalyzeConfigDefaults:
         jenkins_user="cfg-jenkins-user",
         jenkins_password=_FAKE_JENKINS_PASSWORD,
         jenkins_ssl_verify=False,
+        jenkins_timeout=45,
         tests_repo_url="https://github.com/cfg/tests",
         ai_provider="gemini",
         ai_model="2.5-pro",
@@ -1556,6 +1558,7 @@ class TestAnalyzeConfigDefaults:
         kwargs = client.analyze.call_args[1]
         assert kwargs["ai_cli_timeout"] == 20
         assert kwargs["jira_max_results"] == 40
+        assert kwargs["jenkins_timeout"] == 45
 
     def test_config_boolean_fields_used_as_defaults(self):
         """Boolean config fields are sent when CLI flags are absent."""

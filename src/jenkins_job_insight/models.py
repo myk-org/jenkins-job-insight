@@ -202,6 +202,10 @@ class AnalyzeRequest(BaseAnalysisRequest):
         default=None,
         description="Jenkins SSL verification (overrides JENKINS_SSL_VERIFY env var)",
     )
+    jenkins_timeout: Annotated[int, Field(gt=0)] | None = Field(
+        default=None,
+        description="Jenkins API request timeout in seconds (overrides JENKINS_TIMEOUT env var).",
+    )
     jenkins_artifacts_max_size_mb: Annotated[int, Field(gt=0)] | None = Field(
         default=None,
         description="Maximum Jenkins artifacts size in MB (overrides JENKINS_ARTIFACTS_MAX_SIZE_MB env var)",

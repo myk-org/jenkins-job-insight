@@ -921,6 +921,7 @@ class TestJJIClientAnalyzeExtras:
             "jenkins_user": "admin",
             "jenkins_password": "s3cret",  # pragma: allowlist secret
             "jenkins_ssl_verify": False,
+            "jenkins_timeout": 60,
             "jenkins_artifacts_max_size_mb": 50,
             "get_job_artifacts": True,
             "tests_repo_url": "https://github.com/org/tests",

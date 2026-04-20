@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     jenkins_user: str = ""
     jenkins_password: str = Field(default="", repr=False)
     jenkins_ssl_verify: bool = True
+    jenkins_timeout: int = Field(
+        default=30, gt=0, description="Jenkins API request timeout in seconds"
+    )
 
     # Optional defaults (can be overridden per-request in webhook)
     tests_repo_url: str | None = None

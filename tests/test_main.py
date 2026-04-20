@@ -2334,6 +2334,7 @@ class TestWaitForJenkinsCompletion:
                 username="user",
                 password=FAKE_JENKINS_PASSWORD,
                 ssl_verify=False,
+                timeout=30,
             )
 
     @pytest.mark.asyncio
