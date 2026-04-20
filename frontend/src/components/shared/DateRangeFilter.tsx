@@ -6,9 +6,10 @@ interface DateRangeFilterProps {
   to: string
   onFromChange: (value: string) => void
   onToChange: (value: string) => void
+  onClear?: () => void
 }
 
-export function DateRangeFilter({ from, to, onFromChange, onToChange }: DateRangeFilterProps) {
+export function DateRangeFilter({ from, to, onFromChange, onToChange, onClear }: DateRangeFilterProps) {
   return (
     <div className="flex items-center gap-1.5">
       <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
@@ -32,7 +33,7 @@ export function DateRangeFilter({ from, to, onFromChange, onToChange }: DateRang
       {(from || to) && (
         <button
           type="button"
-          onClick={() => { onFromChange(''); onToChange('') }}
+          onClick={() => { if (onClear) { onClear() } else { onFromChange(''); onToChange('') } }}
           className="text-xs text-text-tertiary hover:text-text-secondary"
           aria-label="Clear date filter"
         >

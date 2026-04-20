@@ -127,6 +127,14 @@ export function DashboardPage() {
       return next
     }, { replace: true })
   }, [setSearchParams])
+  const clearDates = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('date_from')
+      next.delete('date_to')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
   const [deleteTarget, setDeleteTarget] = useState<DashboardJob | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -279,7 +287,7 @@ export function DashboardPage() {
                 ))}
               </SelectContent>
             </Select>
-            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDates} />
             <Select value={String(perPage)} onValueChange={(v) => setPerPage(Number(v))}>
               <SelectTrigger aria-label="Rows per page" className="w-full sm:w-20">
                 <SelectValue />

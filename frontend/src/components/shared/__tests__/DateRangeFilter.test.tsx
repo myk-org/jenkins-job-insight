@@ -79,4 +79,13 @@ describe('DateRangeFilter', () => {
     renderDateRangeFilter()
     expect(screen.getByLabelText(TO_LABEL).getAttribute('min')).toBeNull()
   })
+
+  it('calls onClear instead of onFromChange/onToChange when onClear is provided', () => {
+    const onClear = vi.fn()
+    const { props } = renderDateRangeFilter({ from: '2025-01-01', to: '2025-12-31', onClear })
+    fireEvent.click(screen.getByLabelText(CLEAR_LABEL))
+    expect(onClear).toHaveBeenCalledOnce()
+    expect(props.onFromChange).not.toHaveBeenCalled()
+    expect(props.onToChange).not.toHaveBeenCalled()
+  })
 })
