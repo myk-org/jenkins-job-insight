@@ -1,0 +1,493 @@
+"""Health monitoring, error rate tracking, and alerting for jenkins-job-insight.
+
+Provides:
+- Rolling-window error rate counters (thread-safe, in-memory)
+- Health check logic with dependency checks
+- Startup configuration validation
+- Slack/email alerting with throttling
+- Prometheus metrics exposition
+"""
+
+import asyncio
+import os
+import smtplib
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass, field
+from email.message import EmailMessage
+from typing import Any
+
+import httpx
+from simple_logger.logger import get_logger
+
+logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
+
+
+# ---------------------------------------------------------------------------
+# Rolling-window error rate tracker
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _RollingCounter:
+    """Thread-safe rolling-window counter backed by a deque of timestamps."""
+
+    window_seconds: float = 300.0  # 5 minutes default
+    _timestamps: deque = field(default_factory=deque)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def record(self, ts: float | None = None) -> None:
+        ts = ts if ts is not None else time.monotonic()
+        with self._lock:
+            self._timestamps.append(ts)
+            self._evict(ts)
+
+    def count(self, now: float | None = None) -> int:
+        now = now if now is not None else time.monotonic()
+        with self._lock:
+            self._evict(now)
+            return len(self._timestamps)
+
+    def _evict(self, now: float) -> None:
+        cutoff = now - self.window_seconds
+        while self._timestamps and self._timestamps[0] < cutoff:
+            self._timestamps.popleft()
+
+
+class ErrorRateTracker:
+    """In-memory rolling-window request / error counters.
+
+    All public methods are thread-safe.
+    """
+
+    def __init__(self, window_seconds: float = 300.0) -> None:
+        self.window_seconds = window_seconds
+        self._total = _RollingCounter(window_seconds)
+        self._errors: dict[
+            str, _RollingCounter
+        ] = {}  # keyed by status class "4xx"/"5xx"
+        self._lock = threading.Lock()
+
+    def record_request(self, status_code: int) -> None:
+        now = time.monotonic()
+        self._total.record(now)
+        if status_code >= 400:
+            bucket = "5xx" if status_code >= 500 else "4xx"
+            with self._lock:
+                if bucket not in self._errors:
+                    self._errors[bucket] = _RollingCounter(self.window_seconds)
+            self._errors[bucket].record(now)
+
+    def snapshot(self) -> dict[str, Any]:
+        now = time.monotonic()
+        total = self._total.count(now)
+        error_counts: dict[str, int] = {}
+        with self._lock:
+            buckets = list(self._errors.items())
+        for bucket, counter in buckets:
+            error_counts[bucket] = counter.count(now)
+        total_errors = sum(error_counts.values())
+        error_rate = total_errors / total if total > 0 else 0.0
+        return {
+            "window_seconds": self.window_seconds,
+            "total_requests": total,
+            "error_counts": error_counts,
+            "total_errors": total_errors,
+            "error_rate": round(error_rate, 4),
+        }
+
+
+# Singleton tracker used by the middleware
+error_tracker = ErrorRateTracker()
+
+
+# ---------------------------------------------------------------------------
+# Health checks
+# ---------------------------------------------------------------------------
+
+
+async def check_db(db_path: str) -> dict[str, str]:
+    """Check database connectivity."""
+    try:
+        import aiosqlite
+
+        async with aiosqlite.connect(db_path) as db:
+            await db.execute("SELECT 1")
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
+
+async def check_jenkins(settings: Any) -> dict[str, str]:
+    """Check Jenkins reachability (lightweight HEAD/GET to base URL)."""
+    if not settings.jenkins_url:
+        return {"status": "not_configured"}
+    try:
+        async with httpx.AsyncClient(
+            verify=settings.jenkins_ssl_verify, timeout=5.0
+        ) as client:
+            resp = await client.get(settings.jenkins_url)
+            if resp.status_code < 500:
+                return {"status": "ok"}
+            return {"status": "degraded", "detail": f"HTTP {resp.status_code}"}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
+
+async def check_ai_provider() -> dict[str, str]:
+    """Check that an AI provider is configured."""
+    provider = os.getenv("AI_PROVIDER", "")
+    model = os.getenv("AI_MODEL", "")
+    if provider and model:
+        return {"status": "ok", "provider": provider, "model": model}
+    missing = []
+    if not provider:
+        missing.append("AI_PROVIDER")
+    if not model:
+        missing.append("AI_MODEL")
+    return {"status": "not_configured", "detail": f"Missing: {', '.join(missing)}"}
+
+
+async def check_reportportal(settings: Any) -> dict[str, str]:
+    """Check Report Portal configuration."""
+    if not settings.reportportal_enabled:
+        return {"status": "not_configured"}
+    try:
+        token = (
+            settings.reportportal_api_token.get_secret_value()
+            if settings.reportportal_api_token
+            else ""
+        )
+        async with httpx.AsyncClient(
+            verify=settings.reportportal_verify_ssl, timeout=5.0
+        ) as client:
+            resp = await client.get(
+                f"{settings.reportportal_url.rstrip('/')}/api/v1/user",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code < 400:
+                return {"status": "ok"}
+            return {"status": "degraded", "detail": f"HTTP {resp.status_code}"}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
+
+async def build_health_response(settings: Any, db_path: str) -> dict[str, Any]:
+    """Build full health response with checks and error rates.
+
+    Returns a dict with:
+    - status: "healthy", "degraded", or "unhealthy"
+    - checks: results from individual dependency checks
+    - error_rates: current rolling-window error statistics
+    """
+    checks: dict[str, dict] = {}
+
+    # Run all checks concurrently
+    db_check, jenkins_check, ai_check, rp_check = await asyncio.gather(
+        check_db(db_path),
+        check_jenkins(settings),
+        check_ai_provider(),
+        check_reportportal(settings),
+        return_exceptions=True,
+    )
+
+    def _safe(result: Any) -> dict:
+        if isinstance(result, Exception):
+            return {"status": "error", "detail": str(result)}
+        return result
+
+    checks["database"] = _safe(db_check)
+    checks["jenkins"] = _safe(jenkins_check)
+    checks["ai_provider"] = _safe(ai_check)
+    checks["reportportal"] = _safe(rp_check)
+
+    # Determine overall status
+    statuses = [c["status"] for c in checks.values()]
+    if checks["database"]["status"] == "error":
+        overall = "unhealthy"
+    elif any(s == "error" for s in statuses):
+        overall = "degraded"
+    elif any(s == "degraded" for s in statuses):
+        overall = "degraded"
+    else:
+        overall = "healthy"
+
+    return {
+        "status": overall,
+        "checks": checks,
+        "error_rates": error_tracker.snapshot(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Startup config validation
+# ---------------------------------------------------------------------------
+
+
+def validate_startup_config() -> list[str]:
+    """Validate configuration at startup and return warning messages.
+
+    Returns a list of warning strings. Empty list means all OK.
+    Does NOT raise — startup should continue even with warnings.
+    """
+    warnings: list[str] = []
+
+    # AI provider
+    provider = os.getenv("AI_PROVIDER", "")
+    model = os.getenv("AI_MODEL", "")
+    if not provider:
+        warnings.append(
+            "AI_PROVIDER is not set. Analysis requests will require ai_provider in the request body."
+        )
+    if not model:
+        warnings.append(
+            "AI_MODEL is not set. Analysis requests will require ai_model in the request body."
+        )
+
+    # Database path
+    db_path = os.getenv("DB_PATH", "/data/results.db")
+    db_dir = os.path.dirname(db_path) or "."
+    if db_dir and not os.path.isdir(db_dir):
+        warnings.append(
+            f"DB_PATH directory does not exist: {db_dir}. "
+            "The database will be created but the parent directory must exist."
+        )
+
+    # Encryption key
+    if not os.getenv("JJI_ENCRYPTION_KEY"):
+        warnings.append(
+            "JJI_ENCRYPTION_KEY is not set. A file-based key will be auto-generated. "
+            "Set this env var for production deployments."
+        )
+
+    # Slack webhook
+    slack_url = os.getenv("SLACK_WEBHOOK_URL", "")
+    if slack_url and not slack_url.startswith("https://"):
+        warnings.append(
+            "SLACK_WEBHOOK_URL does not start with https://. "
+            "Slack webhooks should use HTTPS."
+        )
+
+    # SMTP config partial check
+    smtp_host = os.getenv("SMTP_HOST", "")
+    alert_email_to = os.getenv("ALERT_EMAIL_TO", "")
+    if smtp_host and not alert_email_to:
+        warnings.append(
+            "SMTP_HOST is set but ALERT_EMAIL_TO is not. Email alerts will not be sent."
+        )
+    if alert_email_to and not smtp_host:
+        warnings.append(
+            "ALERT_EMAIL_TO is set but SMTP_HOST is not. Email alerts will not be sent."
+        )
+
+    return warnings
+
+
+# ---------------------------------------------------------------------------
+# Alert throttling
+# ---------------------------------------------------------------------------
+
+
+class AlertThrottler:
+    """Per-event-type cooldown to prevent alert storms.
+
+    Tracks the last time an alert was sent for each event type and
+    suppresses duplicates within the cooldown window.
+    """
+
+    def __init__(self, cooldown_seconds: float = 300.0) -> None:
+        self.cooldown_seconds = cooldown_seconds
+        self._last_sent: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def should_alert(self, event_type: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            last = self._last_sent.get(event_type, 0.0)
+            if now - last >= self.cooldown_seconds:
+                self._last_sent[event_type] = now
+                return True
+        return False
+
+    def reset(self, event_type: str | None = None) -> None:
+        with self._lock:
+            if event_type:
+                self._last_sent.pop(event_type, None)
+            else:
+                self._last_sent.clear()
+
+
+# Singleton throttler
+alert_throttler = AlertThrottler()
+
+
+# ---------------------------------------------------------------------------
+# Slack notifications
+# ---------------------------------------------------------------------------
+
+
+async def send_slack_alert(message: str, webhook_url: str | None = None) -> bool:
+    """Send an alert to Slack via webhook.
+
+    Args:
+        message: Text message to send.
+        webhook_url: Slack webhook URL. Falls back to SLACK_WEBHOOK_URL env var.
+
+    Returns:
+        True if sent successfully, False otherwise.
+        Never raises — alerting failures are swallowed.
+    """
+    url = webhook_url or os.getenv("SLACK_WEBHOOK_URL", "")
+    if not url:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json={"text": message})
+            if resp.status_code == 200:
+                logger.debug("Slack alert sent successfully")
+                return True
+            logger.warning("Slack webhook returned HTTP %d", resp.status_code)
+            return False
+    except Exception:
+        logger.debug("Failed to send Slack alert", exc_info=True)
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Email notifications
+# ---------------------------------------------------------------------------
+
+
+def send_email_alert(
+    subject: str,
+    body: str,
+    *,
+    smtp_host: str | None = None,
+    smtp_port: int | None = None,
+    smtp_user: str | None = None,
+    smtp_password: str | None = None,
+    smtp_from: str | None = None,
+    alert_email_to: str | None = None,
+) -> bool:
+    """Send an email alert via SMTP.
+
+    All parameters fall back to environment variables when not provided.
+    Never raises — alerting failures are swallowed.
+
+    Returns:
+        True if sent successfully, False otherwise.
+    """
+    host = smtp_host or os.getenv("SMTP_HOST", "")
+    if not host:
+        return False
+    port = smtp_port or int(os.getenv("SMTP_PORT", "587"))
+    user = smtp_user or os.getenv("SMTP_USER", "")
+    password = smtp_password or os.getenv("SMTP_PASSWORD", "")
+    from_addr = smtp_from or os.getenv("SMTP_FROM", user or f"jji@{host}")
+    to_addr = alert_email_to or os.getenv("ALERT_EMAIL_TO", "")
+    if not to_addr:
+        return False
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = from_addr
+        msg["To"] = to_addr
+        msg.set_content(body)
+        with smtplib.SMTP(host, port, timeout=10) as smtp:
+            if port == 587:
+                smtp.starttls()
+            if user and password:
+                smtp.login(user, password)
+            smtp.send_message(msg)
+        logger.debug("Email alert sent to %s", to_addr)
+        return True
+    except Exception:
+        logger.debug("Failed to send email alert", exc_info=True)
+        return False
+
+
+async def send_email_alert_async(
+    subject: str,
+    body: str,
+    **kwargs: Any,
+) -> bool:
+    """Async wrapper around send_email_alert (runs in thread pool)."""
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: send_email_alert(subject, body, **kwargs)
+        )
+    except Exception:
+        logger.debug("Failed to send async email alert", exc_info=True)
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Unified alert dispatch
+# ---------------------------------------------------------------------------
+
+
+async def dispatch_alert(
+    event_type: str,
+    message: str,
+    *,
+    subject: str | None = None,
+) -> None:
+    """Send alert via all configured channels, respecting throttling.
+
+    Args:
+        event_type: Event type key for throttling (e.g. "high_error_rate").
+        message: Alert message body.
+        subject: Email subject line (defaults to event_type).
+
+    Never raises — all alerting failures are swallowed.
+    """
+    if not alert_throttler.should_alert(event_type):
+        logger.debug("Alert throttled for event_type=%s", event_type)
+        return
+    try:
+        email_subject = subject or f"[JJI Alert] {event_type}"
+        await asyncio.gather(
+            send_slack_alert(message),
+            send_email_alert_async(email_subject, message),
+            return_exceptions=True,
+        )
+    except Exception:
+        logger.debug("Failed to dispatch alert", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+
+
+def render_prometheus_metrics() -> str:
+    """Render metrics in Prometheus text exposition format.
+
+    Returns a string ready to serve from /metrics.
+    """
+    snap = error_tracker.snapshot()
+    lines: list[str] = []
+
+    lines.append("# HELP jji_requests_total Total requests in the rolling window.")
+    lines.append("# TYPE jji_requests_total gauge")
+    lines.append(f"jji_requests_total {snap['total_requests']}")
+
+    lines.append("# HELP jji_errors_total Total errors in the rolling window.")
+    lines.append("# TYPE jji_errors_total gauge")
+    lines.append(f"jji_errors_total {snap['total_errors']}")
+
+    lines.append("# HELP jji_error_rate Error rate in the rolling window (0-1).")
+    lines.append("# TYPE jji_error_rate gauge")
+    lines.append(f"jji_error_rate {snap['error_rate']}")
+
+    lines.append(
+        "# HELP jji_errors_by_class Errors by HTTP status class in the rolling window."
+    )
+    lines.append("# TYPE jji_errors_by_class gauge")
+    for cls, count in sorted(snap["error_counts"].items()):
+        lines.append(f'jji_errors_by_class{{status_class="{cls}"}} {count}')
+
+    lines.append("")
+    return "\n".join(lines)

@@ -44,6 +44,13 @@ from jenkins_job_insight.encryption import (
     encrypt_sensitive_fields,
 )
 from jenkins_job_insight.jira import enrich_with_jira_matches
+from jenkins_job_insight.monitoring import (
+    build_health_response,
+    dispatch_alert,
+    error_tracker,
+    render_prometheus_metrics,
+    validate_startup_config,
+)
 from jenkins_job_insight.reportportal import AmbiguousLaunchError, ReportPortalClient
 from jenkins_job_insight.bug_creation import (
     _parse_github_repo_url,
@@ -498,6 +505,12 @@ async def _deferred_resume_waiting_jobs(waiting_jobs: list[dict]) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _install_job_id_filter()
+
+    # Startup config validation
+    config_warnings = validate_startup_config()
+    for warning in config_warnings:
+        logger.warning("[startup] %s", warning)
+
     await init_db()
     await storage.cleanup_expired_sessions()
     waiting_jobs = await storage.mark_stale_results_failed()
@@ -527,6 +540,36 @@ if _FRONTEND_DIR.is_dir():
     )
 
 
+class ErrorTrackingMiddleware(BaseHTTPMiddleware):
+    """Track request counts and error rates for monitoring."""
+
+    _SKIP_PATHS = frozenset({"/health", "/api/health", "/metrics", "/favicon.ico"})
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in self._SKIP_PATHS:
+            return await call_next(request)
+        response = await call_next(request)
+        error_tracker.record_request(response.status_code)
+        # Fire-and-forget alert on high error rates
+        if response.status_code >= 500:
+            try:
+                snap = error_tracker.snapshot()
+                if snap["error_rate"] > 0.5 and snap["total_requests"] >= 10:
+                    task = asyncio.create_task(
+                        dispatch_alert(
+                            "high_error_rate",
+                            f"\u26a0\ufe0f JJI high error rate: {snap['error_rate']:.0%} "
+                            f"({snap['total_errors']}/{snap['total_requests']} requests "
+                            f"in {snap['window_seconds']}s window)",
+                        )
+                    )
+                    _background_tasks.add(task)
+                    task.add_done_callback(_background_tasks.discard)
+            except Exception:
+                pass  # Never crash the app for alerting
+        return response
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     """Authenticate requests: admin via session/Bearer, regular users via cookie."""
 
@@ -534,6 +577,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         {
             "/register",
             "/health",
+            "/api/health",
+            "/metrics",
             "/favicon.ico",
         }
     )
@@ -617,6 +662,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(AuthMiddleware)
+app.add_middleware(ErrorTrackingMiddleware)
 
 
 @app.get("/", include_in_schema=False)
@@ -3490,8 +3536,31 @@ async def get_ai_configs_endpoint() -> list[dict]:
 
 @app.get("/health")
 async def health_check() -> dict:
-    """Health check endpoint."""
+    """Basic health check endpoint (legacy, lightweight)."""
     return {"status": "healthy"}
+
+
+@app.get("/api/health")
+async def health_check_detailed() -> Response:
+    """Detailed health endpoint with dependency checks and error rates.
+
+    Returns:
+        200 for healthy/degraded, 503 for unhealthy.
+    """
+    settings = get_settings()
+    db_path = str(storage.DB_PATH)
+    result = await build_health_response(settings, db_path)
+    status_code = 503 if result["status"] == "unhealthy" else 200
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@app.get("/metrics")
+async def prometheus_metrics() -> Response:
+    """Prometheus metrics endpoint."""
+    return Response(
+        content=render_prometheus_metrics(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @app.get("/favicon.ico", include_in_schema=False)

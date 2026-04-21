@@ -159,8 +159,17 @@ class JJIClient:
     # -- Health ---------------------------------------------------------------
 
     def health(self) -> dict:
-        """Check server health. GET /health"""
-        return self._request("GET", "/health")
+        """Check server health. GET /api/health
+
+        Falls back to GET /health if /api/health returns 404.
+        Accepts both 200 (healthy/degraded) and 503 (unhealthy).
+        """
+        try:
+            return self._request("GET", "/api/health", accept_statuses=(200, 503))
+        except JJIError as exc:
+            if exc.status_code == 404:
+                return self._request("GET", "/health")
+            raise
 
     # -- Results --------------------------------------------------------------
 

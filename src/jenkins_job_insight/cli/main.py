@@ -291,7 +291,25 @@ def health(
     json_output: bool = _JSON_OPTION,
 ):
     """Check server health."""
-    _run_client_command(json_output, lambda c: c.health(), columns=["status"])
+    data = _run_client_command(json_output, lambda c: c.health(), emit_output=False)
+    if not _state.get("json", False):
+        status = data.get("status", "unknown")
+        typer.echo(f"Status: {status}")
+        checks = data.get("checks", {})
+        if checks:
+            typer.echo("\nChecks:")
+            for name, check in checks.items():
+                detail = check.get("detail", "")
+                suffix = f" ({detail})" if detail else ""
+                typer.echo(f"  {name}: {check.get('status', 'unknown')}{suffix}")
+        error_rates = data.get("error_rates", {})
+        if error_rates:
+            typer.echo(
+                f"\nError rate: {error_rates.get('error_rate', 0):.1%} "
+                f"({error_rates.get('total_errors', 0)}/"
+                f"{error_rates.get('total_requests', 0)} in "
+                f"{error_rates.get('window_seconds', 0):.0f}s window)"
+            )
 
 
 # -- Results ------------------------------------------------------------------
