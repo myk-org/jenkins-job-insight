@@ -4236,3 +4236,66 @@ class TestJiraSecurityLevelsEndpoint:
             assert data[0]["name"] == "Internal"
         finally:
             app.dependency_overrides.pop(get_settings, None)
+
+
+class TestMergeSettingsForce:
+    """Tests for force -> force_analysis mapping in _merge_settings."""
+
+    def test_force_true_in_request_sets_force_analysis(self) -> None:
+        """When request.force=True is explicitly set, merged settings have force_analysis=True."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+            force=True,
+        )
+        settings = Settings()
+        merged = _merge_settings(body, settings)
+        assert merged.force_analysis is True
+
+    def test_force_false_in_request_sets_force_analysis_false(self) -> None:
+        """When request.force=False is explicitly set, merged settings have force_analysis=False."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+            force=False,
+        )
+        # Start with settings that have force_analysis=True
+        settings_data = Settings().model_dump(mode="python")
+        settings_data["force_analysis"] = True
+        settings = Settings.model_validate(settings_data)
+        merged = _merge_settings(body, settings)
+        assert merged.force_analysis is False
+
+    def test_force_omitted_preserves_settings_default(self) -> None:
+        """When force is omitted from request, settings.force_analysis is preserved."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+        )
+        settings_data = Settings().model_dump(mode="python")
+        settings_data["force_analysis"] = True
+        settings = Settings.model_validate(settings_data)
+        merged = _merge_settings(body, settings)
+        assert merged.force_analysis is True
+
+    def test_force_omitted_default_false(self) -> None:
+        """When force is omitted and settings default, force_analysis is False."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+        )
+        settings = Settings()
+        merged = _merge_settings(body, settings)
+        assert merged.force_analysis is False
