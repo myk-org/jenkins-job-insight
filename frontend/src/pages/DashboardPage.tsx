@@ -138,10 +138,11 @@ export function DashboardPage() {
   const [deleteTarget, setDeleteTarget] = useState<DashboardJob | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+
+  const showCheckboxes = selectedIds.size > 0
 
   const fetchSeqRef = useRef(0)
   const inFlightRef = useRef(false)
@@ -246,8 +247,7 @@ export function DashboardPage() {
     }
   }
 
-  function exitSelectMode() {
-    setSelectMode(false)
+  function clearSelection() {
     setSelectedIds(new Set())
   }
 
@@ -258,7 +258,7 @@ export function DashboardPage() {
       const deletedSet = new Set(data.deleted)
       fetchSeqRef.current += 1
       setJobs(prev => prev.filter(j => !deletedSet.has(j.job_id)))
-      exitSelectMode()
+      clearSelection()
     } catch (err) {
       console.error('Failed to bulk delete:', err)
     } finally {
@@ -340,16 +340,7 @@ export function DashboardPage() {
                 <SelectItem value="50">50</SelectItem>
               </SelectContent>
             </Select>
-            {isAdmin && !selectMode && (
-              <Button variant="outline" size="sm" onClick={() => setSelectMode(true)}>
-                Select
-              </Button>
-            )}
-            {isAdmin && selectMode && (
-              <Button variant="ghost" size="sm" onClick={exitSelectMode}>
-                Cancel
-              </Button>
-            )}
+
           </div>
         </div>
 
@@ -379,13 +370,13 @@ export function DashboardPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-surface-card hover:bg-surface-card">
-                {selectMode && (
+                {isAdmin && (
                   <TableHead className="w-10">
                     <input
                       type="checkbox"
                       checked={pageJobs.length > 0 && selectedIds.size === pageJobs.length}
                       onChange={toggleSelectAll}
-                      className="rounded border-border-default"
+                      className="h-4 w-4 cursor-pointer appearance-none rounded border border-text-tertiary bg-surface-elevated checked:bg-signal-blue checked:border-signal-blue checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-no-repeat checked:bg-center transition-all"
                       aria-label="Select all"
                     />
                   </TableHead>
@@ -415,18 +406,18 @@ export function DashboardPage() {
                 return (
                   <TableRow
                     key={job.job_id}
-                    className={`group cursor-pointer animate-slide-up ${i % 2 === 0 ? 'bg-surface-card' : 'bg-surface-elevated/40'}`}
+                    className={`group cursor-pointer animate-slide-up ${selectedIds.has(job.job_id) ? 'bg-accent-blue/10' : i % 2 === 0 ? 'bg-surface-card' : 'bg-surface-elevated/40'}`}
                     style={{ animationDelay: `${i * 30}ms`, animationFillMode: 'backwards' }}
-                    onClick={() => selectMode ? toggleSelect(job.job_id) : handleRowClick(job)}
+                    onClick={() => selectedIds.size > 0 ? toggleSelect(job.job_id) : handleRowClick(job)}
                   >
-                    {selectMode && (
-                      <TableCell>
+                    {isAdmin && (
+                      <TableCell className="w-10">
                         <input
                           type="checkbox"
                           checked={selectedIds.has(job.job_id)}
                           onChange={(e) => { e.stopPropagation(); toggleSelect(job.job_id) }}
                           onClick={(e) => e.stopPropagation()}
-                          className="rounded border-border-default"
+                          className={`h-4 w-4 cursor-pointer appearance-none rounded border border-text-tertiary bg-surface-elevated checked:bg-signal-blue checked:border-signal-blue checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-no-repeat checked:bg-center transition-all ${showCheckboxes ? '' : 'opacity-0 group-hover:opacity-100'}`}
                           aria-label={`Select ${getJobDisplayName(job)}`}
                         />
                       </TableCell>
@@ -560,14 +551,14 @@ export function DashboardPage() {
           <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
         )}
 
-        {selectMode && selectedIds.size > 0 && (
+        {selectedIds.size > 0 && (
           <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border-muted bg-surface-card/95 backdrop-blur-sm px-6 py-3 animate-slide-up">
             <div className="mx-auto flex max-w-screen-xl items-center justify-between">
               <span className="text-sm text-text-secondary">
                 {selectedIds.size} {selectedIds.size === 1 ? 'job' : 'jobs'} selected
               </span>
               <div className="flex items-center gap-3">
-                <Button variant="ghost" size="sm" onClick={exitSelectMode}>
+                <Button variant="ghost" size="sm" onClick={clearSelection}>
                   Cancel
                 </Button>
                 <Button
@@ -576,7 +567,7 @@ export function DashboardPage() {
                   onClick={() => setBulkDeleteConfirm(true)}
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                  Delete Selected
+                  Delete ({selectedIds.size})
                 </Button>
               </div>
             </div>
