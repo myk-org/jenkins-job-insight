@@ -1292,6 +1292,7 @@ async def analyze(
 
     Returns immediately with a job_id. Poll /results/{job_id} for status.
     """
+    _check_allow_list(request)
     logger.debug(f"Starting analysis for {body.job_name} #{body.build_number}")
     base_url = _extract_base_url()
 
@@ -1325,6 +1326,7 @@ async def analyze_failures(
     When raw_xml is provided, failures are extracted from the XML and the enriched
     XML with analysis results is included in the response.
     """
+    _check_allow_list(request)
     logger.debug(
         f"POST /analyze-failures: failures_count={len(body.failures) if body.failures else 0}, has_raw_xml={body.raw_xml is not None}"
     )
@@ -1541,6 +1543,7 @@ async def re_analyze(
     overrides from the request body, and queues a new analysis with a
     fresh job_id.
     """
+    _check_allow_list(request)
     base_url = _extract_base_url()
 
     # Load the original result (with sensitive fields for credential reuse)
@@ -1791,6 +1794,7 @@ async def add_comment(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Add a comment to a test failure."""
+    _check_allow_list(request)
     logger.debug(f"POST /results/{job_id}/comments: test_name={body.test_name}")
     await _validate_test_name_in_result(
         job_id, body.test_name, body.child_job_name, body.child_build_number
@@ -1825,6 +1829,7 @@ async def delete_comment_endpoint(
     Admin users can delete any comment. Regular users can only delete
     their own comments (matched by username).
     """
+    _check_allow_list(request)
     logger.debug(f"DELETE /results/{job_id}/comments/{comment_id}")
     username = request.state.username
     if not username:
@@ -1852,6 +1857,7 @@ async def set_reviewed(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Toggle the reviewed state for a test failure."""
+    _check_allow_list(request)
     logger.debug(
         f"PUT /results/{job_id}/reviewed: test_name={body.test_name}, reviewed={body.reviewed}"
     )
@@ -1879,10 +1885,12 @@ async def set_reviewed(
 @app.post("/results/{job_id}/enrich-comments")
 async def enrich_comments(
     job_id: str,
+    request: Request,
     settings: Settings = Depends(get_settings),
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Fetch live statuses for GitHub PRs and Jira tickets found in comments."""
+    _check_allow_list(request)
     logger.debug(f"POST /results/{job_id}/enrich-comments")
     from jenkins_job_insight.comment_enrichment import (
         detect_github_issues,
@@ -2079,6 +2087,7 @@ async def preview_github_issue(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Generate preview content for a GitHub issue from a failure analysis."""
+    _check_allow_list(request)
     logger.debug(
         f"POST /results/{job_id}/preview-github-issue: test_name={body.test_name}"
     )
@@ -2150,6 +2159,7 @@ async def preview_jira_bug(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Generate preview content for a Jira bug from a failure analysis."""
+    _check_allow_list(request)
     logger.debug(f"POST /results/{job_id}/preview-jira-bug: test_name={body.test_name}")
     if not _jira_issue_creation_enabled(settings):
         raise HTTPException(
@@ -2363,6 +2373,7 @@ async def create_github_issue_endpoint(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Create a GitHub issue from a failure analysis."""
+    _check_allow_list(request)
     logger.debug(
         f"POST /results/{job_id}/create-github-issue: test_name={body.test_name}"
     )
@@ -2455,6 +2466,7 @@ async def create_jira_bug_endpoint(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Create a Jira bug from a failure analysis."""
+    _check_allow_list(request)
     logger.debug(f"POST /results/{job_id}/create-jira-bug: test_name={body.test_name}")
 
     if not _jira_issue_creation_enabled(settings):
@@ -2534,6 +2546,7 @@ async def create_jira_bug_endpoint(
 @app.post("/results/{job_id}/push-reportportal", response_model=ReportPortalPushResult)
 async def push_to_reportportal(
     job_id: str,
+    request: Request,
     child_job_name: str | None = Query(
         default=None, description="Child job name for pipeline child push"
     ),
@@ -2548,6 +2561,7 @@ async def push_to_reportportal(
     Finds the matching RP launch, matches failed items to JJI failures,
     and updates each item's defect type and comment.
     """
+    _check_allow_list(request)
     if not settings.reportportal_enabled:
         raise HTTPException(
             status_code=400,
@@ -3039,6 +3053,7 @@ async def override_classification_endpoint(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Override the classification of a failure (CODE ISSUE, PRODUCT BUG, or INFRASTRUCTURE)."""
+    _check_allow_list(request)
     logger.debug(
         f"PUT /results/{job_id}/override-classification: test_name={body.test_name}, "
         f"classification={body.classification}"
@@ -3404,6 +3419,7 @@ async def get_job_stats_endpoint(
 @app.post("/history/classify", status_code=201)
 async def classify_test(request: Request, body: ClassifyTestRequest) -> dict:
     """Classify a test as FLAKY, REGRESSION, etc. Used by AI and humans."""
+    _check_allow_list(request)
     logger.debug(
         f"POST /history/classify: test_name={body.test_name!r}, classification={body.classification!r}"
     )
@@ -3530,6 +3546,26 @@ def _require_admin(request: Request) -> None:
     """Raise 403 if the request is not from an authenticated admin."""
     if not request.state.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def _check_allow_list(request: Request) -> None:
+    """Raise 403 if the requesting user is not on the allow list.
+
+    When the allow list is empty (default), all users are permitted.
+    Admin users always bypass the allow list check.
+    """
+    settings = get_settings()
+    allowed = settings.allowed_users_set
+    if not allowed:
+        return  # Open access — no restriction
+    if request.state.is_admin:
+        return  # Admins always bypass
+    username = (request.state.username or "").strip().lower()
+    if not username or username not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="User not allowed. Contact an administrator to be added to the allow list.",
+        )
 
 
 @app.post("/api/auth/login")
