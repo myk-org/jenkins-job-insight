@@ -235,32 +235,40 @@ class TestHealthChecks:
 class TestStartupConfigValidation:
     """Tests for validate_startup_config."""
 
-    def test_no_warnings_with_good_config(self):
+    def test_no_warnings_with_good_config(self, tmp_path):
+        db_path = str(tmp_path / "test.db")
         env = {
             "AI_PROVIDER": "claude",
             "AI_MODEL": "test-model",
             "JJI_ENCRYPTION_KEY": "test-key",
-            "DB_PATH": "/tmp/test.db",
+            "DB_PATH": db_path,
+            "JENKINS_URL": "https://jenkins.example.com",
+            "JIRA_URL": "https://jira.example.com",
+            "REPORTPORTAL_URL": "https://rp.example.com",
+            "PEER_AI_CONFIGS": "claude:model1",
+            "ADMIN_KEY": "test-admin-key",
         }
         with patch.dict(os.environ, env, clear=True):
-            warnings = validate_startup_config()
-        # May still warn about DB_PATH dir not existing, filter to known warnings
-        ai_warnings = [w for w in warnings if "AI_PROVIDER" in w or "AI_MODEL" in w]
+            result = validate_startup_config()
+        ai_warnings = [
+            w for w in result.warnings if "AI_PROVIDER" in w or "AI_MODEL" in w
+        ]
         assert len(ai_warnings) == 0
+        assert len(result.errors) == 0
 
     def test_missing_ai_provider(self):
         with patch.dict(os.environ, {}, clear=True):
             env = {k: v for k, v in os.environ.items() if k != "AI_PROVIDER"}
             with patch.dict(os.environ, env, clear=True):
-                warnings = validate_startup_config()
-        assert any("AI_PROVIDER" in w for w in warnings)
+                result = validate_startup_config()
+        assert any("AI_PROVIDER" in w for w in result.warnings)
 
     def test_missing_encryption_key(self):
         with patch.dict(
             os.environ, {"AI_PROVIDER": "claude", "AI_MODEL": "test"}, clear=True
         ):
-            warnings = validate_startup_config()
-        assert any("JJI_ENCRYPTION_KEY" in w for w in warnings)
+            result = validate_startup_config()
+        assert any("JJI_ENCRYPTION_KEY" in w for w in result.warnings)
 
     def test_bad_slack_url(self):
         with patch.dict(
@@ -272,8 +280,8 @@ class TestStartupConfigValidation:
             },
             clear=True,
         ):
-            warnings = validate_startup_config()
-        assert any("SLACK_WEBHOOK_URL" in w for w in warnings)
+            result = validate_startup_config()
+        assert any("SLACK_WEBHOOK_URL" in w for w in result.warnings)
 
     def test_smtp_without_alert_to(self):
         with patch.dict(
@@ -285,8 +293,21 @@ class TestStartupConfigValidation:
             },
             clear=True,
         ):
-            warnings = validate_startup_config()
-        assert any("ALERT_EMAIL_TO" in w for w in warnings)
+            result = validate_startup_config()
+        assert any("ALERT_EMAIL_TO" in w for w in result.warnings)
+
+    def test_db_path_missing_dir_is_error(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AI_PROVIDER": "claude",
+                "AI_MODEL": "test",
+                "DB_PATH": "/nonexistent/path/test.db",
+            },
+            clear=True,
+        ):
+            result = validate_startup_config()
+        assert any("DB_PATH" in e for e in result.errors)
 
 
 # ---------------------------------------------------------------------------
@@ -480,7 +501,6 @@ class TestHealthEndpointIntegration:
         from jenkins_job_insight import storage
 
         env = {
-            "JENKINS_URL": "https://jenkins.example.com",
             "JENKINS_USER": "testuser",
             "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
             "GEMINI_API_KEY": "test-key",  # pragma: allowlist secret
@@ -490,7 +510,14 @@ class TestHealthEndpointIntegration:
 
             get_settings.cache_clear()
             try:
-                with mock_patch.object(storage, "DB_PATH", temp_db_path):
+                with (
+                    mock_patch.object(storage, "DB_PATH", temp_db_path),
+                    mock_patch(
+                        "jenkins_job_insight.monitoring.check_jenkins",
+                        new_callable=AsyncMock,
+                        return_value={"status": "not_configured"},
+                    ),
+                ):
                     from starlette.testclient import TestClient
                     from jenkins_job_insight.main import app
 
