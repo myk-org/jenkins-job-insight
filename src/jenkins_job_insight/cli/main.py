@@ -1,5 +1,7 @@
 """jji -- CLI tool for the jenkins-job-insight REST API."""
 
+from typing import Optional
+
 import typer
 
 from jenkins_job_insight.cli.client import JJIClient, JJIError
@@ -381,20 +383,52 @@ def results_show(
 
 @results_app.command("delete")
 def results_delete(
-    job_id: str = typer.Argument(help="Job ID to delete."),
+    job_ids: Optional[list[str]] = typer.Argument(
+        default=None, help="Job ID(s) to delete."
+    ),
+    all_jobs: bool = typer.Option(False, "--all", help="Delete all jobs."),
+    confirm: bool = typer.Option(
+        False, "--confirm", help="Skip confirmation prompt (required with --all)."
+    ),
     json_output: bool = _JSON_OPTION,
 ):
-    """Delete a job and all related data."""
+    """Delete one or more jobs and all related data."""
     _set_json(json_output)
     try:
         client = _get_client()
-        data = client.delete_job(job_id)
+        if all_jobs:
+            if not confirm:
+                typer.confirm("Delete ALL jobs? This cannot be undone", abort=True)
+            # Fetch all job IDs from the dashboard
+            dashboard = client.dashboard()
+            job_ids = [j["job_id"] for j in dashboard]
+            if not job_ids:
+                typer.echo("No jobs to delete.")
+                raise typer.Exit()
+        elif not job_ids:
+            typer.echo("Error: provide at least one JOB_ID or use --all.")
+            raise typer.Exit(code=1)
+
+        if len(job_ids) == 1:
+            data = client.delete_job(job_ids[0])
+            if _state.get("json", False):
+                print_output(data, columns=[], as_json=True)
+            else:
+                typer.echo(f"Deleted job {data.get('job_id', job_ids[0])}")
+        else:
+            data = client.delete_jobs_bulk(job_ids)
+            if _state.get("json", False):
+                print_output(data, columns=[], as_json=True)
+            else:
+                deleted = data.get("deleted", [])
+                failed = data.get("failed", [])
+                typer.echo(
+                    f"Deleted {len(deleted)} of {data.get('total', len(job_ids))} jobs"
+                )
+                for f in failed:
+                    typer.echo(f"  Failed: {f['job_id']} — {f['reason']}")
     except JJIError as err:
         _handle_error(err)
-    if _state.get("json", False):
-        print_output(data, columns=[], as_json=True)
-    else:
-        typer.echo(f"Deleted job {data.get('job_id', job_id)}")
 
 
 # -- Review -------------------------------------------------------------------

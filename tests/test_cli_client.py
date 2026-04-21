@@ -91,6 +91,21 @@ class TestJJIClientResults:
         result = client.delete_job("abc-123")
         assert result["status"] == "deleted"
 
+    def test_delete_jobs_bulk(self):
+        def handler(request):
+            assert request.method == "DELETE"
+            assert request.url.path == "/api/results/bulk"
+            body = json.loads(request.content)
+            assert body["job_ids"] == ["abc", "def"]
+            return httpx.Response(
+                200, json={"deleted": ["abc", "def"], "failed": [], "total": 2}
+            )
+
+        client = _make_client(handler)
+        result = client.delete_jobs_bulk(["abc", "def"])
+        assert result["deleted"] == ["abc", "def"]
+        assert result["total"] == 2
+
 
 class TestJJIClientDashboard:
     def test_dashboard(self):

@@ -136,6 +136,49 @@ class TestResultsCommands:
         assert result.exit_code == 0
         assert "deleted" in result.output.lower()
 
+    def test_results_delete_bulk(self, mock_client):
+        mock_client.delete_jobs_bulk.return_value = {
+            "deleted": ["abc", "def"],
+            "failed": [],
+            "total": 2,
+        }
+        result = runner.invoke(app, ["results", "delete", "abc", "def"])
+        assert result.exit_code == 0
+        assert "Deleted 2 of 2 jobs" in result.output
+        mock_client.delete_jobs_bulk.assert_called_once_with(["abc", "def"])
+
+    def test_results_delete_bulk_with_failures(self, mock_client):
+        mock_client.delete_jobs_bulk.return_value = {
+            "deleted": ["abc"],
+            "failed": [{"job_id": "def", "reason": "not found"}],
+            "total": 2,
+        }
+        result = runner.invoke(app, ["results", "delete", "abc", "def"])
+        assert result.exit_code == 0
+        assert "Deleted 1 of 2 jobs" in result.output
+        assert "Failed: def" in result.output
+
+    def test_results_delete_all(self, mock_client):
+        mock_client.dashboard.return_value = [
+            {"job_id": "a"},
+            {"job_id": "b"},
+            {"job_id": "c"},
+        ]
+        mock_client.delete_jobs_bulk.return_value = {
+            "deleted": ["a", "b", "c"],
+            "failed": [],
+            "total": 3,
+        }
+        result = runner.invoke(app, ["results", "delete", "--all", "--confirm"])
+        assert result.exit_code == 0
+        assert "Deleted 3 of 3 jobs" in result.output
+
+    def test_results_delete_all_empty(self, mock_client):
+        mock_client.dashboard.return_value = []
+        result = runner.invoke(app, ["results", "delete", "--all", "--confirm"])
+        assert result.exit_code == 0
+        assert "No jobs to delete" in result.output
+
 
 class TestReviewStatusCommand:
     def test_review_status(self, mock_client):

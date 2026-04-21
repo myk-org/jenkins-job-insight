@@ -233,6 +233,53 @@ class TestDeleteJobAdminOnly:
         assert resp.status_code == 404  # Not found, not forbidden
 
 
+class TestBulkDeleteAdminOnly:
+    def test_bulk_delete_requires_admin(self, client):
+        """Regular users cannot bulk delete jobs."""
+        resp = client.request(
+            "DELETE",
+            "/api/results/bulk",
+            json={"job_ids": ["a", "b"]},
+            cookies={"jji_username": "regular"},
+        )
+        assert resp.status_code == 403
+
+    def test_bulk_delete_no_auth(self, client):
+        """Unauthenticated users cannot bulk delete jobs."""
+        resp = client.request(
+            "DELETE",
+            "/api/results/bulk",
+            json={"job_ids": ["a", "b"]},
+        )
+        assert resp.status_code == 403
+
+    def test_bulk_delete_as_admin(self, client):
+        """Admin can bulk delete jobs."""
+        cookies = _admin_login(client)
+        resp = client.request(
+            "DELETE",
+            "/api/results/bulk",
+            json={"job_ids": ["nonexistent-1", "nonexistent-2"]},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted"] == []
+        assert len(data["failed"]) == 2
+        assert data["total"] == 2
+
+    def test_bulk_delete_empty_list(self, client):
+        """Empty job_ids list returns 400."""
+        cookies = _admin_login(client)
+        resp = client.request(
+            "DELETE",
+            "/api/results/bulk",
+            json={"job_ids": []},
+            cookies=cookies,
+        )
+        assert resp.status_code == 400
+
+
 class TestBearerTokenAuth:
     def test_bearer_admin_key(self, client):
         """Bearer token with admin_key works."""

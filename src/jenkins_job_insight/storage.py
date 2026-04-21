@@ -1959,6 +1959,40 @@ async def delete_job(job_id: str) -> bool:
         return job_existed
 
 
+async def delete_jobs_bulk(job_ids: list[str]) -> dict:
+    """Delete multiple jobs and all their related data in a single transaction.
+
+    Returns dict with 'deleted' (list of successfully deleted job_ids) and
+    'failed' (list of dicts with 'job_id' and 'reason' for failures).
+    """
+    deleted = []
+    failed = []
+    async with aiosqlite.connect(DB_PATH) as db:
+        for job_id in job_ids:
+            try:
+                await db.execute("DELETE FROM comments WHERE job_id = ?", (job_id,))
+                await db.execute(
+                    "DELETE FROM failure_reviews WHERE job_id = ?", (job_id,)
+                )
+                await db.execute(
+                    "DELETE FROM failure_history WHERE job_id = ?", (job_id,)
+                )
+                await db.execute(
+                    "DELETE FROM test_classifications WHERE job_id = ?", (job_id,)
+                )
+                cursor = await db.execute(
+                    "DELETE FROM results WHERE job_id = ?", (job_id,)
+                )
+                if cursor.rowcount > 0:
+                    deleted.append(job_id)
+                else:
+                    failed.append({"job_id": job_id, "reason": "not found"})
+            except Exception as e:
+                failed.append({"job_id": job_id, "reason": str(e)})
+        await db.commit()
+    return {"deleted": deleted, "failed": failed, "total": len(job_ids)}
+
+
 async def override_classification(
     job_id: str,
     test_name: str,

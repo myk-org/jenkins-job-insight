@@ -667,3 +667,9 @@ class ReportPortalPushResult(BaseModel):
         description="Error messages from failed RP API calls",
     )
     launch_id: int | None = Field(default=None, description="Report Portal launch ID")
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request body for bulk-deleting jobs."""
+
+    job_ids: list[str] = Field(..., max_length=500)

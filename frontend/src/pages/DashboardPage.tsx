@@ -138,6 +138,10 @@ export function DashboardPage() {
   const [deleteTarget, setDeleteTarget] = useState<DashboardJob | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
 
   const fetchSeqRef = useRef(0)
   const inFlightRef = useRef(false)
@@ -225,6 +229,44 @@ export function DashboardPage() {
     if (page !== safePage) setPage(safePage)
   }, [page, safePage])
 
+  function toggleSelect(jobId: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(jobId)) next.delete(jobId)
+      else next.add(jobId)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === pageJobs.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(pageJobs.map(j => j.job_id)))
+    }
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+  }
+
+  async function handleBulkDelete() {
+    setBulkDeleting(true)
+    try {
+      const data = await api.delete<{ deleted: string[]; failed: { job_id: string; reason: string }[] }>('/api/results/bulk', { job_ids: [...selectedIds] })
+      const deletedSet = new Set(data.deleted)
+      fetchSeqRef.current += 1
+      setJobs(prev => prev.filter(j => !deletedSet.has(j.job_id)))
+      exitSelectMode()
+    } catch (err) {
+      console.error('Failed to bulk delete:', err)
+    } finally {
+      setBulkDeleting(false)
+      setBulkDeleteConfirm(false)
+    }
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return
     setDeleting(true)
@@ -298,6 +340,16 @@ export function DashboardPage() {
                 <SelectItem value="50">50</SelectItem>
               </SelectContent>
             </Select>
+            {isAdmin && !selectMode && (
+              <Button variant="outline" size="sm" onClick={() => setSelectMode(true)}>
+                Select
+              </Button>
+            )}
+            {isAdmin && selectMode && (
+              <Button variant="ghost" size="sm" onClick={exitSelectMode}>
+                Cancel
+              </Button>
+            )}
           </div>
         </div>
 
@@ -327,6 +379,17 @@ export function DashboardPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-surface-card hover:bg-surface-card">
+                {selectMode && (
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={pageJobs.length > 0 && selectedIds.size === pageJobs.length}
+                      onChange={toggleSelectAll}
+                      className="rounded border-border-default"
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                )}
                 <SortableHeader label="Job" sortKey="job_name" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="w-[40%]" />
                 <SortableHeader label="Status" sortKey="status" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} />
                 <SortableHeader label="Failures" sortKey="failure_count" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-center" />
@@ -354,8 +417,20 @@ export function DashboardPage() {
                     key={job.job_id}
                     className={`group cursor-pointer animate-slide-up ${i % 2 === 0 ? 'bg-surface-card' : 'bg-surface-elevated/40'}`}
                     style={{ animationDelay: `${i * 30}ms`, animationFillMode: 'backwards' }}
-                    onClick={() => handleRowClick(job)}
+                    onClick={() => selectMode ? toggleSelect(job.job_id) : handleRowClick(job)}
                   >
+                    {selectMode && (
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(job.job_id)}
+                          onChange={(e) => { e.stopPropagation(); toggleSelect(job.job_id) }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded border-border-default"
+                          aria-label={`Select ${getJobDisplayName(job)}`}
+                        />
+                      </TableCell>
+                    )}
                     {/* Job name + build (with left accent border) */}
                     <TableCell className={`border-l-4 ${borderColor}`}>
                       <div>
@@ -485,6 +560,29 @@ export function DashboardPage() {
           <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
         )}
 
+        {selectMode && selectedIds.size > 0 && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border-muted bg-surface-card/95 backdrop-blur-sm px-6 py-3 animate-slide-up">
+            <div className="mx-auto flex max-w-screen-xl items-center justify-between">
+              <span className="text-sm text-text-secondary">
+                {selectedIds.size} {selectedIds.size === 1 ? 'job' : 'jobs'} selected
+              </span>
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" size="sm" onClick={exitSelectMode}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteConfirm(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <ConfirmDialog
           open={deleteTarget !== null}
           onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
@@ -494,6 +592,17 @@ export function DashboardPage() {
           variant="destructive"
           onConfirm={handleDelete}
           loading={deleting}
+        />
+
+        <ConfirmDialog
+          open={bulkDeleteConfirm}
+          onOpenChange={(open) => { if (!open) setBulkDeleteConfirm(false) }}
+          title="Delete selected analyses"
+          description={`Permanently delete ${selectedIds.size} ${selectedIds.size === 1 ? 'analysis' : 'analyses'}? This cannot be undone.`}
+          confirmLabel={`Delete ${selectedIds.size}`}
+          variant="destructive"
+          onConfirm={handleBulkDelete}
+          loading={bulkDeleting}
         />
       </div>
     </TooltipProvider>

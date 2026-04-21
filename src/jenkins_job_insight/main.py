@@ -59,6 +59,7 @@ from jenkins_job_insight.models import (
     AnalyzeFailuresRequest,
     AnalyzeRequest,
     BaseAnalysisRequest,
+    BulkDeleteRequest,
     ChildJobAnalysis,
     ClassifyTestRequest,
     CreateIssueRequest,
@@ -3101,6 +3102,28 @@ async def list_job_results(limit: int = Query(50, le=100)) -> list[dict]:
     """List recent analysis jobs."""
     logger.debug(f"GET /results: limit={limit}")
     return await list_results(limit)
+
+
+@app.delete("/api/results/bulk")
+async def bulk_delete_jobs_endpoint(body: BulkDeleteRequest, request: Request) -> dict:
+    """Delete multiple jobs and all related data. Admin only."""
+    _require_admin(request)
+
+    if not body.job_ids:
+        raise HTTPException(status_code=400, detail="job_ids list cannot be empty")
+
+    if len(body.job_ids) > 500:
+        raise HTTPException(
+            status_code=400, detail="Cannot delete more than 500 jobs at once"
+        )
+
+    result = await storage.delete_jobs_bulk(body.job_ids)
+
+    # Audit log each deletion individually
+    for job_id in result["deleted"]:
+        logger.info(f"[AUDIT] Admin '{request.state.username}' deleted job {job_id}")
+
+    return result
 
 
 @app.delete("/results/{job_id}")
