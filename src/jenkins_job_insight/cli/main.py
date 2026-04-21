@@ -407,7 +407,14 @@ def results_delete(
             dashboard_jobs = client.dashboard()
             job_ids = [j["job_id"] for j in dashboard_jobs]
             if not job_ids:
-                typer.echo("No jobs to delete.")
+                if _state.get("json", False):
+                    print_output(
+                        {"deleted": [], "failed": [], "total": 0},
+                        columns=[],
+                        as_json=True,
+                    )
+                else:
+                    typer.echo("No jobs to delete.")
                 raise typer.Exit()
         elif not job_ids:
             typer.echo("Error: provide at least one JOB_ID or use --all.", err=True)
@@ -430,7 +437,9 @@ def results_delete(
                     chunk_data = client.delete_jobs_bulk(chunk)
                     deleted.extend(chunk_data.get("deleted", []))
                     failed.extend(chunk_data.get("failed", []))
-                except JJIError:
+                except JJIError as err:
+                    if err.status_code in (401, 403):
+                        raise
                     failed.extend(
                         {"job_id": jid, "reason": "batch request failed"}
                         for jid in chunk
