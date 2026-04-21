@@ -43,7 +43,11 @@ def parse_peer_configs(raw: str) -> list[dict]:
 
 
 def parse_additional_repos(raw: str) -> list[dict]:
-    """Parse 'name:url,name:url' into list of dicts.
+    """Parse 'name:url,name:url' or 'name:url:ref@token' into list of dicts.
+
+    Token is separated from the URL (or URL:ref) by ``@token`` at the end.
+    To specify a token without a ref, use ``name:https://host/repo@token``.
+    To specify both ref and token, use ``name:https://host/repo:ref@token``.
 
     Raises ValueError on malformed input. Empty string returns [].
     """
@@ -67,8 +71,16 @@ def parse_additional_repos(raw: str) -> list[dict]:
             raise ValueError(f"Empty name at position {i + 1}: '{entry}'")
         if not url_raw:
             raise ValueError(f"Empty URL at position {i + 1}: '{entry}'")
+        # Extract token: look for @token after the path (not in the netloc)
+        token = _extract_token_from_url_spec(url_raw)
+        if token:
+            # Remove the @token suffix from url_raw
+            url_raw = url_raw[: url_raw.rfind("@" + token)]
         url, ref = parse_repo_ref(url_raw)
-        result.append({"name": name, "url": url, "ref": ref})
+        entry_dict: dict = {"name": name, "url": url, "ref": ref}
+        if token:
+            entry_dict["token"] = token
+        result.append(entry_dict)
 
     names = [r["name"] for r in result]
     dupes = [n for n in names if names.count(n) > 1]
@@ -78,6 +90,32 @@ def parse_additional_repos(raw: str) -> list[dict]:
         )
 
     return result
+
+
+def _extract_token_from_url_spec(url_spec: str) -> str:
+    """Extract a token from a URL spec like 'https://host/repo@token'.
+
+    The token is the part after the last '@' that appears after the
+    URL's netloc (i.e., in the path portion). Returns empty string
+    if no token is found.
+    """
+    parts = urlsplit(url_spec)
+    # Check for @token in the path portion (after netloc)
+    # The token is the last @-separated segment of the full path+ref portion
+    full_after_netloc = url_spec
+    if parts.scheme and parts.netloc:
+        scheme_netloc = f"{parts.scheme}://{parts.netloc}"
+        full_after_netloc = url_spec[len(scheme_netloc) :]
+
+    if "@" not in full_after_netloc:
+        return ""
+
+    # The token is everything after the last '@' in the path portion
+    candidate = full_after_netloc.rsplit("@", 1)[1]
+    # Token should not contain '/' or ':' (those indicate it's part of the URL)
+    if "/" in candidate or ":" in candidate or not candidate:
+        return ""
+    return candidate
 
 
 def parse_repo_ref(raw: str) -> tuple[str, str]:

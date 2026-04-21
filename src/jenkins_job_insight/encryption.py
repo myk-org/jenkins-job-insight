@@ -145,6 +145,79 @@ def _get_fernet() -> Fernet:
     return Fernet(_derive_fernet_key(_resolve_encryption_secret()))
 
 
+def _encrypt_additional_repos_tokens(
+    repos: list, fernet: Fernet | None
+) -> tuple[list, Fernet | None]:
+    """Encrypt token fields inside additional_repos entries.
+
+    Returns the updated list and the (possibly lazily-created) Fernet instance.
+    """
+    result = []
+    for entry in repos:
+        if not isinstance(entry, dict):
+            result.append(entry)
+            continue
+        token_val = entry.get("token")
+        if (
+            isinstance(token_val, str)
+            and token_val
+            and not token_val.startswith(_ENCRYPTED_PREFIX)
+        ):
+            if fernet is None:
+                fernet = _get_fernet()
+            enc = fernet.encrypt(token_val.encode()).decode()
+            result.append({**entry, "token": f"{_ENCRYPTED_PREFIX}{enc}"})
+        else:
+            result.append(entry)
+    return result, fernet
+
+
+def _decrypt_additional_repos_tokens(
+    repos: list, fernet: Fernet | None
+) -> tuple[list, Fernet | None]:
+    """Decrypt token fields inside additional_repos entries.
+
+    Returns the updated list and the (possibly lazily-created) Fernet instance.
+    """
+    result = []
+    for entry in repos:
+        if not isinstance(entry, dict):
+            result.append(entry)
+            continue
+        token_val = entry.get("token")
+        if (
+            isinstance(token_val, str)
+            and token_val
+            and token_val.startswith(_ENCRYPTED_PREFIX)
+        ):
+            if fernet is None:
+                fernet = _get_fernet()
+            ciphertext = token_val[len(_ENCRYPTED_PREFIX) :]
+            try:
+                decrypted = fernet.decrypt(ciphertext.encode()).decode()
+                result.append({**entry, "token": decrypted})
+            except InvalidToken:
+                logger.warning(
+                    "Failed to decrypt additional_repos token: encryption key may have changed."
+                )
+                result.append(entry)
+        else:
+            result.append(entry)
+    return result, fernet
+
+
+def _strip_additional_repos_tokens(repos: list) -> list:
+    """Remove token fields from additional_repos entries for API responses."""
+    result = []
+    for entry in repos:
+        if isinstance(entry, dict):
+            stripped = {k: v for k, v in entry.items() if k != "token"}
+            result.append(stripped)
+        else:
+            result.append(entry)
+    return result
+
+
 def encrypt_sensitive_fields(params: dict) -> dict:
     """Return a shallow copy of *params* with sensitive values encrypted.
 
@@ -152,6 +225,8 @@ def encrypt_sensitive_fields(params: dict) -> dict:
     encrypted.  Values are prefixed with ``enc:`` so that
     :func:`decrypt_sensitive_fields` can distinguish them from legacy
     plaintext values.
+
+    Also encrypts ``token`` fields nested inside ``additional_repos`` entries.
 
     The Fernet instance is lazily initialised: when no sensitive field
     carries a non-empty string value, the key file is never touched.
@@ -165,6 +240,12 @@ def encrypt_sensitive_fields(params: dict) -> dict:
                 fernet = _get_fernet()
             token = fernet.encrypt(value.encode()).decode()
             result[key] = f"{_ENCRYPTED_PREFIX}{token}"
+    # Handle nested tokens in additional_repos
+    additional_repos = result.get("additional_repos")
+    if isinstance(additional_repos, list):
+        result["additional_repos"], fernet = _encrypt_additional_repos_tokens(
+            additional_repos, fernet
+        )
     return result
 
 
@@ -200,6 +281,10 @@ def strip_sensitive_from_response(result_data: dict) -> dict:
     params = dict(request_params)
     for key in RESPONSE_REDACTED_KEYS:
         params.pop(key, None)
+    # Strip tokens from additional_repos entries
+    additional_repos = params.get("additional_repos")
+    if isinstance(additional_repos, list):
+        params["additional_repos"] = _strip_additional_repos_tokens(additional_repos)
     result["request_params"] = params
     return result
 
@@ -254,4 +339,10 @@ def decrypt_sensitive_fields(params: dict) -> dict:
                     f"Failed to decrypt field '{key}': encryption key may have changed. "
                     "The encrypted value will be kept as-is."
                 )
+    # Handle nested tokens in additional_repos
+    additional_repos = result.get("additional_repos")
+    if isinstance(additional_repos, list):
+        result["additional_repos"], fernet = _decrypt_additional_repos_tokens(
+            additional_repos, fernet
+        )
     return result

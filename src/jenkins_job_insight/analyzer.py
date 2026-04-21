@@ -91,6 +91,7 @@ async def clone_additional_repos(
                 target,
                 depth=1,
                 branch=ar.ref,
+                token=ar.token or None,
             )
             cloned[ar.name] = target
             logger.info(f"Cloned additional repo '{ar.name}' into {target}")

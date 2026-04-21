@@ -43,6 +43,11 @@ class AdditionalRepo(BaseModel):
         default="",
         description="Git ref (branch/tag) for clone checkout and UI file links; empty = remote default branch",
     )
+    token: str | None = Field(
+        default=None,
+        description="Authentication token for cloning private repos",
+        json_schema_extra={"format": "password"},
+    )
 
     @field_validator("ref")
     @classmethod
