@@ -547,28 +547,39 @@ class ErrorTrackingMiddleware(BaseHTTPMiddleware):
 
     _SKIP_PATHS = frozenset({"/health", "/api/health", "/metrics", "/favicon.ico"})
 
+    def _schedule_high_error_rate_alert(self) -> None:
+        """Check 5xx error rate and schedule an alert if it exceeds the threshold."""
+        try:
+            snap = error_tracker.snapshot()
+            total_requests = snap["total_requests"]
+            server_errors = snap.get("error_counts", {}).get("5xx", 0)
+            server_error_rate = server_errors / total_requests if total_requests else 0
+            if server_error_rate > 0.5 and total_requests >= 10:
+                task = asyncio.create_task(
+                    dispatch_alert(
+                        "high_error_rate",
+                        f"\u26a0\ufe0f JJI high 5xx error rate: {server_error_rate:.0%} "
+                        f"({server_errors}/{total_requests} requests "
+                        f"in {snap['window_seconds']}s window)",
+                    )
+                )
+                _background_tasks.add(task)
+                task.add_done_callback(_background_tasks.discard)
+        except Exception:
+            logger.debug("Failed to schedule high-error-rate alert", exc_info=True)
+
     async def dispatch(self, request: Request, call_next):
         if request.url.path in self._SKIP_PATHS:
             return await call_next(request)
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            error_tracker.record_request(500)
+            self._schedule_high_error_rate_alert()
+            raise
         error_tracker.record_request(response.status_code)
-        # Fire-and-forget alert on high error rates
         if response.status_code >= 500:
-            try:
-                snap = error_tracker.snapshot()
-                if snap["error_rate"] > 0.5 and snap["total_requests"] >= 10:
-                    task = asyncio.create_task(
-                        dispatch_alert(
-                            "high_error_rate",
-                            f"\u26a0\ufe0f JJI high error rate: {snap['error_rate']:.0%} "
-                            f"({snap['total_errors']}/{snap['total_requests']} requests "
-                            f"in {snap['window_seconds']}s window)",
-                        )
-                    )
-                    _background_tasks.add(task)
-                    task.add_done_callback(_background_tasks.discard)
-            except Exception:
-                pass  # Never crash the app for alerting
+            self._schedule_high_error_rate_alert()
         return response
 
 
