@@ -1,5 +1,6 @@
 """Tests for job metadata storage, API endpoints, and CLI commands."""
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -174,3 +175,151 @@ class TestJobMetadataStorage:
             fetched = await storage.get_job_metadata("my-job")
             assert fetched is not None
             assert fetched["labels"] == []
+
+
+# --- API endpoint tests ---
+
+
+@pytest.fixture
+def mock_settings():
+    env = {
+        "JENKINS_URL": "https://jenkins.example.com",
+        "JENKINS_USER": "testuser",
+        "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
+        "GEMINI_API_KEY": "test-key",  # pragma: allowlist secret
+    }
+    with patch.dict(os.environ, env, clear=True):
+        from jenkins_job_insight.config import get_settings
+
+        get_settings.cache_clear()
+        try:
+            yield
+        finally:
+            get_settings.cache_clear()
+
+
+@pytest.fixture
+def api_client(mock_settings, temp_db_path: Path):
+    with patch.object(storage, "DB_PATH", temp_db_path):
+        from starlette.testclient import TestClient
+        from jenkins_job_insight.main import app
+
+        with TestClient(app) as client:
+            yield client
+
+
+class TestJobMetadataAPI:
+    """Tests for job metadata API endpoints."""
+
+    def test_set_and_get_metadata(self, api_client) -> None:
+        resp = api_client.put(
+            "/api/jobs/my-job/metadata",
+            json={"team": "platform", "tier": "critical", "labels": ["smoke"]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["job_name"] == "my-job"
+        assert data["team"] == "platform"
+
+        resp = api_client.get("/api/jobs/my-job/metadata")
+        assert resp.status_code == 200
+        assert resp.json()["team"] == "platform"
+
+    def test_get_metadata_not_found(self, api_client) -> None:
+        resp = api_client.get("/api/jobs/nonexistent/metadata")
+        assert resp.status_code == 404
+
+    def test_delete_metadata(self, api_client) -> None:
+        api_client.put("/api/jobs/my-job/metadata", json={"team": "alpha"})
+        resp = api_client.delete("/api/jobs/my-job/metadata")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "deleted"
+
+        resp = api_client.get("/api/jobs/my-job/metadata")
+        assert resp.status_code == 404
+
+    def test_delete_metadata_not_found(self, api_client) -> None:
+        resp = api_client.delete("/api/jobs/nonexistent/metadata")
+        assert resp.status_code == 404
+
+    def test_list_metadata(self, api_client) -> None:
+        api_client.put("/api/jobs/job-a/metadata", json={"team": "alpha"})
+        api_client.put("/api/jobs/job-b/metadata", json={"team": "beta"})
+
+        resp = api_client.get("/api/jobs/metadata")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+
+    def test_list_metadata_filter_by_team(self, api_client) -> None:
+        api_client.put("/api/jobs/job-a/metadata", json={"team": "alpha"})
+        api_client.put("/api/jobs/job-b/metadata", json={"team": "beta"})
+
+        resp = api_client.get("/api/jobs/metadata", params={"team": "alpha"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["team"] == "alpha"
+
+    def test_list_metadata_filter_by_label(self, api_client) -> None:
+        api_client.put(
+            "/api/jobs/job-a/metadata",
+            json={"labels": ["nightly", "smoke"]},
+        )
+        api_client.put(
+            "/api/jobs/job-b/metadata",
+            json={"labels": ["nightly"]},
+        )
+
+        resp = api_client.get(
+            "/api/jobs/metadata", params={"label": ["nightly", "smoke"]}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["job_name"] == "job-a"
+
+    def test_bulk_import(self, api_client) -> None:
+        resp = api_client.put(
+            "/api/jobs/metadata/bulk",
+            json={
+                "items": [
+                    {"job_name": "job-a", "team": "alpha"},
+                    {"job_name": "job-b", "team": "beta", "labels": ["ci"]},
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 2
+
+        resp = api_client.get("/api/jobs/job-b/metadata")
+        assert resp.status_code == 200
+        assert resp.json()["labels"] == ["ci"]
+
+    def test_dashboard_filtered_no_filters(self, api_client) -> None:
+        resp = api_client.get("/api/dashboard/filtered")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+    def test_dashboard_filtered_with_team(self, api_client) -> None:
+        # Set metadata for a job
+        api_client.put("/api/jobs/my-job/metadata", json={"team": "alpha"})
+
+        resp = api_client.get("/api/dashboard/filtered", params={"team": "alpha"})
+        assert resp.status_code == 200
+        data = resp.json()
+        # Even if no analysis results, the response should be a list
+        assert isinstance(data, list)
+
+    def test_folder_style_job_name(self, api_client) -> None:
+        """Test that folder-style job names (with /) work correctly."""
+        resp = api_client.put(
+            "/api/jobs/folder/subfolder/my-job/metadata",
+            json={"team": "platform"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["job_name"] == "folder/subfolder/my-job"
+
+        resp = api_client.get("/api/jobs/folder/subfolder/my-job/metadata")
+        assert resp.status_code == 200
+        assert resp.json()["team"] == "platform"
