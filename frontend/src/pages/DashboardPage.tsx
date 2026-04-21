@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { GITHUB_REPO_URL } from '@/lib/constants'
-import type { DashboardJob } from '@/types'
+import type { DashboardJob, DashboardJobWithMetadata } from '@/types'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -37,6 +37,8 @@ import { DateRangeFilter } from '@/components/shared/DateRangeFilter'
 import { useTableSort } from '@/lib/useTableSort'
 import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle, Github } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
+import { MetadataFilterBar } from '@/components/shared/MetadataFilterBar'
+import { MetadataBadges } from '@/components/shared/MetadataBadges'
 
 const STATUS_FILTER_ALL = 'ALL'
 const STATUS_FILTER_OPTIONS = [STATUS_FILTER_ALL, 'completed', 'running', 'waiting', 'pending', 'failed', 'timeout'] as const
@@ -105,7 +107,7 @@ function getJobDisplayName(job: DashboardJob | null | undefined): string {
 export function DashboardPage() {
   const navigate = useNavigate()
   const { isAdmin } = useAuth()
-  const [jobs, setJobs] = useState<DashboardJob[]>([])
+  const [jobs, setJobs] = useState<DashboardJobWithMetadata[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(STATUS_FILTER_ALL)
@@ -115,6 +117,29 @@ export function DashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const dateFrom = searchParams.get('date_from') ?? ''
   const dateTo = searchParams.get('date_to') ?? ''
+
+  // Metadata filter state — persisted in URL query params
+  const metaTeam = searchParams.get('team') ?? ''
+  const metaTier = searchParams.get('tier') ?? ''
+  const metaVersion = searchParams.get('version') ?? ''
+  const metaLabels = searchParams.getAll('label')
+  const setMetaParam = useCallback((key: string, value: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set(key, value)
+      else next.delete(key)
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+  const setMetaLabels = useCallback((labels: string[]) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('label')
+      for (const l of labels) next.append('label', l)
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+  const hasMetadataFilters = !!(metaTeam || metaTier || metaVersion || metaLabels.length > 0)
   const setDateFrom = useCallback((value: string) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
@@ -165,7 +190,15 @@ export function DashboardPage() {
     inFlightRef.current = true
     const thisSeq = ++fetchSeqRef.current
     try {
-      const data = await api.get<DashboardJob[]>('/api/dashboard')
+      let url = '/api/dashboard/filtered'
+      const params = new URLSearchParams()
+      if (metaTeam) params.set('team', metaTeam)
+      if (metaTier) params.set('tier', metaTier)
+      if (metaVersion) params.set('version', metaVersion)
+      for (const l of metaLabels) params.append('label', l)
+      const qs = params.toString()
+      if (qs) url += `?${qs}`
+      const data = await api.get<DashboardJobWithMetadata[]>(url)
       if (thisSeq === fetchSeqRef.current) {
         setError(null)
         setJobs(data)
@@ -180,14 +213,14 @@ export function DashboardPage() {
         setLoading(false)
       }
     }
-  }, [])
+  }, [metaTeam, metaTier, metaVersion, metaLabels])
 
   useEffect(() => {
     fetchJobs()
     const interval = setInterval(fetchJobs, 10_000)
     return () => clearInterval(interval)
   }, [fetchJobs])
-  useEffect(() => { setPage(1) }, [search, statusFilter, perPage, dateFrom, dateTo])
+  useEffect(() => { setPage(1) }, [search, statusFilter, perPage, dateFrom, dateTo, metaTeam, metaTier, metaVersion, metaLabels])
 
   const filtered = useMemo(() => {
     const fromBound = dateFrom ? utcStartOfDateInput(dateFrom) : null
@@ -398,6 +431,18 @@ export function DashboardPage() {
           </div>
         </div>
 
+        {/* Metadata filters */}
+        <MetadataFilterBar
+          team={metaTeam}
+          tier={metaTier}
+          version={metaVersion}
+          labels={metaLabels}
+          onTeamChange={(v) => setMetaParam('team', v)}
+          onTierChange={(v) => setMetaParam('tier', v)}
+          onVersionChange={(v) => setMetaParam('version', v)}
+          onLabelsChange={setMetaLabels}
+        />
+
         {/* Bulk result message */}
         {bulkResultMessage && (
           <div role="alert" className="flex items-center justify-between rounded-lg border border-signal-red/30 bg-signal-red/10 px-4 py-3 text-sm text-signal-red">
@@ -430,7 +475,7 @@ export function DashboardPage() {
         ) : pageJobs.length === 0 && (!error || jobs.length > 0) ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-border-muted bg-surface-card py-16 text-center animate-fade-in">
             <p className="text-text-secondary">
-              {search || statusFilter !== STATUS_FILTER_ALL || dateFrom || dateTo
+              {search || statusFilter !== STATUS_FILTER_ALL || dateFrom || dateTo || hasMetadataFilters
                 ? 'No jobs match your filters.'
                 : 'No analysis runs yet.'}
             </p>
@@ -506,6 +551,7 @@ export function DashboardPage() {
                         {job.build_number !== undefined && (
                           <span className="ml-2 font-mono text-xs text-text-tertiary">#{job.build_number}</span>
                         )}
+                        <MetadataBadges metadata={job.metadata} />
                       </div>
                       {failureHint && (
                         <Tooltip>

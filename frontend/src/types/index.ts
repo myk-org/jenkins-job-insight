@@ -309,3 +309,17 @@ export interface CommentEnrichment {
   key: string
   status: string
 }
+
+// -- Job Metadata ---------------------------------------------------
+
+export interface JobMetadata {
+  job_name: string
+  team: string | null
+  tier: string | null
+  version: string | null
+  labels: string[]
+}
+
+export interface DashboardJobWithMetadata extends DashboardJob {
+  metadata?: JobMetadata | null
+}
