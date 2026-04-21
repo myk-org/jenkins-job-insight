@@ -178,6 +178,16 @@ class Settings(BaseSettings):
     poll_interval_minutes: int = Field(default=2, gt=0)
     max_wait_minutes: int = Field(default=0, ge=0)
 
+    # Allow list — comma-separated usernames allowed to submit/modify data.
+    # Empty means open access (all users allowed). Admin users always bypass.
+    allowed_users: str = Field(
+        default="",
+        description=(
+            "Comma-separated list of usernames allowed to create/modify data. "
+            "Empty = open access (no restriction). Admin users always bypass."
+        ),
+    )
+
     # Admin authentication
     admin_key: str = Field(
         default="", repr=False
@@ -243,6 +253,18 @@ class Settings(BaseSettings):
                     SecretStr(stripped) if stripped else None,
                 )
         return self
+
+    @property
+    def allowed_users_set(self) -> frozenset[str]:
+        """Parse ALLOWED_USERS into a frozen set of lowercase usernames.
+
+        Returns an empty frozenset when unset (open access).
+        """
+        if not self.allowed_users or not self.allowed_users.strip():
+            return frozenset()
+        return frozenset(
+            u.strip().lower() for u in self.allowed_users.split(",") if u.strip()
+        )
 
     @property
     def jira_enabled(self) -> bool:
