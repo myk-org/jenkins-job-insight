@@ -1945,17 +1945,13 @@ async def get_all_failures(
 
 
 async def _delete_job_rows(db: aiosqlite.Connection, job_id: str) -> bool:
-    """Delete a job and all related data from the database. Returns True if the job existed."""
-    cursor = await db.execute("SELECT 1 FROM results WHERE job_id = ?", (job_id,))
-    if await cursor.fetchone() is None:
-        return False
-
+    """Delete all rows for a job across related tables. Returns True if the job existed."""
     await db.execute("DELETE FROM comments WHERE job_id = ?", (job_id,))
     await db.execute("DELETE FROM failure_reviews WHERE job_id = ?", (job_id,))
     await db.execute("DELETE FROM failure_history WHERE job_id = ?", (job_id,))
     await db.execute("DELETE FROM test_classifications WHERE job_id = ?", (job_id,))
-    await db.execute("DELETE FROM results WHERE job_id = ?", (job_id,))
-    return True
+    cursor = await db.execute("DELETE FROM results WHERE job_id = ?", (job_id,))
+    return cursor.rowcount > 0
 
 
 async def delete_job(job_id: str) -> bool:
@@ -1977,26 +1973,21 @@ async def delete_jobs_bulk(job_ids: list[str]) -> dict:
     # Preserve order while dropping duplicates
     unique_ids = list(dict.fromkeys(job_ids))
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("BEGIN IMMEDIATE")
-        try:
-            for idx, job_id in enumerate(unique_ids):
-                savepoint = f"delete_job_{idx}"
-                await db.execute(f"SAVEPOINT {savepoint}")
-                try:
-                    if await _delete_job_rows(db, job_id):
-                        deleted.append(job_id)
-                    else:
-                        failed.append({"job_id": job_id, "reason": "not found"})
-                    await db.execute(f"RELEASE SAVEPOINT {savepoint}")
-                except Exception:
-                    logger.exception("delete_jobs_bulk: failed to delete %s", job_id)
-                    await db.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-                    await db.execute(f"RELEASE SAVEPOINT {savepoint}")
-                    failed.append({"job_id": job_id, "reason": "deletion failed"})
-            await db.commit()
-        except Exception:
-            await db.execute("ROLLBACK")
-            raise
+        for idx, job_id in enumerate(unique_ids):
+            savepoint = f"delete_job_{idx}"
+            await db.execute(f"SAVEPOINT {savepoint}")
+            try:
+                if await _delete_job_rows(db, job_id):
+                    deleted.append(job_id)
+                else:
+                    failed.append({"job_id": job_id, "reason": "not found"})
+                await db.execute(f"RELEASE SAVEPOINT {savepoint}")
+            except Exception:
+                logger.exception("delete_jobs_bulk: failed to delete %s", job_id)
+                await db.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                await db.execute(f"RELEASE SAVEPOINT {savepoint}")
+                failed.append({"job_id": job_id, "reason": "deletion failed"})
+        await db.commit()
     return {"deleted": deleted, "failed": failed, "total": len(unique_ids)}
 
 

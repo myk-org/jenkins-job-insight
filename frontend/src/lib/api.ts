@@ -56,9 +56,15 @@ const requestWithJsonBody = <T>(
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) => requestWithJsonBody<T>('POST', path, body),
-  put: <T>(path: string, body?: unknown) => requestWithJsonBody<T>('PUT', path, body),
-  delete: <T>(path: string, body?: unknown) => requestWithJsonBody<T>('DELETE', path, body),
+
+  post: <T>(path: string, body?: unknown) =>
+    requestWithJsonBody<T>('POST', path, body),
+
+  put: <T>(path: string, body?: unknown) =>
+    requestWithJsonBody<T>('PUT', path, body),
+
+  delete: <T>(path: string, body?: unknown) =>
+    requestWithJsonBody<T>('DELETE', path, body),
 }
 
 

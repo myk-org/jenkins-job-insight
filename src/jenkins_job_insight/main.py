@@ -3105,14 +3105,9 @@ async def list_job_results(limit: int = Query(50, le=100)) -> list[dict]:
 
 
 @app.delete("/api/results/bulk")
-async def bulk_delete_jobs_endpoint(request: Request) -> dict:
+async def bulk_delete_jobs_endpoint(body: BulkDeleteRequest, request: Request) -> dict:
     """Delete multiple jobs and all related data. Admin only."""
     _require_admin(request)
-
-    try:
-        body = BulkDeleteRequest.model_validate(await _read_json_object(request))
-    except ValidationError as exc:
-        raise HTTPException(status_code=400, detail=exc.errors()) from exc
 
     result = await storage.delete_jobs_bulk(body.job_ids)
 

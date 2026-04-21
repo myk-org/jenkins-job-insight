@@ -269,7 +269,7 @@ class TestBulkDeleteAdminOnly:
         assert data["total"] == 2
 
     def test_bulk_delete_empty_list(self, client):
-        """Empty job_ids list returns 400."""
+        """Empty job_ids list returns 422 (Pydantic min_length=1 validation)."""
         cookies = _admin_login(client)
         resp = client.request(
             "DELETE",
@@ -277,7 +277,7 @@ class TestBulkDeleteAdminOnly:
             json={"job_ids": []},
             cookies=cookies,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 class TestBearerTokenAuth:
