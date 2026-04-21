@@ -569,8 +569,18 @@ async def dispatch_alert(
 # ---------------------------------------------------------------------------
 
 
-def render_prometheus_metrics() -> str:
+def render_prometheus_metrics(
+    *,
+    health_up: int | None = None,
+    active_analyses: int | None = None,
+) -> str:
     """Render metrics in Prometheus text exposition format.
+
+    Args:
+        health_up: 1 if healthy/degraded, 0 if unhealthy. When None the
+            metric is omitted.
+        active_analyses: Number of currently active (pending/running/waiting)
+            analyses. When None the metric is omitted.
 
     Returns a string ready to serve from /metrics.
     """
@@ -595,6 +605,18 @@ def render_prometheus_metrics() -> str:
     lines.append("# TYPE jji_errors_by_class gauge")
     for cls, count in sorted(snap["error_counts"].items()):
         lines.append(f'jji_errors_by_class{{status_class="{cls}"}} {count}')
+
+    if health_up is not None:
+        lines.append(
+            "# HELP jji_health_up Whether the application is healthy (1) or unhealthy (0)."
+        )
+        lines.append("# TYPE jji_health_up gauge")
+        lines.append(f"jji_health_up {health_up}")
+
+    if active_analyses is not None:
+        lines.append("# HELP jji_active_analyses Number of currently active analyses.")
+        lines.append("# TYPE jji_active_analyses gauge")
+        lines.append(f"jji_active_analyses {active_analyses}")
 
     lines.append("")
     return "\n".join(lines)

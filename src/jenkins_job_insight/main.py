@@ -3570,8 +3570,33 @@ async def health_check_detailed() -> Response:
 @app.get("/metrics")
 async def prometheus_metrics() -> Response:
     """Prometheus metrics endpoint."""
+    # Compute health_up from a lightweight health check
+    settings = get_settings()
+    db_path = str(storage.DB_PATH)
+    try:
+        health = await build_health_response(settings, db_path)
+        health_up = 0 if health["status"] == "unhealthy" else 1
+    except Exception:
+        health_up = 0
+
+    # Count active analyses
+    active_analyses: int | None = None
+    try:
+        import aiosqlite
+
+        async with aiosqlite.connect(db_path) as db:
+            cursor = await db.execute(
+                "SELECT COUNT(*) FROM results WHERE status IN ('pending', 'running', 'waiting')"
+            )
+            row = await cursor.fetchone()
+            active_analyses = row[0] if row else 0
+    except Exception:
+        pass
+
     return Response(
-        content=render_prometheus_metrics(),
+        content=render_prometheus_metrics(
+            health_up=health_up, active_analyses=active_analyses
+        ),
         media_type="text/plain; version=0.0.4; charset=utf-8",
     )
 
