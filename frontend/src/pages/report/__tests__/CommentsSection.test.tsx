@@ -87,7 +87,7 @@ describe('CommentsSection – delete confirmation', () => {
     const deleteBtn = screen.getByRole('button', { name: 'Delete comment' })
     fireEvent.click(deleteBtn)
 
-    expect(screen.getByText('Are you sure you want to delete this comment?')).toBeDefined()
+    expect(screen.getByText('Are you sure you want to delete this comment? This action cannot be undone.')).toBeDefined()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDefined()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDefined()
   })
@@ -119,7 +119,7 @@ describe('CommentsSection – delete confirmation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
-      expect(screen.queryByText('Are you sure you want to delete this comment?')).toBeNull()
+      expect(screen.queryByText('Are you sure you want to delete this comment? This action cannot be undone.')).toBeNull()
     })
   })
 

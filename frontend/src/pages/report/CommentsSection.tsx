@@ -263,7 +263,7 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
         open={deleteTarget !== null}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
         title="Delete comment"
-        description="Are you sure you want to delete this comment?"
+        description="Are you sure you want to delete this comment? This action cannot be undone."
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={() => { if (deleteTarget !== null) handleDelete(deleteTarget) }}
