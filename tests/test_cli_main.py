@@ -567,6 +567,21 @@ class TestErrorHandling:
         assert "admin access" in result.output.lower()
         assert "--api-key" in result.output
 
+    def test_403_allow_list_hints_about_allow_list(self, mock_client):
+        """_handle_error should hint about allow list when detail mentions it."""
+        mock_client.add_comment.side_effect = JJIError(
+            status_code=403,
+            detail="User not allowed. Contact an administrator to be added to the allow list.",
+        )
+        result = runner.invoke(
+            app,
+            ["comments", "add", "job-1", "--test", "test_foo", "-m", "my comment"],
+        )
+        assert result.exit_code == 1
+        assert "allow list" in result.output.lower()
+        # Should NOT hint about --api-key for allow list errors
+        assert "--api-key" not in result.output
+
 
 class TestNullFieldHandling:
     def test_history_test_with_null_failure_rate(self, mock_client):

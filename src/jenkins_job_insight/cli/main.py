@@ -81,10 +81,17 @@ def _handle_error(err: JJIError) -> None:
             err=True,
         )
     elif err.status_code == 403:
-        typer.echo(
-            "Hint: This action requires admin access. Use --api-key or set JJI_API_KEY.",
-            err=True,
-        )
+        detail = err.detail.lower() if err.detail else ""
+        if "allow list" in detail:
+            typer.echo(
+                "Hint: Your user is not on the server's allow list. Contact an administrator.",
+                err=True,
+            )
+        else:
+            typer.echo(
+                "Hint: This action requires admin access. Use --api-key or set JJI_API_KEY.",
+                err=True,
+            )
     raise typer.Exit(code=1)
 
 
