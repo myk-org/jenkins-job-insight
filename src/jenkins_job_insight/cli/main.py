@@ -437,7 +437,7 @@ def results_delete(
                     f"Deleted {len(deleted)} of {data.get('total', len(job_ids))} jobs"
                 )
                 for f in failed:
-                    typer.echo(f"  Failed: {f['job_id']} — {f['reason']}")
+                    typer.echo(f"  Failed: {f['job_id']} - {f['reason']}", err=True)
     except JJIError as err:
         _handle_error(err)
 

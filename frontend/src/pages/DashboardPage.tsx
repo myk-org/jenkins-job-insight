@@ -284,14 +284,17 @@ export function DashboardPage() {
     return `Permanently delete ${names.join(', ')}? This cannot be undone.`
   }, [jobs, selectedIds])
 
+  function enforceBulkDeleteLimit(count: number, closeConfirm = false): boolean {
+    if (count <= BULK_DELETE_LIMIT) return true
+    setBulkResultMessage(`Select ${BULK_DELETE_LIMIT} or fewer jobs to bulk delete.`)
+    if (closeConfirm) setBulkDeleteConfirm(false)
+    return false
+  }
+
   async function handleBulkDelete() {
     const jobIdsToDelete = [...selectedIds]
     if (jobIdsToDelete.length === 0) return
-    if (jobIdsToDelete.length > BULK_DELETE_LIMIT) {
-      setBulkResultMessage(`Select ${BULK_DELETE_LIMIT} or fewer jobs to bulk delete.`)
-      setBulkDeleteConfirm(false)
-      return
-    }
+    if (!enforceBulkDeleteLimit(jobIdsToDelete.length, true)) return
     setBulkDeleting(true)
     try {
       const data = await api.delete<{ deleted: string[]; failed: { job_id: string; reason: string }[]; total?: number }>(
@@ -632,10 +635,7 @@ export function DashboardPage() {
                   variant="destructive"
                   size="sm"
                   onClick={() => {
-                    if (selectedIds.size > BULK_DELETE_LIMIT) {
-                      setBulkResultMessage(`Select ${BULK_DELETE_LIMIT} or fewer jobs to bulk delete.`)
-                      return
-                    }
+                    if (!enforceBulkDeleteLimit(selectedIds.size)) return
                     setBulkDeleteConfirm(true)
                   }}
                 >
