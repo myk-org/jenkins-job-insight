@@ -6,15 +6,18 @@ export function useClipboard(resetMs = 2000) {
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
 
-  const copy = (text: string, key = 'default') => {
-    if (!navigator.clipboard?.writeText) return
-    void navigator.clipboard.writeText(text)
-      .then(() => {
-        setCopiedKey(key)
-        if (timerRef.current) clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(() => setCopiedKey(null), resetMs)
-      })
-      .catch(() => setCopiedKey(null))
+  const copy = async (text: string, key = 'default'): Promise<boolean> => {
+    if (!navigator.clipboard?.writeText) return false
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedKey(key)
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => setCopiedKey(null), resetMs)
+      return true
+    } catch {
+      setCopiedKey(null)
+      return false
+    }
   }
 
   return { copiedKey, isCopied: (k = 'default') => copiedKey === k, copy }
