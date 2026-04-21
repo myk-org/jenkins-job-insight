@@ -40,6 +40,7 @@ import { useAuth } from '@/lib/auth'
 
 const STATUS_FILTER_ALL = 'ALL'
 const STATUS_FILTER_OPTIONS = [STATUS_FILTER_ALL, 'completed', 'running', 'waiting', 'pending', 'failed', 'timeout'] as const
+const BULK_DELETE_LIMIT = 500
 
 const BULK_SELECT_CHECKBOX_CLASS =
   "h-4 w-4 cursor-pointer appearance-none rounded border border-text-tertiary bg-surface-elevated checked:bg-signal-blue checked:border-signal-blue checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-no-repeat checked:bg-center transition-all"
@@ -154,7 +155,7 @@ export function DashboardPage() {
       clearSelection()
       setBulkDeleteConfirm(false)
     }
-  }, [isAdmin])
+  }, [isAdmin, selectedIds])
 
   const fetchSeqRef = useRef(0)
   const inFlightRef = useRef(false)
@@ -262,11 +263,15 @@ export function DashboardPage() {
   }
 
   function toggleSelectAll() {
-    if (selectedIds.size === pageJobs.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(pageJobs.map(j => j.job_id)))
-    }
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (allPageSelected) {
+        pageJobIds.forEach(id => next.delete(id))
+      } else {
+        pageJobIds.forEach(id => next.add(id))
+      }
+      return next
+    })
   }
 
   function clearSelection() {
@@ -280,16 +285,30 @@ export function DashboardPage() {
   }, [jobs, selectedIds])
 
   async function handleBulkDelete() {
+    const jobIdsToDelete = [...selectedIds]
+    if (jobIdsToDelete.length === 0) return
+    if (jobIdsToDelete.length > BULK_DELETE_LIMIT) {
+      setBulkResultMessage(`Select ${BULK_DELETE_LIMIT} or fewer jobs to bulk delete.`)
+      setBulkDeleteConfirm(false)
+      return
+    }
     setBulkDeleting(true)
     try {
-      const data = await api.delete<{ deleted: string[]; failed: { job_id: string; reason: string }[] }>('/api/results/bulk', { job_ids: [...selectedIds] })
+      const data = await api.delete<{ deleted: string[]; failed: { job_id: string; reason: string }[]; total?: number }>(
+        '/api/results/bulk',
+        { job_ids: jobIdsToDelete },
+      )
       const deletedSet = new Set(data.deleted)
       fetchSeqRef.current += 1
       setJobs(prev => prev.filter(j => !deletedSet.has(j.job_id)))
-      clearSelection()
       if (data.failed.length > 0) {
         const details = data.failed.map(f => `${f.job_id}: ${f.reason}`).join('; ')
-        setBulkResultMessage(`${data.failed.length} job(s) failed to delete: ${details}`)
+        setSelectedIds(new Set(data.failed.map(f => f.job_id)))
+        setBulkResultMessage(
+          `Deleted ${data.deleted.length} of ${data.total ?? jobIdsToDelete.length}. Failed: ${details}`
+        )
+      } else {
+        clearSelection()
       }
     } catch (err) {
       setBulkResultMessage(err instanceof Error ? err.message : 'Failed to bulk delete')
@@ -612,7 +631,13 @@ export function DashboardPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => setBulkDeleteConfirm(true)}
+                  onClick={() => {
+                    if (selectedIds.size > BULK_DELETE_LIMIT) {
+                      setBulkResultMessage(`Select ${BULK_DELETE_LIMIT} or fewer jobs to bulk delete.`)
+                      return
+                    }
+                    setBulkDeleteConfirm(true)
+                  }}
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                   Delete ({selectedIds.size})

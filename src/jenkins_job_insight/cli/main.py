@@ -52,6 +52,7 @@ _state: dict = {}
 # both globally (before the subcommand) and per-command (after it).
 _JSON_OPTION = typer.Option(False, "--json", help="Output as JSON instead of table.")
 _JOB_IDS_ARGUMENT = typer.Argument(default=None, help="Job ID(s) to delete.")
+_BULK_DELETE_BATCH_SIZE = 500
 
 
 def _set_json(json_output: bool) -> None:
@@ -393,18 +394,26 @@ def results_delete(
     _set_json(json_output)
     try:
         client = _get_client()
+        if all_jobs and job_ids:
+            typer.echo(
+                "Error: --all cannot be combined with explicit JOB_ID values.", err=True
+            )
+            raise typer.Exit(code=1)
         if all_jobs:
             if not confirm:
-                typer.confirm("Delete ALL jobs? This cannot be undone", abort=True)
+                typer.echo("Error: --all requires --confirm.", err=True)
+                raise typer.Exit(code=1)
             # Fetch all job IDs from the dashboard
-            dashboard = client.dashboard()
-            job_ids = [j["job_id"] for j in dashboard]
+            dashboard_jobs = client.dashboard()
+            job_ids = [j["job_id"] for j in dashboard_jobs]
             if not job_ids:
                 typer.echo("No jobs to delete.")
                 raise typer.Exit()
         elif not job_ids:
-            typer.echo("Error: provide at least one JOB_ID or use --all.")
+            typer.echo("Error: provide at least one JOB_ID or use --all.", err=True)
             raise typer.Exit(code=1)
+
+        job_ids = list(dict.fromkeys(job_ids))
 
         if len(job_ids) == 1:
             data = client.delete_job(job_ids[0])
@@ -413,12 +422,17 @@ def results_delete(
             else:
                 typer.echo(f"Deleted job {data.get('job_id', job_ids[0])}")
         else:
-            data = client.delete_jobs_bulk(job_ids)
+            deleted: list[str] = []
+            failed: list[dict] = []
+            for start in range(0, len(job_ids), _BULK_DELETE_BATCH_SIZE):
+                chunk = job_ids[start : start + _BULK_DELETE_BATCH_SIZE]
+                chunk_data = client.delete_jobs_bulk(chunk)
+                deleted.extend(chunk_data.get("deleted", []))
+                failed.extend(chunk_data.get("failed", []))
+            data = {"deleted": deleted, "failed": failed, "total": len(job_ids)}
             if _state.get("json", False):
                 print_output(data, columns=[], as_json=True)
             else:
-                deleted = data.get("deleted", [])
-                failed = data.get("failed", [])
                 typer.echo(
                     f"Deleted {len(deleted)} of {data.get('total', len(job_ids))} jobs"
                 )
