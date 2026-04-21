@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
+import { useState, useMemo, type ReactNode } from 'react'
+import { useClipboard } from '@/lib/useClipboard'
 import type { GroupedFailure } from '@/types'
 import { buildFileUrl, buildRepoUrls, isSafeHref, matchRepo, type RepoUrl } from '@/lib/autoLink'
 import { isCommentInScope } from '@/lib/grouping'
@@ -80,30 +81,12 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
   const [selectedProvider, setSelectedProvider] = useState(result?.ai_provider ?? '')
   const [selectedModel, setSelectedModel] = useState(result?.ai_model ?? '')
   const [includeLinks, setIncludeLinks] = useState(false)
-  const [copiedSection, setCopiedSection] = useState<string | null>(null)
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const { copiedKey: copiedSection, copy: copyToClipboard } = useClipboard()
 
   const repoUrls = useMemo<RepoUrl[]>(
     () => buildRepoUrls(result?.request_params),
     [result?.request_params],
   )
-
-  useEffect(() => {
-    return () => {
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
-    }
-  }, [])
-
-  function copyToClipboard(text: string, section: string) {
-    if (!navigator.clipboard?.writeText) return
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopiedSection(section)
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
-      copyTimeoutRef.current = setTimeout(() => setCopiedSection(null), 2000)
-    }).catch(() => {
-      setCopiedSection(null)
-    })
-  }
 
   function getModelsForProvider(provider: string) {
     return [...new Set(aiConfigs.filter((c) => c.ai_provider === provider).map((c) => c.ai_model))]

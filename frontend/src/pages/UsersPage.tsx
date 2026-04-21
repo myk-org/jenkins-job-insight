@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '@/lib/api'
+import { useClipboard } from '@/lib/useClipboard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -26,17 +27,7 @@ import { formatTimestamp } from '@/lib/utils'
 import type { AdminUser, CreateUserResponse, RotateKeyResponse, ChangeRoleResponse } from '@/types'
 
 function CopyableKey({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false)
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // fallback: select text
-    }
-  }
+  const { isCopied, copy } = useClipboard()
 
   return (
     <div className="space-y-1.5">
@@ -45,11 +36,11 @@ function CopyableKey({ label, value }: { label: string; value: string }) {
         <code className="flex-1 break-all font-mono text-xs text-text-primary">{value}</code>
         <button
           type="button"
-          onClick={handleCopy}
+          onClick={() => copy(value)}
           className="shrink-0 rounded p-1 text-text-tertiary transition-colors hover:text-text-secondary"
           aria-label="Copy to clipboard"
         >
-          {copied ? <Check className="h-4 w-4 text-signal-green" /> : <Copy className="h-4 w-4" />}
+          {isCopied() ? <Check className="h-4 w-4 text-signal-green" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
       <p className="text-xs text-signal-amber">

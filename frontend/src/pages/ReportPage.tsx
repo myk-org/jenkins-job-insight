@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
+import { useClipboard } from '@/lib/useClipboard'
 import { parseApiTimestamp, isAnalysisTimeout, formatDuration, formatTimestamp } from '@/lib/utils'
 import { buildRepoUrls, type RepoUrl } from '@/lib/autoLink'
 import { groupFailures } from '@/lib/grouping'
@@ -80,28 +81,21 @@ export function ReportPage() {
 }
 
 function CliCommand({ jobId }: { jobId: string }) {
-  const [copied, setCopied] = useState(false)
+  const { isCopied, copy } = useClipboard()
   const command = `jji results show ${jobId} --json`
-
-  useEffect(() => {
-    if (!copied) return
-    const timer = setTimeout(() => setCopied(false), 2000)
-    return () => clearTimeout(timer)
-  }, [copied])
 
   return (
     <p className="flex items-center gap-1.5">
       CLI:{' '}
       <code className="font-mono bg-background-offset px-1.5 py-0.5 rounded">{command}</code>
       <button
-        onClick={() => {
-          if (!navigator.clipboard?.writeText) return
-          void navigator.clipboard.writeText(command).then(() => setCopied(true)).catch(() => {})
-        }}
+        type="button"
+        onClick={() => copy(command)}
         className="inline-flex items-center hover:text-text-secondary transition-colors"
         title="Copy CLI command"
+        aria-label={isCopied() ? 'CLI command copied' : 'Copy CLI command'}
       >
-        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        {isCopied() ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
     </p>
   )
