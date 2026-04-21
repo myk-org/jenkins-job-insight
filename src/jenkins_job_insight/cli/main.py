@@ -35,10 +35,13 @@ auth_app = typer.Typer(help="Authentication commands.", no_args_is_help=True)
 admin_app = typer.Typer(help="Admin management commands.", no_args_is_help=True)
 admin_users_app = typer.Typer(help="Manage admin users.", no_args_is_help=True)
 
+metadata_app = typer.Typer(help="Manage job metadata.", no_args_is_help=True)
+
 app.add_typer(results_app, name="results")
 app.add_typer(history_app, name="history")
 app.add_typer(comments_app, name="comments")
 app.add_typer(classifications_app, name="classifications")
+app.add_typer(metadata_app, name="metadata")
 app.add_typer(config_app, name="config")
 app.add_typer(auth_app, name="auth")
 app.add_typer(admin_app, name="admin")
@@ -1836,6 +1839,134 @@ def admin_users_change_role(
             typer.echo(
                 "\u26a0\ufe0f  Save this API key now \u2014 it cannot be retrieved later."
             )
+
+
+# -- Metadata -----------------------------------------------------------------
+
+
+@metadata_app.command("list")
+def metadata_list(
+    team: str = typer.Option("", "--team", help="Filter by team."),
+    tier: str = typer.Option("", "--tier", help="Filter by tier."),
+    version: str = typer.Option("", "--version", help="Filter by version."),
+    label: list[str] = typer.Option(
+        [], "--label", "-l", help="Filter by label (can repeat)."
+    ),
+    json_output: bool = _JSON_OPTION,
+):
+    """List job metadata with optional filters."""
+    _run_client_command(
+        json_output,
+        lambda c: c.list_jobs_metadata(
+            team=team, tier=tier, version=version, labels=label or None
+        ),
+        columns=["job_name", "team", "tier", "version", "labels"],
+        labels={"job_name": "JOB NAME"},
+    )
+
+
+@metadata_app.command("get")
+def metadata_get(
+    job_name: str = typer.Argument(help="Job name."),
+    json_output: bool = _JSON_OPTION,
+):
+    """Show metadata for a specific job."""
+    _run_client_command(
+        json_output,
+        lambda c: c.get_job_metadata(job_name),
+        columns=["job_name", "team", "tier", "version", "labels"],
+    )
+
+
+@metadata_app.command("set")
+def metadata_set(
+    job_name: str = typer.Argument(help="Job name."),
+    team: str = typer.Option("", "--team", help="Team owning this job."),
+    tier: str = typer.Option("", "--tier", help="Service tier."),
+    version: str = typer.Option("", "--version", help="Version label."),
+    label: list[str] = typer.Option([], "--label", "-l", help="Label (can repeat)."),
+    json_output: bool = _JSON_OPTION,
+):
+    """Set or update metadata for a job."""
+    data = _run_client_command(
+        json_output,
+        lambda c: c.set_job_metadata(
+            job_name, team=team, tier=tier, version=version, labels=label or None
+        ),
+        emit_output=False,
+    )
+    if not _state.get("json", False):
+        typer.echo(f"Metadata set for {data.get('job_name', job_name)}")
+
+
+@metadata_app.command("delete")
+def metadata_delete(
+    job_name: str = typer.Argument(help="Job name."),
+    json_output: bool = _JSON_OPTION,
+):
+    """Delete metadata for a job."""
+    data = _run_client_command(
+        json_output,
+        lambda c: c.delete_job_metadata(job_name),
+        emit_output=False,
+    )
+    if not _state.get("json", False):
+        typer.echo(f"Metadata deleted for {data.get('job_name', job_name)}")
+
+
+@metadata_app.command("import")
+def metadata_import(
+    file_path: str = typer.Argument(help="Path to JSON or YAML file."),
+    json_output: bool = _JSON_OPTION,
+):
+    """Bulk import metadata from a JSON or YAML file.
+
+    File format: a list of objects with job_name, team, tier, version, labels.
+    """
+    import json as json_mod
+    from pathlib import Path
+
+    _set_json(json_output)
+    path = Path(file_path)
+    if not path.exists():
+        typer.echo(f"Error: file not found: {file_path}", err=True)
+        raise typer.Exit(code=1)
+
+    content = path.read_text(encoding="utf-8")
+    items: list[dict] = []
+
+    if path.suffix in (".yaml", ".yml"):
+        try:
+            import yaml
+
+            items = yaml.safe_load(content)
+        except ImportError:
+            typer.echo(
+                "Error: PyYAML is required for YAML files. Install with: pip install pyyaml",
+                err=True,
+            )
+            raise typer.Exit(code=1) from None
+    else:
+        try:
+            items = json_mod.loads(content)
+        except json_mod.JSONDecodeError as exc:
+            typer.echo(f"Error: invalid JSON: {exc}", err=True)
+            raise typer.Exit(code=1) from None
+
+    if not isinstance(items, list):
+        typer.echo("Error: file must contain a JSON/YAML array of objects.", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        client = _get_client()
+        data = client.bulk_set_metadata(items)
+    except JJIError as err:
+        _handle_error(err)
+
+    if _state.get("json", False):
+        print_output(data, columns=[], as_json=True)
+    else:
+        typer.echo(f"Imported {data.get('updated', 0)} metadata entries.")
 
 
 # -- Config -------------------------------------------------------------------

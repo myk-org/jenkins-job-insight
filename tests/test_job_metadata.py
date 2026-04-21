@@ -1,12 +1,18 @@
 """Tests for job metadata storage, API endpoints, and CLI commands."""
 
+import json as json_mod
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
+from typer.testing import CliRunner
 
 from jenkins_job_insight import storage
+from jenkins_job_insight.cli.main import _state
+from jenkins_job_insight.cli.main import app as cli_app
+from tests.conftest import CLI_TEST_BASE_URL, make_test_client
 
 
 @pytest.fixture
@@ -323,3 +329,212 @@ class TestJobMetadataAPI:
         resp = api_client.get("/api/jobs/folder/subfolder/my-job/metadata")
         assert resp.status_code == 200
         assert resp.json()["team"] == "platform"
+
+
+# --- CLI client tests ---
+
+
+def _metadata_handler(request: httpx.Request) -> httpx.Response:
+    """Mock handler for metadata CLI client tests."""
+    path = request.url.path
+    method = request.method
+
+    if method == "GET" and path == "/api/jobs/metadata":
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "job_name": "job-a",
+                    "team": "alpha",
+                    "tier": None,
+                    "version": None,
+                    "labels": [],
+                }
+            ],
+        )
+    if method == "GET" and path == "/api/jobs/my-job/metadata":
+        return httpx.Response(
+            200,
+            json={
+                "job_name": "my-job",
+                "team": "platform",
+                "tier": "critical",
+                "version": None,
+                "labels": ["smoke"],
+            },
+        )
+    if method == "PUT" and path == "/api/jobs/my-job/metadata":
+        import json
+
+        body = json.loads(request.content)
+        body["job_name"] = "my-job"
+        return httpx.Response(200, json=body)
+    if method == "DELETE" and path == "/api/jobs/my-job/metadata":
+        return httpx.Response(200, json={"status": "deleted", "job_name": "my-job"})
+    if method == "PUT" and path == "/api/jobs/metadata/bulk":
+        import json
+
+        body = json.loads(request.content)
+        return httpx.Response(200, json={"updated": len(body.get("items", []))})
+    return httpx.Response(404, json={"detail": "Not found"})
+
+
+class TestJobMetadataCLIClient:
+    """Tests for job metadata CLI client methods."""
+
+    def test_list_jobs_metadata(self) -> None:
+        client = make_test_client(_metadata_handler)
+        data = client.list_jobs_metadata()
+        assert len(data) == 1
+        assert data[0]["team"] == "alpha"
+
+    def test_get_job_metadata(self) -> None:
+        client = make_test_client(_metadata_handler)
+        data = client.get_job_metadata("my-job")
+        assert data["team"] == "platform"
+        assert data["labels"] == ["smoke"]
+
+    def test_set_job_metadata(self) -> None:
+        client = make_test_client(_metadata_handler)
+        data = client.set_job_metadata("my-job", team="platform", labels=["ci"])
+        assert data["job_name"] == "my-job"
+
+    def test_delete_job_metadata(self) -> None:
+        client = make_test_client(_metadata_handler)
+        data = client.delete_job_metadata("my-job")
+        assert data["status"] == "deleted"
+
+    def test_bulk_set_metadata(self) -> None:
+        client = make_test_client(_metadata_handler)
+        data = client.bulk_set_metadata(
+            [
+                {"job_name": "job-a", "team": "alpha"},
+                {"job_name": "job-b", "team": "beta"},
+            ]
+        )
+        assert data["updated"] == 2
+
+
+# --- CLI command tests ---
+
+runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def reset_cli_state():
+    _state.clear()
+    _state["server_url"] = CLI_TEST_BASE_URL
+    _state["username"] = "testuser"
+    _state["no_verify_ssl"] = False
+    _state["api_key"] = ""
+    yield
+    _state.clear()
+
+
+class TestMetadataCLICommands:
+    """Tests for metadata CLI commands."""
+
+    @patch("jenkins_job_insight.cli.main._get_client")
+    def test_metadata_list(self, mock_get_client) -> None:
+        mock_client = MagicMock()
+        mock_client.list_jobs_metadata.return_value = [
+            {
+                "job_name": "job-a",
+                "team": "alpha",
+                "tier": None,
+                "version": None,
+                "labels": [],
+            }
+        ]
+        mock_get_client.return_value = mock_client
+        result = runner.invoke(cli_app, ["metadata", "list"])
+        assert result.exit_code == 0
+        assert "job-a" in result.output
+
+    @patch("jenkins_job_insight.cli.main._get_client")
+    def test_metadata_get(self, mock_get_client) -> None:
+        mock_client = MagicMock()
+        mock_client.get_job_metadata.return_value = {
+            "job_name": "my-job",
+            "team": "platform",
+            "tier": "critical",
+            "version": None,
+            "labels": [],
+        }
+        mock_get_client.return_value = mock_client
+        result = runner.invoke(cli_app, ["metadata", "get", "my-job"])
+        assert result.exit_code == 0
+        assert "platform" in result.output
+
+    @patch("jenkins_job_insight.cli.main._get_client")
+    def test_metadata_set(self, mock_get_client) -> None:
+        mock_client = MagicMock()
+        mock_client.set_job_metadata.return_value = {
+            "job_name": "my-job",
+            "team": "alpha",
+        }
+        mock_get_client.return_value = mock_client
+        result = runner.invoke(
+            cli_app, ["metadata", "set", "my-job", "--team", "alpha"]
+        )
+        assert result.exit_code == 0
+        assert "Metadata set" in result.output
+
+    @patch("jenkins_job_insight.cli.main._get_client")
+    def test_metadata_delete(self, mock_get_client) -> None:
+        mock_client = MagicMock()
+        mock_client.delete_job_metadata.return_value = {
+            "status": "deleted",
+            "job_name": "my-job",
+        }
+        mock_get_client.return_value = mock_client
+        result = runner.invoke(cli_app, ["metadata", "delete", "my-job"])
+        assert result.exit_code == 0
+        assert "Metadata deleted" in result.output
+
+    @patch("jenkins_job_insight.cli.main._get_client")
+    def test_metadata_import_json(self, mock_get_client, tmp_path) -> None:
+        import json as json_mod
+
+        mock_client = MagicMock()
+        mock_client.bulk_set_metadata.return_value = {"updated": 2}
+        mock_get_client.return_value = mock_client
+
+        f = tmp_path / "metadata.json"
+        f.write_text(
+            json_mod.dumps(
+                [
+                    {"job_name": "job-a", "team": "alpha"},
+                    {"job_name": "job-b", "team": "beta"},
+                ]
+            )
+        )
+
+        result = runner.invoke(cli_app, ["metadata", "import", str(f)])
+        assert result.exit_code == 0
+        assert "Imported 2" in result.output
+
+    @patch("jenkins_job_insight.cli.main._get_client")
+    def test_metadata_list_with_filters(self, mock_get_client) -> None:
+        mock_client = MagicMock()
+        mock_client.list_jobs_metadata.return_value = []
+        mock_get_client.return_value = mock_client
+        result = runner.invoke(
+            cli_app,
+            ["metadata", "list", "--team", "alpha", "--tier", "critical"],
+        )
+        assert result.exit_code == 0
+        mock_client.list_jobs_metadata.assert_called_once_with(
+            team="alpha", tier="critical", version="", labels=None
+        )
+
+    @patch("jenkins_job_insight.cli.main._get_client")
+    def test_metadata_list_json(self, mock_get_client) -> None:
+        mock_client = MagicMock()
+        mock_client.list_jobs_metadata.return_value = [{"job_name": "j"}]
+        mock_get_client.return_value = mock_client
+        result = runner.invoke(cli_app, ["metadata", "list", "--json"])
+        assert result.exit_code == 0
+        # JSON output should be parseable
+        parsed = json_mod.loads(result.output)
+        assert isinstance(parsed, list)
