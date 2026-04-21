@@ -672,4 +672,9 @@ class ReportPortalPushResult(BaseModel):
 class BulkDeleteRequest(BaseModel):
     """Request body for bulk-deleting jobs."""
 
-    job_ids: list[str] = Field(...)
+    job_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Job IDs to delete (1–500 per request).",
+    )

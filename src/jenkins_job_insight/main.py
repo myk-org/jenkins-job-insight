@@ -3114,14 +3114,6 @@ async def bulk_delete_jobs_endpoint(request: Request) -> dict:
     except ValidationError as exc:
         raise HTTPException(status_code=400, detail=exc.errors()) from exc
 
-    if not body.job_ids:
-        raise HTTPException(status_code=400, detail="job_ids list cannot be empty")
-
-    if len(body.job_ids) > 500:
-        raise HTTPException(
-            status_code=400, detail="Cannot delete more than 500 jobs at once"
-        )
-
     result = await storage.delete_jobs_bulk(body.job_ids)
 
     # Audit log each deletion individually

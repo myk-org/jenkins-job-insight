@@ -386,7 +386,9 @@ def results_delete(
     job_ids: list[str] | None = _JOB_IDS_ARGUMENT,
     all_jobs: bool = typer.Option(False, "--all", help="Delete all jobs."),
     confirm: bool = typer.Option(
-        False, "--confirm", help="Skip confirmation prompt (required with --all)."
+        False,
+        "--confirm",
+        help="Skip interactive confirmation (recommended with --all for non-TTY use).",
     ),
     json_output: bool = _JSON_OPTION,
 ):
@@ -403,13 +405,13 @@ def results_delete(
             if not confirm:
                 typer.confirm("Delete ALL jobs? This cannot be undone", abort=True)
             # Fetch all job IDs from the dashboard
-            dashboard = client.dashboard()
-            job_ids = [j["job_id"] for j in dashboard]
+            dashboard_jobs = client.dashboard()
+            job_ids = [j["job_id"] for j in dashboard_jobs]
             if not job_ids:
                 typer.echo("No jobs to delete.")
                 raise typer.Exit()
         elif not job_ids:
-            typer.echo("Error: provide at least one JOB_ID or use --all.")
+            typer.echo("Error: provide at least one JOB_ID or use --all.", err=True)
             raise typer.Exit(code=1)
 
         if len(job_ids) == 1:

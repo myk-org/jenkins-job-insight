@@ -139,6 +139,7 @@ export function DashboardPage() {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkResultMessage, setBulkResultMessage] = useState<string | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
 
@@ -240,7 +241,15 @@ export function DashboardPage() {
   }
 
   const pageJobIds = useMemo(() => pageJobs.map((j) => j.job_id), [pageJobs])
+  const selectAllRef = useRef<HTMLInputElement>(null)
+  const somePageSelected = pageJobIds.some((id) => selectedIds.has(id))
   const allPageSelected = pageJobIds.length > 0 && pageJobIds.every((jobId) => selectedIds.has(jobId))
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = somePageSelected && !allPageSelected
+    }
+  }, [somePageSelected, allPageSelected])
 
   function toggleSelectAll() {
     setSelectedIds((prev) => {
@@ -257,6 +266,7 @@ export function DashboardPage() {
 
   function clearSelection() {
     setSelectedIds(new Set())
+    setBulkResultMessage(null)
   }
 
   const bulkDeleteDescription = useMemo(() => {
@@ -277,17 +287,17 @@ export function DashboardPage() {
       setJobs(prev => prev.filter(j => !deletedSet.has(j.job_id)))
       if (data.failed.length > 0) {
         setSelectedIds(new Set(data.failed.map((failure) => failure.job_id)))
-        setError(
+        setBulkResultMessage(
           `Deleted ${data.deleted.length} of ${data.total ?? jobIdsToDelete.length} jobs. ` +
           `Failed: ${data.failed.map((failure) => `${failure.job_id}: ${failure.reason}`).join('; ')}`
         )
       } else {
         clearSelection()
-        setError(null)
+        setBulkResultMessage(null)
       }
     } catch (err) {
       console.error('Failed to bulk delete:', err)
-      setError(err instanceof Error ? err.message : 'Failed to bulk delete selected jobs')
+      setBulkResultMessage(err instanceof Error ? err.message : 'Failed to bulk delete selected jobs')
     } finally {
       setBulkDeleting(false)
       setBulkDeleteConfirm(false)
@@ -378,6 +388,21 @@ export function DashboardPage() {
           </p>
         )}
 
+        {/* Bulk result message */}
+        {bulkResultMessage && (
+          <div role="alert" className="flex items-center justify-between rounded-lg border border-signal-red/30 bg-signal-red/10 px-4 py-3 text-sm text-signal-red">
+            <span>{bulkResultMessage}</span>
+            <button
+              type="button"
+              onClick={() => setBulkResultMessage(null)}
+              className="ml-4 shrink-0 rounded p-0.5 hover:bg-signal-red/20 transition-colors"
+              aria-label="Dismiss message"
+            >
+              <span aria-hidden="true" className="text-lg leading-none">&times;</span>
+            </button>
+          </div>
+        )}
+
         {/* Table */}
         {loading ? (
           <div className="space-y-2">
@@ -400,6 +425,7 @@ export function DashboardPage() {
                 {isAdmin && (
                   <TableHead className="w-10">
                     <input
+                      ref={selectAllRef}
                       type="checkbox"
                       checked={allPageSelected}
                       onChange={toggleSelectAll}

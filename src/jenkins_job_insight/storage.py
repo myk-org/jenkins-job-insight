@@ -1974,8 +1974,10 @@ async def delete_jobs_bulk(job_ids: list[str]) -> dict:
     """
     deleted = []
     failed = []
+    # Preserve order while dropping duplicates
+    unique_ids = list(dict.fromkeys(job_ids))
     async with aiosqlite.connect(DB_PATH) as db:
-        for idx, job_id in enumerate(job_ids):
+        for idx, job_id in enumerate(unique_ids):
             savepoint = f"delete_job_{idx}"
             await db.execute(f"SAVEPOINT {savepoint}")
             try:
@@ -1984,12 +1986,13 @@ async def delete_jobs_bulk(job_ids: list[str]) -> dict:
                 else:
                     failed.append({"job_id": job_id, "reason": "not found"})
                 await db.execute(f"RELEASE SAVEPOINT {savepoint}")
-            except Exception as e:
+            except Exception:
+                logger.exception("delete_jobs_bulk: failed to delete %s", job_id)
                 await db.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
                 await db.execute(f"RELEASE SAVEPOINT {savepoint}")
-                failed.append({"job_id": job_id, "reason": str(e)})
+                failed.append({"job_id": job_id, "reason": "deletion failed"})
         await db.commit()
-    return {"deleted": deleted, "failed": failed, "total": len(job_ids)}
+    return {"deleted": deleted, "failed": failed, "total": len(unique_ids)}
 
 
 async def override_classification(
