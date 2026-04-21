@@ -15,6 +15,7 @@ from xml.etree.ElementTree import ParseError
 
 import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -617,6 +618,73 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(AuthMiddleware)
+
+
+class RequestBodyLoggingMiddleware(BaseHTTPMiddleware):
+    """Log incoming request bodies at DEBUG level with sensitive data masked."""
+
+    async def dispatch(self, request: Request, call_next):
+        if logger.isEnabledFor(logging.DEBUG) and request.method in (
+            "POST",
+            "PUT",
+            "PATCH",
+        ):
+            body_bytes = await request.body()
+            if body_bytes:
+                try:
+                    body_json = json.loads(body_bytes)
+                    from jenkins_job_insight.utils import mask_sensitive_fields
+
+                    masked = mask_sensitive_fields(body_json)
+                    logger.debug(
+                        "Incoming %s %s body: %s",
+                        request.method,
+                        request.url.path,
+                        json.dumps(masked),
+                    )
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    logger.debug(
+                        "Incoming %s %s body: <non-JSON, %d bytes>",
+                        request.method,
+                        request.url.path,
+                        len(body_bytes),
+                    )
+        return await call_next(request)
+
+
+app.add_middleware(RequestBodyLoggingMiddleware)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Log 422 validation error details at DEBUG level, then return standard response."""
+    from fastapi.encoders import jsonable_encoder
+
+    if logger.isEnabledFor(logging.DEBUG):
+        from jenkins_job_insight.utils import mask_sensitive_fields
+
+        masked_body = None
+        if exc.body is not None:
+            try:
+                masked_body = mask_sensitive_fields(
+                    exc.body if isinstance(exc.body, (dict, list)) else exc.body
+                )
+            except Exception:
+                masked_body = "<unable to mask>"
+        masked_errors = mask_sensitive_fields(jsonable_encoder(exc.errors()))
+        logger.debug(
+            "RequestValidationError on %s %s: errors=%s body=%s",
+            request.method,
+            request.url.path,
+            masked_errors,
+            masked_body,
+        )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(exc.errors())},
+    )
 
 
 @app.get("/", include_in_schema=False)
