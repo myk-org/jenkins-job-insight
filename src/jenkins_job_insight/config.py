@@ -173,6 +173,9 @@ class Settings(BaseSettings):
     # Artifact download toggle
     get_job_artifacts: bool = True
 
+    # Force analysis on successful builds
+    force_analysis: bool = False
+
     # Jenkins job monitoring (wait for completion before analysis)
     wait_for_completion: bool = True
     poll_interval_minutes: int = Field(default=2, gt=0)

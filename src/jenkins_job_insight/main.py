@@ -305,6 +305,7 @@ def _reconstruct_from_params(
         additional_repos=(
             params["additional_repos"] if "additional_repos" in params else None
         ),
+        force=params.get("force", False),
     )
     # Build Settings from env defaults, then layer stored overrides
     base_settings = get_settings()
@@ -327,10 +328,15 @@ def _reconstruct_from_params(
         "jenkins_artifacts_max_size_mb",
         "get_job_artifacts",
         "peer_analysis_max_rounds",
+        "force_analysis",
     ]
     for field in settings_fields:
         if field in params:
             overrides[field] = params[field]
+
+    # Map stored 'force' flag to Settings.force_analysis
+    if "force" in params:
+        overrides["force_analysis"] = params["force"]
 
     # Tests repo URL
     recomposed = _recompose_repo_spec(
@@ -796,6 +802,11 @@ def _merge_settings(body: BaseAnalysisRequest, settings: Settings) -> Settings:
             if field in body.model_fields_set:
                 overrides[field] = getattr(body, field)
 
+        # force has a non-None default (False); only override when
+        # explicitly sent so that omitted requests inherit from env/settings.
+        if "force" in body.model_fields_set:
+            overrides["force_analysis"] = body.force
+
     if overrides:
         merged_data = settings.model_dump(mode="python") | overrides
         return Settings.model_validate(merged_data)
@@ -1228,6 +1239,7 @@ def _build_request_params(
             "get_job_artifacts": merged.get_job_artifacts,
             "raw_prompt": body.raw_prompt or "",
             "peer_analysis_max_rounds": merged.peer_analysis_max_rounds,
+            "force": body.force,
             "wait_started_at": _time.time(),
         }
     )

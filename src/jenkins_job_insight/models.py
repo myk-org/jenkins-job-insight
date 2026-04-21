@@ -173,6 +173,10 @@ class AnalyzeRequest(BaseAnalysisRequest):
         description="Jenkins job name (can include folders like 'folder/job-name')"
     )
     build_number: int = Field(description="Build number to analyze")
+    force: bool = Field(
+        default=False,
+        description="Force analysis even if the build succeeded (bypass SUCCESS early-return)",
+    )
     wait_for_completion: bool = Field(
         default=True,
         description="Wait for Jenkins job to complete before analyzing",
