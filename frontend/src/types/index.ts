@@ -70,6 +70,8 @@ export interface CodeFix {
   file: string
   line: string
   change: string
+  original_code?: string | null
+  suggested_code?: string | null
 }
 
 export interface AnalysisDetail {

@@ -159,12 +159,53 @@ class TestCodeFix:
         assert fix.file == ""
         assert fix.line == ""
         assert fix.change == ""
+        assert fix.original_code is None
+        assert fix.suggested_code is None
 
     def test_creation_with_values(self) -> None:
         """Test creating with all fields."""
         fix = CodeFix(file="src/main.py", line="42", change="Fix the bug")
         assert fix.file == "src/main.py"
         assert fix.line == "42"
+
+    def test_creation_with_code_fields(self) -> None:
+        """Test creating with original_code and suggested_code."""
+        fix = CodeFix(
+            file="src/main.py",
+            line="42",
+            change="Replace broken assertion",
+            original_code="assert x == 1",
+            suggested_code="assert x == 2",
+        )
+        assert fix.original_code == "assert x == 1"
+        assert fix.suggested_code == "assert x == 2"
+
+    def test_code_fields_optional_backward_compatible(self) -> None:
+        """Test that existing data without code fields still works."""
+        data = {"file": "test.py", "line": "10", "change": "fix it"}
+        fix = CodeFix(**data)
+        assert fix.original_code is None
+        assert fix.suggested_code is None
+
+    def test_serialization_includes_code_fields(self) -> None:
+        """Test that code fields appear in serialized output when set."""
+        fix = CodeFix(
+            file="a.py",
+            line="1",
+            change="fix",
+            original_code="old",
+            suggested_code="new",
+        )
+        data = fix.model_dump()
+        assert data["original_code"] == "old"
+        assert data["suggested_code"] == "new"
+
+    def test_serialization_with_none_code_fields(self) -> None:
+        """Test that None code fields are serialized as None."""
+        fix = CodeFix(file="a.py", line="1", change="fix")
+        data = fix.model_dump()
+        assert data["original_code"] is None
+        assert data["suggested_code"] is None
 
 
 class TestAnalysisDetail:

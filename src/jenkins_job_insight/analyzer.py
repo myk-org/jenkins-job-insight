@@ -226,7 +226,9 @@ If CODE ISSUE:
   "code_fix": {
     "file": "exact/file/path.py",
     "line": "line number",
-    "change": "specific code change that fixes all affected tests"
+    "change": "specific code change that fixes all affected tests",
+    "original_code": "the exact original code being replaced (raw code string, NO markdown formatting)",
+    "suggested_code": "the suggested replacement code (raw code string, NO markdown formatting)"
   }
 }
 
@@ -399,10 +401,26 @@ def _recover_from_details(result: AnalysisDetail) -> AnalysisDetail:
     change_match = re.search(r'"change"\s*:\s*"((?:[^"\\]|\\.)*)"', details)
     if file_match and change_match:
         line_match = re.search(r'"line"\s*:\s*"([^"]*)"', details)
+        original_code_match = re.search(
+            r'"original_code"\s*:\s*"((?:[^"\\]|\\.)*)"', details, re.DOTALL
+        )
+        suggested_code_match = re.search(
+            r'"suggested_code"\s*:\s*"((?:[^"\\]|\\.)*)"', details, re.DOTALL
+        )
         code_fix = CodeFix(
             file=file_match.group(1),
             line=line_match.group(1) if line_match else "",
             change=change_match.group(1).replace("\\n", "\n"),
+            original_code=(
+                original_code_match.group(1).replace("\\n", "\n")
+                if original_code_match
+                else None
+            ),
+            suggested_code=(
+                suggested_code_match.group(1).replace("\\n", "\n")
+                if suggested_code_match
+                else None
+            ),
         )
 
     # Extract artifacts_evidence (top-level field)

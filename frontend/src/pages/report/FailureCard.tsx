@@ -336,6 +336,18 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
                     </p>
                   )}
                   {analysis.code_fix.change && <p className="mt-1 text-text-secondary whitespace-pre-wrap"><LinkedText text={analysis.code_fix.change} repoUrls={repoUrls} /></p>}
+                  {analysis.code_fix.original_code && (
+                    <div className="mt-2">
+                      <p className="text-xs font-display uppercase tracking-widest text-text-tertiary mb-1">Original Code</p>
+                      <pre className="overflow-x-auto rounded bg-surface-elevated p-2 text-xs font-mono whitespace-pre-wrap text-text-secondary">{analysis.code_fix.original_code}</pre>
+                    </div>
+                  )}
+                  {analysis.code_fix.suggested_code && (
+                    <div className="mt-2">
+                      <p className="text-xs font-display uppercase tracking-widest text-text-tertiary mb-1">Suggested Code</p>
+                      <pre className="overflow-x-auto rounded bg-surface-elevated p-2 text-xs font-mono whitespace-pre-wrap text-signal-green">{analysis.code_fix.suggested_code}</pre>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

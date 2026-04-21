@@ -10,6 +10,8 @@ from jenkins_job_insight.analyzer import (
     _JSON_RESPONSE_SCHEMA,
     _build_resources_section,
     _call_ai_cli_with_retry,
+    _parse_json_response,
+    _recover_from_details,
     handle_jenkins_exception,
 )
 from jenkins_job_insight.config import Settings
@@ -2664,3 +2666,101 @@ class TestJsonResponseSchemaParagraphBreaks:
     ) -> None:
         """product_bug_report description field instructs AI to use paragraph breaks."""
         assert "paragraph breaks between sections" in _JSON_RESPONSE_SCHEMA
+
+
+class TestJsonResponseSchemaCodeFields:
+    """Tests that _JSON_RESPONSE_SCHEMA includes original_code and suggested_code."""
+
+    def test_schema_includes_original_code(self) -> None:
+        """Schema instructs AI to produce original_code field."""
+        assert "original_code" in _JSON_RESPONSE_SCHEMA
+
+    def test_schema_includes_suggested_code(self) -> None:
+        """Schema instructs AI to produce suggested_code field."""
+        assert "suggested_code" in _JSON_RESPONSE_SCHEMA
+
+    def test_schema_specifies_no_markdown(self) -> None:
+        """Schema instructs AI to produce raw code with no markdown."""
+        assert "NO markdown" in _JSON_RESPONSE_SCHEMA
+
+
+class TestParseJsonResponseCodeFields:
+    """Tests that _parse_json_response handles original_code and suggested_code."""
+
+    def test_parse_code_fix_with_code_fields(self) -> None:
+        """JSON with original_code and suggested_code parses correctly."""
+        import json
+
+        data = {
+            "classification": "CODE ISSUE",
+            "affected_tests": ["test_foo"],
+            "details": "Missing import",
+            "artifacts_evidence": "",
+            "code_fix": {
+                "file": "src/app.py",
+                "line": "10",
+                "change": "Add import os",
+                "original_code": "import sys",
+                "suggested_code": "import sys\nimport os",
+            },
+        }
+        result = _parse_json_response(json.dumps(data))
+        assert result.code_fix
+        assert result.code_fix.original_code == "import sys"
+        assert result.code_fix.suggested_code == "import sys\nimport os"
+
+    def test_parse_code_fix_without_code_fields(self) -> None:
+        """JSON without original_code/suggested_code still parses (backward compat)."""
+        import json
+
+        data = {
+            "classification": "CODE ISSUE",
+            "affected_tests": ["test_foo"],
+            "details": "Bug found",
+            "artifacts_evidence": "",
+            "code_fix": {
+                "file": "src/app.py",
+                "line": "10",
+                "change": "Fix it",
+            },
+        }
+        result = _parse_json_response(json.dumps(data))
+        assert result.code_fix
+        assert result.code_fix.original_code is None
+        assert result.code_fix.suggested_code is None
+
+
+class TestRecoverFromDetailsCodeFields:
+    """Tests that _recover_from_details extracts original_code and suggested_code."""
+
+    def test_recover_with_code_fields(self) -> None:
+        """Regex recovery extracts original_code and suggested_code."""
+        from jenkins_job_insight.models import AnalysisDetail
+
+        raw = (
+            '{"classification": "CODE ISSUE", "affected_tests": ["test_x"], '
+            '"details": "broken", "code_fix": {"file": "a.py", "line": "1", '
+            '"change": "fix", "original_code": "old code", "suggested_code": "new code"}}'
+        )
+        fallback = AnalysisDetail(details=raw)
+        result = _recover_from_details(fallback)
+        assert result.classification == "CODE ISSUE"
+        assert result.code_fix
+        assert result.code_fix.original_code == "old code"
+        assert result.code_fix.suggested_code == "new code"
+
+    def test_recover_without_code_fields(self) -> None:
+        """Regex recovery works without original_code/suggested_code."""
+        from jenkins_job_insight.models import AnalysisDetail
+
+        raw = (
+            '{"classification": "CODE ISSUE", "affected_tests": ["test_x"], '
+            '"details": "broken", "code_fix": {"file": "a.py", "line": "1", '
+            '"change": "fix"}}'
+        )
+        fallback = AnalysisDetail(details=raw)
+        result = _recover_from_details(fallback)
+        assert result.classification == "CODE ISSUE"
+        assert result.code_fix
+        assert result.code_fix.original_code is None
+        assert result.code_fix.suggested_code is None
