@@ -71,22 +71,21 @@ class ErrorRateTracker:
 
     def record_request(self, status_code: int) -> None:
         now = time.monotonic()
-        self._total.record(now)
-        if status_code >= 400:
-            bucket = "5xx" if status_code >= 500 else "4xx"
-            with self._lock:
+        with self._lock:
+            self._total.record(now)
+            if status_code >= 400:
+                bucket = "5xx" if status_code >= 500 else "4xx"
                 if bucket not in self._errors:
                     self._errors[bucket] = _RollingCounter(self.window_seconds)
-            self._errors[bucket].record(now)
+                self._errors[bucket].record(now)
 
     def snapshot(self) -> dict[str, Any]:
         now = time.monotonic()
-        total = self._total.count(now)
-        error_counts: dict[str, int] = {}
         with self._lock:
-            buckets = list(self._errors.items())
-        for bucket, counter in buckets:
-            error_counts[bucket] = counter.count(now)
+            total = self._total.count(now)
+            error_counts: dict[str, int] = {}
+            for bucket, counter in self._errors.items():
+                error_counts[bucket] = counter.count(now)
         total_errors = sum(error_counts.values())
         error_rate = total_errors / total if total > 0 else 0.0
         return {
