@@ -507,8 +507,10 @@ async def lifespan(app: FastAPI):
     _install_job_id_filter()
 
     # Startup config validation
-    config_warnings = validate_startup_config()
-    for warning in config_warnings:
+    config_result = validate_startup_config()
+    for error in config_result.errors:
+        logger.error("[startup] %s", error)
+    for warning in config_result.warnings:
         logger.warning("[startup] %s", warning)
 
     await init_db()

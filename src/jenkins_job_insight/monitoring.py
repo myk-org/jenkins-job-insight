@@ -245,63 +245,150 @@ async def build_health_response(settings: Any, db_path: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def validate_startup_config() -> list[str]:
-    """Validate configuration at startup and return warning messages.
+@dataclass
+class _ConfigFinding:
+    """A single startup configuration finding with severity."""
 
-    Returns a list of warning strings. Empty list means all OK.
-    Does NOT raise — startup should continue even with warnings.
+    severity: str  # "error" or "warning"
+    message: str
+
+
+@dataclass
+class StartupConfigResult:
+    """Structured result from startup configuration validation."""
+
+    findings: list[_ConfigFinding]
+
+    @property
+    def errors(self) -> list[str]:
+        return [f.message for f in self.findings if f.severity == "error"]
+
+    @property
+    def warnings(self) -> list[str]:
+        return [f.message for f in self.findings if f.severity == "warning"]
+
+
+def validate_startup_config() -> StartupConfigResult:
+    """Validate configuration at startup and return structured results.
+
+    Returns a StartupConfigResult with findings categorised by severity.
+    - 'error': critical issues (e.g. missing DB directory)
+    - 'warning': optional integrations not configured
+    Does NOT raise — startup should continue even with errors.
     """
-    warnings: list[str] = []
+    findings: list[_ConfigFinding] = []
 
-    # AI provider
+    # AI provider (optional — can be passed per-request)
     provider = os.getenv("AI_PROVIDER", "")
     model = os.getenv("AI_MODEL", "")
     if not provider:
-        warnings.append(
-            "AI_PROVIDER is not set. Analysis requests will require ai_provider in the request body."
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "AI_PROVIDER is not set. Analysis requests will require ai_provider in the request body.",
+            )
         )
     if not model:
-        warnings.append(
-            "AI_MODEL is not set. Analysis requests will require ai_model in the request body."
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "AI_MODEL is not set. Analysis requests will require ai_model in the request body.",
+            )
         )
 
-    # Database path
+    # Database path (critical)
     db_path = os.getenv("DB_PATH", "/data/results.db")
     db_dir = os.path.dirname(db_path) or "."
     if db_dir and not os.path.isdir(db_dir):
-        warnings.append(
-            f"DB_PATH directory does not exist: {db_dir}. "
-            "The database will be created but the parent directory must exist."
+        findings.append(
+            _ConfigFinding(
+                "error",
+                f"DB_PATH directory does not exist: {db_dir}. "
+                "The database will be created but the parent directory must exist.",
+            )
         )
 
-    # Encryption key
+    # Encryption key (critical for production)
     if not os.getenv("JJI_ENCRYPTION_KEY"):
-        warnings.append(
-            "JJI_ENCRYPTION_KEY is not set. A file-based key will be auto-generated. "
-            "Set this env var for production deployments."
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "JJI_ENCRYPTION_KEY is not set. A file-based key will be auto-generated. "
+                "Set this env var for production deployments.",
+            )
         )
 
-    # Slack webhook
+    # Slack webhook (optional integration)
     slack_url = os.getenv("SLACK_WEBHOOK_URL", "")
     if slack_url and not slack_url.startswith("https://"):
-        warnings.append(
-            "SLACK_WEBHOOK_URL does not start with https://. "
-            "Slack webhooks should use HTTPS."
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "SLACK_WEBHOOK_URL does not start with https://. "
+                "Slack webhooks should use HTTPS.",
+            )
         )
 
-    # SMTP config partial check
+    # SMTP config partial check (optional integration)
     smtp_host = os.getenv("SMTP_HOST", "")
     alert_email_to = os.getenv("ALERT_EMAIL_TO", "")
     if smtp_host and not alert_email_to:
-        warnings.append(
-            "SMTP_HOST is set but ALERT_EMAIL_TO is not. Email alerts will not be sent."
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "SMTP_HOST is set but ALERT_EMAIL_TO is not. Email alerts will not be sent.",
+            )
         )
     if alert_email_to and not smtp_host:
-        warnings.append(
-            "ALERT_EMAIL_TO is set but SMTP_HOST is not. Email alerts will not be sent."
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "ALERT_EMAIL_TO is set but SMTP_HOST is not. Email alerts will not be sent.",
+            )
         )
 
-    return warnings
+    # Optional integration URLs
+    if not os.getenv("JENKINS_URL", ""):
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "JENKINS_URL is not set. Jenkins-based analysis will require jenkins_url in the request body.",
+            )
+        )
+    if not os.getenv("JIRA_URL", ""):
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "JIRA_URL is not set. Jira enrichment will be disabled unless provided per-request.",
+            )
+        )
+    if not os.getenv("REPORTPORTAL_URL", ""):
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "REPORTPORTAL_URL is not set. Report Portal integration is disabled.",
+            )
+        )
+
+    # Peer AI configs (optional)
+    if not os.getenv("PEER_AI_CONFIGS", ""):
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "PEER_AI_CONFIGS is not set. Peer analysis will be disabled unless provided per-request.",
+            )
+        )
+
+    # Admin key (optional but recommended)
+    if not os.getenv("ADMIN_KEY", ""):
+        findings.append(
+            _ConfigFinding(
+                "warning",
+                "ADMIN_KEY is not set. Admin API access will require user-based admin authentication.",
+            )
+        )
+
+    return StartupConfigResult(findings=findings)
 
 
 # ---------------------------------------------------------------------------
