@@ -381,14 +381,14 @@ def send_email_alert(
     host = smtp_host or os.getenv("SMTP_HOST", "")
     if not host:
         return False
-    port = smtp_port or int(os.getenv("SMTP_PORT", "587"))
-    user = smtp_user or os.getenv("SMTP_USER", "")
-    password = smtp_password or os.getenv("SMTP_PASSWORD", "")
-    from_addr = smtp_from or os.getenv("SMTP_FROM", user or f"jji@{host}")
     to_addr = alert_email_to or os.getenv("ALERT_EMAIL_TO", "")
     if not to_addr:
         return False
     try:
+        port = smtp_port or int(os.getenv("SMTP_PORT", "587"))
+        user = smtp_user or os.getenv("SMTP_USER", "")
+        password = smtp_password or os.getenv("SMTP_PASSWORD", "")
+        from_addr = smtp_from or os.getenv("SMTP_FROM", user or f"jji@{host}")
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = from_addr
@@ -400,7 +400,7 @@ def send_email_alert(
             if user and password:
                 smtp.login(user, password)
             smtp.send_message(msg)
-        logger.debug("Email alert sent to %s", to_addr)
+        logger.debug("Email alert sent successfully")
         return True
     except Exception:
         logger.debug("Failed to send email alert", exc_info=True)

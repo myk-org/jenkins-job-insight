@@ -32,7 +32,7 @@ spec:
               JJI error rate is {{ $value | humanizePercentage }} over the
               rolling window (threshold 50%).
         - alert: JJIHealthUnhealthy
-          expr: probe_success{job="jji-health"} == 0
+          expr: jji_health_up == 0
           for: 5m
           labels:
             severity: critical
