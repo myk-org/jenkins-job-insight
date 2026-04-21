@@ -1944,18 +1944,25 @@ async def get_all_failures(
         }
 
 
+async def _delete_job_rows(db: aiosqlite.Connection, job_id: str) -> bool:
+    """Delete a job and all related data from the database. Returns True if the job existed."""
+    cursor = await db.execute("SELECT 1 FROM results WHERE job_id = ?", (job_id,))
+    if await cursor.fetchone() is None:
+        return False
+
+    await db.execute("DELETE FROM comments WHERE job_id = ?", (job_id,))
+    await db.execute("DELETE FROM failure_reviews WHERE job_id = ?", (job_id,))
+    await db.execute("DELETE FROM failure_history WHERE job_id = ?", (job_id,))
+    await db.execute("DELETE FROM test_classifications WHERE job_id = ?", (job_id,))
+    await db.execute("DELETE FROM results WHERE job_id = ?", (job_id,))
+    return True
+
+
 async def delete_job(job_id: str) -> bool:
     """Delete an analyzed job and all its related data."""
     async with aiosqlite.connect(DB_PATH) as db:
-        # Delete from all related tables
-        await db.execute("DELETE FROM comments WHERE job_id = ?", (job_id,))
-        await db.execute("DELETE FROM failure_reviews WHERE job_id = ?", (job_id,))
-        await db.execute("DELETE FROM failure_history WHERE job_id = ?", (job_id,))
-        await db.execute("DELETE FROM test_classifications WHERE job_id = ?", (job_id,))
-        cursor = await db.execute("DELETE FROM results WHERE job_id = ?", (job_id,))
-        job_existed = cursor.rowcount > 0
+        job_existed = await _delete_job_rows(db, job_id)
         await db.commit()
-
         return job_existed
 
 
@@ -1968,26 +1975,18 @@ async def delete_jobs_bulk(job_ids: list[str]) -> dict:
     deleted = []
     failed = []
     async with aiosqlite.connect(DB_PATH) as db:
-        for job_id in job_ids:
+        for idx, job_id in enumerate(job_ids):
+            savepoint = f"delete_job_{idx}"
+            await db.execute(f"SAVEPOINT {savepoint}")
             try:
-                await db.execute("DELETE FROM comments WHERE job_id = ?", (job_id,))
-                await db.execute(
-                    "DELETE FROM failure_reviews WHERE job_id = ?", (job_id,)
-                )
-                await db.execute(
-                    "DELETE FROM failure_history WHERE job_id = ?", (job_id,)
-                )
-                await db.execute(
-                    "DELETE FROM test_classifications WHERE job_id = ?", (job_id,)
-                )
-                cursor = await db.execute(
-                    "DELETE FROM results WHERE job_id = ?", (job_id,)
-                )
-                if cursor.rowcount > 0:
+                if await _delete_job_rows(db, job_id):
                     deleted.append(job_id)
                 else:
                     failed.append({"job_id": job_id, "reason": "not found"})
+                await db.execute(f"RELEASE SAVEPOINT {savepoint}")
             except Exception as e:
+                await db.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                await db.execute(f"RELEASE SAVEPOINT {savepoint}")
                 failed.append({"job_id": job_id, "reason": str(e)})
         await db.commit()
     return {"deleted": deleted, "failed": failed, "total": len(job_ids)}

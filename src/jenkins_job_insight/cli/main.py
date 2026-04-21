@@ -1,7 +1,5 @@
 """jji -- CLI tool for the jenkins-job-insight REST API."""
 
-from typing import Optional
-
 import typer
 
 from jenkins_job_insight.cli.client import JJIClient, JJIError
@@ -53,6 +51,8 @@ _state: dict = {}
 # Shared option definition reused across leaf commands so --json works
 # both globally (before the subcommand) and per-command (after it).
 _JSON_OPTION = typer.Option(False, "--json", help="Output as JSON instead of table.")
+_JOB_IDS_ARGUMENT = typer.Argument(default=None, help="Job ID(s) to delete.")
+_BULK_DELETE_BATCH_SIZE = 500
 
 
 def _set_json(json_output: bool) -> None:
@@ -383,9 +383,7 @@ def results_show(
 
 @results_app.command("delete")
 def results_delete(
-    job_ids: Optional[list[str]] = typer.Argument(
-        default=None, help="Job ID(s) to delete."
-    ),
+    job_ids: list[str] | None = _JOB_IDS_ARGUMENT,
     all_jobs: bool = typer.Option(False, "--all", help="Delete all jobs."),
     confirm: bool = typer.Option(
         False, "--confirm", help="Skip confirmation prompt (required with --all)."
@@ -396,6 +394,11 @@ def results_delete(
     _set_json(json_output)
     try:
         client = _get_client()
+        if all_jobs and job_ids:
+            typer.echo(
+                "Error: --all cannot be combined with explicit JOB_ID values.", err=True
+            )
+            raise typer.Exit(code=1)
         if all_jobs:
             if not confirm:
                 typer.confirm("Delete ALL jobs? This cannot be undone", abort=True)
@@ -416,12 +419,17 @@ def results_delete(
             else:
                 typer.echo(f"Deleted job {data.get('job_id', job_ids[0])}")
         else:
-            data = client.delete_jobs_bulk(job_ids)
+            deleted: list[str] = []
+            failed: list[dict] = []
+            for start in range(0, len(job_ids), _BULK_DELETE_BATCH_SIZE):
+                chunk = job_ids[start : start + _BULK_DELETE_BATCH_SIZE]
+                chunk_data = client.delete_jobs_bulk(chunk)
+                deleted.extend(chunk_data.get("deleted", []))
+                failed.extend(chunk_data.get("failed", []))
+            data = {"deleted": deleted, "failed": failed, "total": len(job_ids)}
             if _state.get("json", False):
                 print_output(data, columns=[], as_json=True)
             else:
-                deleted = data.get("deleted", [])
-                failed = data.get("failed", [])
                 typer.echo(
                     f"Deleted {len(deleted)} of {data.get('total', len(job_ids))} jobs"
                 )

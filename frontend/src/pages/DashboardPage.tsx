@@ -239,28 +239,55 @@ export function DashboardPage() {
     })
   }
 
+  const pageJobIds = useMemo(() => pageJobs.map((j) => j.job_id), [pageJobs])
+  const allPageSelected = pageJobIds.length > 0 && pageJobIds.every((jobId) => selectedIds.has(jobId))
+
   function toggleSelectAll() {
-    if (selectedIds.size === pageJobs.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(pageJobs.map(j => j.job_id)))
-    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      const allSelectedOnPage = pageJobIds.length > 0 && pageJobIds.every((jobId) => prev.has(jobId))
+      if (allSelectedOnPage) {
+        pageJobIds.forEach((jobId) => next.delete(jobId))
+      } else {
+        pageJobIds.forEach((jobId) => next.add(jobId))
+      }
+      return next
+    })
   }
 
   function clearSelection() {
     setSelectedIds(new Set())
   }
 
+  const bulkDeleteDescription = useMemo(() => {
+    const names = jobs.filter((j) => selectedIds.has(j.job_id)).map((j) => j.job_name || j.job_id)
+    const first5 = names.slice(0, 5).join(', ')
+    const suffix = names.length > 5 ? ` and ${names.length - 5} more` : ''
+    return `Permanently delete ${first5}${suffix}? This cannot be undone.`
+  }, [jobs, selectedIds])
+
   async function handleBulkDelete() {
+    const jobIdsToDelete = [...selectedIds]
+    if (jobIdsToDelete.length === 0) return
     setBulkDeleting(true)
     try {
-      const data = await api.delete<{ deleted: string[]; failed: { job_id: string; reason: string }[] }>('/api/results/bulk', { job_ids: [...selectedIds] })
+      const data = await api.delete<{ deleted: string[]; failed: { job_id: string; reason: string }[]; total?: number }>('/api/results/bulk', { job_ids: jobIdsToDelete })
       const deletedSet = new Set(data.deleted)
       fetchSeqRef.current += 1
       setJobs(prev => prev.filter(j => !deletedSet.has(j.job_id)))
-      clearSelection()
+      if (data.failed.length > 0) {
+        setSelectedIds(new Set(data.failed.map((failure) => failure.job_id)))
+        setError(
+          `Deleted ${data.deleted.length} of ${data.total ?? jobIdsToDelete.length} jobs. ` +
+          `Failed: ${data.failed.map((failure) => `${failure.job_id}: ${failure.reason}`).join('; ')}`
+        )
+      } else {
+        clearSelection()
+        setError(null)
+      }
     } catch (err) {
       console.error('Failed to bulk delete:', err)
+      setError(err instanceof Error ? err.message : 'Failed to bulk delete selected jobs')
     } finally {
       setBulkDeleting(false)
       setBulkDeleteConfirm(false)
@@ -374,7 +401,7 @@ export function DashboardPage() {
                   <TableHead className="w-10">
                     <input
                       type="checkbox"
-                      checked={pageJobs.length > 0 && selectedIds.size === pageJobs.length}
+                      checked={allPageSelected}
                       onChange={toggleSelectAll}
                       className="h-4 w-4 cursor-pointer appearance-none rounded border border-text-tertiary bg-surface-elevated checked:bg-signal-blue checked:border-signal-blue checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-no-repeat checked:bg-center transition-all"
                       aria-label="Select all"
@@ -589,7 +616,7 @@ export function DashboardPage() {
           open={bulkDeleteConfirm}
           onOpenChange={(open) => { if (!open) setBulkDeleteConfirm(false) }}
           title="Delete selected analyses"
-          description={`Permanently delete ${selectedIds.size} ${selectedIds.size === 1 ? 'analysis' : 'analyses'}? This cannot be undone.`}
+          description={bulkDeleteDescription}
           confirmLabel={`Delete ${selectedIds.size}`}
           variant="destructive"
           onConfirm={handleBulkDelete}
