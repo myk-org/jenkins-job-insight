@@ -367,6 +367,23 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at)"
         )
 
+        # Job metadata table for filtering and organization
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS job_metadata (
+                job_name TEXT PRIMARY KEY,
+                team TEXT,
+                tier TEXT,
+                version TEXT,
+                labels TEXT NOT NULL DEFAULT '[]'
+            )
+        """)
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jm_team ON job_metadata (team)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jm_tier ON job_metadata (tier)"
+        )
+
         await db.commit()
 
     # Backfill failure_history from existing results (runs once when table is empty).
@@ -2692,3 +2709,173 @@ async def get_user_tokens(username: str) -> dict[str, str]:
             "jira_email": decrypt_value(row[1] or ""),
             "jira_token": decrypt_value(row[2] or ""),
         }
+
+
+# --- Job Metadata ---
+
+
+async def get_job_metadata(job_name: str) -> dict | None:
+    """Get metadata for a specific job.
+
+    Args:
+        job_name: The Jenkins job name.
+
+    Returns:
+        Metadata dict if found, None otherwise.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT job_name, team, tier, version, labels FROM job_metadata WHERE job_name = ?",
+            (job_name,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return _job_metadata_row_to_dict(row)
+
+
+def _job_metadata_row_to_dict(row) -> dict:
+    """Convert a job_metadata row to a dict, parsing the labels JSON."""
+    d = dict(row)
+    labels_raw = d.get("labels", "[]")
+    try:
+        d["labels"] = json.loads(labels_raw) if labels_raw else []
+    except (json.JSONDecodeError, TypeError):
+        d["labels"] = []
+    return d
+
+
+async def set_job_metadata(
+    job_name: str,
+    *,
+    team: str | None = None,
+    tier: str | None = None,
+    version: str | None = None,
+    labels: list[str] | None = None,
+) -> dict:
+    """Set or update metadata for a job.
+
+    Uses INSERT OR REPLACE to upsert.
+
+    Args:
+        job_name: The Jenkins job name.
+        team: Team owning this job.
+        tier: Service tier.
+        version: Version or release label.
+        labels: Arbitrary labels.
+
+    Returns:
+        The stored metadata dict.
+    """
+    labels_json = json.dumps(labels or [])
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO job_metadata (job_name, team, tier, version, labels) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (job_name, team, tier, version, labels_json),
+        )
+        await db.commit()
+    return {
+        "job_name": job_name,
+        "team": team,
+        "tier": tier,
+        "version": version,
+        "labels": labels or [],
+    }
+
+
+async def delete_job_metadata(job_name: str) -> bool:
+    """Delete metadata for a job.
+
+    Returns:
+        True if deleted, False if not found.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "DELETE FROM job_metadata WHERE job_name = ?",
+            (job_name,),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def list_jobs_with_metadata(
+    *,
+    team: str = "",
+    tier: str = "",
+    version: str = "",
+    labels: list[str] | None = None,
+) -> list[dict]:
+    """List all job metadata entries, optionally filtered.
+
+    Filters combine with AND logic. Multiple labels require all to match.
+
+    Args:
+        team: Filter by team (exact match).
+        tier: Filter by tier (exact match).
+        version: Filter by version (exact match).
+        labels: Filter by labels (all must be present).
+
+    Returns:
+        List of metadata dicts.
+    """
+    conditions: list[str] = []
+    params: list[str] = []
+
+    if team:
+        conditions.append("team = ?")
+        params.append(team)
+    if tier:
+        conditions.append("tier = ?")
+        params.append(tier)
+    if version:
+        conditions.append("version = ?")
+        params.append(version)
+
+    where = " AND ".join(conditions) if conditions else "1=1"
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"SELECT job_name, team, tier, version, labels FROM job_metadata WHERE {where} ORDER BY job_name",
+            params,
+        )
+        rows = await cursor.fetchall()
+
+    result = [_job_metadata_row_to_dict(row) for row in rows]
+
+    # Filter by labels in Python (JSON array matching)
+    if labels:
+        result = [
+            r for r in result if all(lbl in r.get("labels", []) for lbl in labels)
+        ]
+
+    return result
+
+
+async def bulk_set_metadata(items: list[dict]) -> dict:
+    """Bulk upsert job metadata.
+
+    Args:
+        items: List of dicts with job_name, team, tier, version, labels.
+
+    Returns:
+        Dict with 'updated' count.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        for item in items:
+            labels_json = json.dumps(item.get("labels", []))
+            await db.execute(
+                "INSERT OR REPLACE INTO job_metadata (job_name, team, tier, version, labels) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    item["job_name"],
+                    item.get("team"),
+                    item.get("tier"),
+                    item.get("version"),
+                    labels_json,
+                ),
+            )
+        await db.commit()
+    return {"updated": len(items)}

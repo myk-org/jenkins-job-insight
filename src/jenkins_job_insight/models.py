@@ -695,3 +695,51 @@ class BulkDeleteRequest(BaseModel):
         max_length=500,
         description="Job IDs to delete (1-500 per request).",
     )
+
+
+class JobMetadata(BaseModel):
+    """Metadata for a Jenkins job used for filtering and organization."""
+
+    job_name: str = Field(description="Jenkins job name (primary key)")
+    team: str | None = Field(default=None, description="Team owning this job")
+    tier: str | None = Field(
+        default=None, description="Service tier (e.g. critical, standard, low)"
+    )
+    version: str | None = Field(default=None, description="Version or release label")
+    labels: list[str] = Field(
+        default_factory=list, description="Arbitrary labels for categorization"
+    )
+
+
+class JobMetadataInput(BaseModel):
+    """Input model for setting job metadata (no job_name — taken from URL path)."""
+
+    team: str | None = Field(default=None, description="Team owning this job")
+    tier: str | None = Field(
+        default=None, description="Service tier (e.g. critical, standard, low)"
+    )
+    version: str | None = Field(default=None, description="Version or release label")
+    labels: list[str] = Field(
+        default_factory=list, description="Arbitrary labels for categorization"
+    )
+
+
+class BulkJobMetadataEntry(BaseModel):
+    """A single entry in a bulk metadata import."""
+
+    job_name: str = Field(description="Jenkins job name")
+    team: str | None = Field(default=None)
+    tier: str | None = Field(default=None)
+    version: str | None = Field(default=None)
+    labels: list[str] = Field(default_factory=list)
+
+
+class BulkJobMetadataRequest(BaseModel):
+    """Request body for bulk-importing job metadata."""
+
+    items: list[BulkJobMetadataEntry] = Field(
+        ...,
+        min_length=1,
+        max_length=1000,
+        description="Metadata entries to import (1-1000 per request).",
+    )
