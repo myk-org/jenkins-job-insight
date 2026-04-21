@@ -107,12 +107,33 @@ error_tracker = ErrorRateTracker()
 
 
 async def check_db(db_path: str) -> dict[str, str]:
-    """Check database connectivity."""
+    """Check database connectivity and writability."""
+    import pathlib
+
     try:
+        p = pathlib.Path(db_path)
+        db_dir = p.parent
+
+        # Check directory exists and is writable
+        if not db_dir.is_dir():
+            return {"status": "error", "detail": f"Directory does not exist: {db_dir}"}
+        if not os.access(str(db_dir), os.W_OK):
+            return {"status": "error", "detail": f"Directory is not writable: {db_dir}"}
+
+        # Check file is writable if it already exists
+        if p.exists() and not os.access(str(p), os.W_OK):
+            return {
+                "status": "error",
+                "detail": f"Database file is not writable: {db_path}",
+            }
+
         import aiosqlite
 
         async with aiosqlite.connect(db_path) as db:
-            await db.execute("SELECT 1")
+            # Use BEGIN IMMEDIATE to verify write-lock can be acquired,
+            # then rollback to avoid any side effects.
+            await db.execute("BEGIN IMMEDIATE")
+            await db.execute("ROLLBACK")
         return {"status": "ok"}
     except Exception as exc:
         return {"status": "error", "detail": str(exc)}
