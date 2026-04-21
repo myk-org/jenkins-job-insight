@@ -386,7 +386,7 @@ def results_delete(
     job_ids: list[str] | None = _JOB_IDS_ARGUMENT,
     all_jobs: bool = typer.Option(False, "--all", help="Delete all jobs."),
     confirm: bool = typer.Option(
-        False, "--confirm", help="Skip confirmation prompt (required with --all)."
+        False, "--confirm", help="Confirm deleting all jobs (required with --all)."
     ),
     json_output: bool = _JSON_OPTION,
 ):
@@ -426,9 +426,15 @@ def results_delete(
             failed: list[dict] = []
             for start in range(0, len(job_ids), _BULK_DELETE_BATCH_SIZE):
                 chunk = job_ids[start : start + _BULK_DELETE_BATCH_SIZE]
-                chunk_data = client.delete_jobs_bulk(chunk)
-                deleted.extend(chunk_data.get("deleted", []))
-                failed.extend(chunk_data.get("failed", []))
+                try:
+                    chunk_data = client.delete_jobs_bulk(chunk)
+                    deleted.extend(chunk_data.get("deleted", []))
+                    failed.extend(chunk_data.get("failed", []))
+                except JJIError:
+                    failed.extend(
+                        {"job_id": jid, "reason": "batch request failed"}
+                        for jid in chunk
+                    )
             data = {"deleted": deleted, "failed": failed, "total": len(job_ids)}
             if _state.get("json", False):
                 print_output(data, columns=[], as_json=True)
