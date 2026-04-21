@@ -41,6 +41,11 @@ import { useAuth } from '@/lib/auth'
 const STATUS_FILTER_ALL = 'ALL'
 const STATUS_FILTER_OPTIONS = [STATUS_FILTER_ALL, 'completed', 'running', 'waiting', 'pending', 'failed', 'timeout'] as const
 
+const BULK_DELETE_LIMIT = 500
+
+const BULK_SELECT_CHECKBOX_CLASS =
+  "h-4 w-4 cursor-pointer appearance-none rounded border border-text-tertiary bg-surface-elevated checked:bg-signal-blue checked:border-signal-blue checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-no-repeat checked:bg-center transition-all"
+
 function MetricCell({ value, displayValue, icon, tone, tooltipText }: {
   value: number | null | undefined
   displayValue?: ReactNode
@@ -144,6 +149,13 @@ export function DashboardPage() {
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
 
   const showCheckboxes = selectedIds.size > 0
+
+  useEffect(() => {
+    if (!isAdmin && selectedIds.size > 0) {
+      clearSelection()
+      setBulkDeleteConfirm(false)
+    }
+  }, [isAdmin])
 
   const fetchSeqRef = useRef(0)
   const inFlightRef = useRef(false)
@@ -271,14 +283,17 @@ export function DashboardPage() {
 
   const bulkDeleteDescription = useMemo(() => {
     const names = jobs.filter((j) => selectedIds.has(j.job_id)).map((j) => j.job_name || j.job_id)
-    const first5 = names.slice(0, 5).join(', ')
-    const suffix = names.length > 5 ? ` and ${names.length - 5} more` : ''
-    return `Permanently delete ${first5}${suffix}? This cannot be undone.`
+    return `Permanently delete ${names.join(', ')}? This cannot be undone.`
   }, [jobs, selectedIds])
 
   async function handleBulkDelete() {
     const jobIdsToDelete = [...selectedIds]
     if (jobIdsToDelete.length === 0) return
+    if (jobIdsToDelete.length > BULK_DELETE_LIMIT) {
+      setBulkResultMessage(`Select ${BULK_DELETE_LIMIT} or fewer jobs to bulk delete.`)
+      setBulkDeleteConfirm(false)
+      return
+    }
     setBulkDeleting(true)
     try {
       const data = await api.delete<{ deleted: string[]; failed: { job_id: string; reason: string }[]; total?: number }>('/api/results/bulk', { job_ids: jobIdsToDelete })
@@ -429,7 +444,7 @@ export function DashboardPage() {
                       type="checkbox"
                       checked={allPageSelected}
                       onChange={toggleSelectAll}
-                      className="h-4 w-4 cursor-pointer appearance-none rounded border border-text-tertiary bg-surface-elevated checked:bg-signal-blue checked:border-signal-blue checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-no-repeat checked:bg-center transition-all"
+                      className={BULK_SELECT_CHECKBOX_CLASS}
                       aria-label="Select all"
                     />
                   </TableHead>
@@ -461,7 +476,7 @@ export function DashboardPage() {
                     key={job.job_id}
                     className={`group cursor-pointer animate-slide-up ${selectedIds.has(job.job_id) ? 'bg-accent-blue/10' : i % 2 === 0 ? 'bg-surface-card' : 'bg-surface-elevated/40'}`}
                     style={{ animationDelay: `${i * 30}ms`, animationFillMode: 'backwards' }}
-                    onClick={() => selectedIds.size > 0 ? toggleSelect(job.job_id) : handleRowClick(job)}
+                    onClick={() => isAdmin && selectedIds.size > 0 ? toggleSelect(job.job_id) : handleRowClick(job)}
                   >
                     {isAdmin && (
                       <TableCell className="w-10">
@@ -470,7 +485,7 @@ export function DashboardPage() {
                           checked={selectedIds.has(job.job_id)}
                           onChange={(e) => { e.stopPropagation(); toggleSelect(job.job_id) }}
                           onClick={(e) => e.stopPropagation()}
-                          className={`h-4 w-4 cursor-pointer appearance-none rounded border border-text-tertiary bg-surface-elevated checked:bg-signal-blue checked:border-signal-blue checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-no-repeat checked:bg-center transition-all ${showCheckboxes ? '' : 'opacity-0 group-hover:opacity-100'}`}
+                          className={`${BULK_SELECT_CHECKBOX_CLASS} ${showCheckboxes ? '' : 'opacity-0 group-hover:opacity-100'}`}
                           aria-label={`Select ${getJobDisplayName(job)}`}
                         />
                       </TableCell>
@@ -604,7 +619,7 @@ export function DashboardPage() {
           <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
         )}
 
-        {selectedIds.size > 0 && (
+        {isAdmin && selectedIds.size > 0 && (
           <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border-muted bg-surface-card/95 backdrop-blur-sm px-6 py-3 animate-slide-up">
             <div className="mx-auto flex max-w-screen-xl items-center justify-between">
               <span className="text-sm text-text-secondary">
@@ -617,7 +632,13 @@ export function DashboardPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => setBulkDeleteConfirm(true)}
+                  onClick={() => {
+                    if (selectedIds.size > BULK_DELETE_LIMIT) {
+                      setBulkResultMessage(`Select ${BULK_DELETE_LIMIT} or fewer jobs to bulk delete.`)
+                      return
+                    }
+                    setBulkDeleteConfirm(true)
+                  }}
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                   Delete ({selectedIds.size})
@@ -639,7 +660,7 @@ export function DashboardPage() {
         />
 
         <ConfirmDialog
-          open={bulkDeleteConfirm}
+          open={isAdmin && bulkDeleteConfirm}
           onOpenChange={(open) => { if (!open) setBulkDeleteConfirm(false) }}
           title="Delete selected analyses"
           description={bulkDeleteDescription}

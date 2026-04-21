@@ -676,5 +676,5 @@ class BulkDeleteRequest(BaseModel):
         ...,
         min_length=1,
         max_length=500,
-        description="Job IDs to delete (1–500 per request).",
+        description="Job IDs to delete (1-500 per request).",
     )

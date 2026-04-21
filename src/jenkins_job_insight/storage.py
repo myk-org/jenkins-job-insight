@@ -1977,21 +1977,26 @@ async def delete_jobs_bulk(job_ids: list[str]) -> dict:
     # Preserve order while dropping duplicates
     unique_ids = list(dict.fromkeys(job_ids))
     async with aiosqlite.connect(DB_PATH) as db:
-        for idx, job_id in enumerate(unique_ids):
-            savepoint = f"delete_job_{idx}"
-            await db.execute(f"SAVEPOINT {savepoint}")
-            try:
-                if await _delete_job_rows(db, job_id):
-                    deleted.append(job_id)
-                else:
-                    failed.append({"job_id": job_id, "reason": "not found"})
-                await db.execute(f"RELEASE SAVEPOINT {savepoint}")
-            except Exception:
-                logger.exception("delete_jobs_bulk: failed to delete %s", job_id)
-                await db.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-                await db.execute(f"RELEASE SAVEPOINT {savepoint}")
-                failed.append({"job_id": job_id, "reason": "deletion failed"})
-        await db.commit()
+        await db.execute("BEGIN IMMEDIATE")
+        try:
+            for idx, job_id in enumerate(unique_ids):
+                savepoint = f"delete_job_{idx}"
+                await db.execute(f"SAVEPOINT {savepoint}")
+                try:
+                    if await _delete_job_rows(db, job_id):
+                        deleted.append(job_id)
+                    else:
+                        failed.append({"job_id": job_id, "reason": "not found"})
+                    await db.execute(f"RELEASE SAVEPOINT {savepoint}")
+                except Exception:
+                    logger.exception("delete_jobs_bulk: failed to delete %s", job_id)
+                    await db.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    await db.execute(f"RELEASE SAVEPOINT {savepoint}")
+                    failed.append({"job_id": job_id, "reason": "deletion failed"})
+            await db.commit()
+        except Exception:
+            await db.execute("ROLLBACK")
+            raise
     return {"deleted": deleted, "failed": failed, "total": len(unique_ids)}
 
 

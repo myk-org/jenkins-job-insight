@@ -414,6 +414,8 @@ def results_delete(
             typer.echo("Error: provide at least one JOB_ID or use --all.", err=True)
             raise typer.Exit(code=1)
 
+        job_ids = list(dict.fromkeys(job_ids))
+
         if len(job_ids) == 1:
             data = client.delete_job(job_ids[0])
             if _state.get("json", False):
