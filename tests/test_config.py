@@ -398,6 +398,49 @@ class TestParseAdditionalRepos:
                 "infra:https://github.com/org/a,infra:https://github.com/org/b"
             )
 
+    def test_repo_with_token(self) -> None:
+        """Repo URL with @token extracts token into result dict."""
+        result = parse_additional_repos(
+            "infra:https://github.com/org/infra@ghp_secret123"
+        )
+        assert result == [
+            {
+                "name": "infra",
+                "url": "https://github.com/org/infra",
+                "ref": "",
+                "token": "ghp_secret123",  # pragma: allowlist secret
+            }
+        ]
+
+    def test_repo_with_ref_and_token(self) -> None:
+        """Repo URL with :ref and @token extracts both."""
+        result = parse_additional_repos(
+            "infra:https://github.com/org/infra:develop@ghp_secret123"
+        )
+        assert result == [
+            {
+                "name": "infra",
+                "url": "https://github.com/org/infra",
+                "ref": "develop",
+                "token": "ghp_secret123",  # pragma: allowlist secret
+            }
+        ]
+
+    def test_repo_without_token_has_no_token_key(self) -> None:
+        """Repo without @token does not include token key in result."""
+        result = parse_additional_repos("infra:https://github.com/org/infra")
+        assert "token" not in result[0]
+
+    def test_multiple_repos_mixed_tokens(self) -> None:
+        """Some repos with token, some without."""
+        result = parse_additional_repos(
+            "infra:https://github.com/org/infra@tok1,"
+            "product:https://github.com/org/product"
+        )
+        assert len(result) == 2
+        assert result[0]["token"] == "tok1"  # pragma: allowlist secret
+        assert "token" not in result[1]
+
     def test_settings_loads_additional_repos(self) -> None:
         with patch.dict(
             os.environ,

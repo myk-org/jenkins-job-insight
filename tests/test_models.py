@@ -901,6 +901,36 @@ class TestAdditionalRepo:
         )
         assert repo.ref == ""
 
+    def test_token_optional(self) -> None:
+        """Token defaults to None when not provided."""
+        repo = AdditionalRepo(name="infra", url="https://github.com/org/infra")
+        assert repo.token is None
+
+    def test_token_accepted(self) -> None:
+        """Token field accepts a string value."""
+        repo = AdditionalRepo(
+            name="infra",
+            url="https://github.com/org/infra",
+            token="tok",  # noqa: S106
+        )
+        assert repo.token == "tok"  # noqa: S105
+
+    def test_token_none_explicit(self) -> None:
+        """Explicitly passing None for token is accepted."""
+        repo = AdditionalRepo(
+            name="infra", url="https://github.com/org/infra", token=None
+        )
+        assert repo.token is None
+
+    def test_backward_compat_no_token(self) -> None:
+        """AdditionalRepo created without token field is backward compatible."""
+        data = {"name": "infra", "url": "https://github.com/org/infra"}
+        repo = AdditionalRepo(**data)
+        assert repo.token is None
+        dumped = repo.model_dump(mode="json")
+        assert "token" in dumped
+        assert dumped["token"] is None
+
 
 class TestAdditionalReposDuplicateNames:
     """Tests for duplicate name rejection in additional_repos."""
