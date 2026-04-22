@@ -305,7 +305,7 @@ def _reconstruct_from_params(
         additional_repos=(
             params["additional_repos"] if "additional_repos" in params else None
         ),
-        force=params.get("force", False),
+        **({"force": params["force"]} if "force" in params else {}),
     )
     # Build Settings from env defaults, then layer stored overrides
     base_settings = get_settings()
@@ -1239,7 +1239,7 @@ def _build_request_params(
             "get_job_artifacts": merged.get_job_artifacts,
             "raw_prompt": body.raw_prompt or "",
             "peer_analysis_max_rounds": merged.peer_analysis_max_rounds,
-            "force": body.force,
+            "force": merged.force_analysis,
             "wait_started_at": _time.time(),
         }
     )

@@ -1157,6 +1157,7 @@ class TestForceAnalysisSuccessfulBuild:
             "artifacts": [],
         }
         mock_client.get_build_console.return_value = "Build finished successfully"
+        mock_client.get_test_report.return_value = None
 
         monkeypatch.setattr(
             "jenkins_job_insight.analyzer.JenkinsClient",
@@ -1170,22 +1171,28 @@ class TestForceAnalysisSuccessfulBuild:
             "jenkins_job_insight.analyzer.asyncio.to_thread",
             fake_to_thread,
         )
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.check_ai_cli_available",
+            AsyncMock(return_value=(True, "")),
+        )
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer._call_ai_cli_with_retry",
+            AsyncMock(
+                return_value=(True, '{"classification": "CODE ISSUE", "details": "d"}')
+            ),
+        )
 
         # With force=True, it should NOT return the early "Build passed" result.
-        # It will proceed into the analysis flow and may fail at AI CLI sanity
-        # check (which is expected in test env without actual AI CLI).
+        # It will proceed into the analysis flow.
         # The key assertion: get_build_console was called, proving it went past
         # the SUCCESS early-return guard.
-        try:
-            await analyze_job(
-                body,
-                merged,
-                ai_provider="claude",
-                ai_model="test-model",
-                job_id=None,
-            )
-        except Exception:
-            pass  # AI CLI sanity check failure is expected
+        await analyze_job(
+            body,
+            merged,
+            ai_provider="claude",
+            ai_model="test-model",
+            job_id=None,
+        )
 
         mock_client.get_build_console.assert_called_once()
 
@@ -1217,6 +1224,7 @@ class TestForceAnalysisSuccessfulBuild:
             "artifacts": [],
         }
         mock_client.get_build_console.return_value = "Build finished successfully"
+        mock_client.get_test_report.return_value = None
 
         monkeypatch.setattr(
             "jenkins_job_insight.analyzer.JenkinsClient",
@@ -1230,17 +1238,24 @@ class TestForceAnalysisSuccessfulBuild:
             "jenkins_job_insight.analyzer.asyncio.to_thread",
             fake_to_thread,
         )
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.check_ai_cli_available",
+            AsyncMock(return_value=(True, "")),
+        )
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer._call_ai_cli_with_retry",
+            AsyncMock(
+                return_value=(True, '{"classification": "CODE ISSUE", "details": "d"}')
+            ),
+        )
 
-        try:
-            await analyze_job(
-                body,
-                merged,
-                ai_provider="claude",
-                ai_model="test-model",
-                job_id=None,
-            )
-        except Exception:
-            pass  # AI CLI sanity check failure is expected
+        await analyze_job(
+            body,
+            merged,
+            ai_provider="claude",
+            ai_model="test-model",
+            job_id=None,
+        )
 
         # Verify it went past the SUCCESS early-return guard
         mock_client.get_build_console.assert_called_once()

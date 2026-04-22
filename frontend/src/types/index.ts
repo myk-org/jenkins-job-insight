@@ -139,6 +139,7 @@ export interface AnalysisResult {
     tests_repo_url?: string
     tests_repo_ref?: string
     additional_repos?: Array<{ name: string; url: string; ref?: string }>
+    force?: boolean
     [key: string]: unknown
   }
 }

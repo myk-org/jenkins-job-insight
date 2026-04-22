@@ -106,7 +106,7 @@ function initFormState(p: AnalysisResult['request_params']) {
     jiraProjectKey: (p?.jira_project_key as string) || '',
     getArtifacts: p?.get_job_artifacts != null ? (p.get_job_artifacts as boolean) : undefined,
     maxArtifactsSize: p?.jenkins_artifacts_max_size_mb != null ? (p.jenkins_artifacts_max_size_mb as number) : undefined,
-    force: p?.force != null ? (p.force as boolean) : false,
+    force: p?.force ?? false,
   }
 }
 
@@ -173,7 +173,7 @@ export function ReAnalyzeDialog({ open, onOpenChange, result, jobId }: ReAnalyze
       const body: Record<string, unknown> = {
         ai_provider: aiProvider,
         ai_model: aiModel,
-        ...(force && { force: true }),
+        force,
         ...(aiCliTimeout !== undefined && { ai_cli_timeout: aiCliTimeout }),
         ...(enableJira !== undefined && { enable_jira: enableJira }),
         ...(jiraUrl && { jira_url: jiraUrl }),
