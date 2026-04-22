@@ -15,6 +15,7 @@ from xml.etree.ElementTree import ParseError
 
 import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -674,14 +675,12 @@ async def _validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """Log 422 validation error details at DEBUG level, then return standard response."""
-    from fastapi.encoders import jsonable_encoder
-
     if logger.isEnabledFor(logging.DEBUG):
         masked_body = None
         if exc.body is not None:
             try:
                 masked_body = mask_sensitive_fields(exc.body)
-            except Exception:
+            except Exception:  # noqa: BLE001 — masking must never break the 422 response
                 masked_body = "<unable to mask>"
         raw_errors = jsonable_encoder(exc.errors())
         masked_errors = [_mask_pydantic_error(e) for e in raw_errors]
