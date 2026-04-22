@@ -1844,6 +1844,10 @@ def admin_users_change_role(
 # -- Metadata -----------------------------------------------------------------
 
 
+_METADATA_COLUMNS = ["job_name", "team", "tier", "version", "labels"]
+_METADATA_COLUMN_LABELS = {"job_name": "JOB NAME"}
+
+
 @metadata_app.command("list")
 def metadata_list(
     team: str = typer.Option("", "--team", help="Filter by team."),
@@ -1860,8 +1864,8 @@ def metadata_list(
         lambda c: c.list_jobs_metadata(
             team=team, tier=tier, version=version, labels=label or None
         ),
-        columns=["job_name", "team", "tier", "version", "labels"],
-        labels={"job_name": "JOB NAME"},
+        columns=_METADATA_COLUMNS,
+        labels=_METADATA_COLUMN_LABELS,
     )
 
 
@@ -1874,7 +1878,7 @@ def metadata_get(
     _run_client_command(
         json_output,
         lambda c: c.get_job_metadata(job_name),
-        columns=["job_name", "team", "tier", "version", "labels"],
+        columns=_METADATA_COLUMNS,
     )
 
 
@@ -1945,6 +1949,9 @@ def metadata_import(
                 "Error: PyYAML is required for YAML files. Install with: pip install pyyaml",
                 err=True,
             )
+            raise typer.Exit(code=1) from None
+        except yaml.YAMLError as exc:
+            typer.echo(f"Error: invalid YAML: {exc}", err=True)
             raise typer.Exit(code=1) from None
     else:
         try:

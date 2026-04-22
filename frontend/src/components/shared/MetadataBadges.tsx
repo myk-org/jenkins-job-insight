@@ -15,7 +15,7 @@ export function MetadataBadges({ metadata }: { metadata: JobMetadata | null | un
   if (!hasBadges) return null
 
   return (
-    <span className="inline-flex flex-wrap items-center gap-1">
+    <div className="inline-flex flex-wrap items-center gap-1">
       {team && (
         <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-accent-blue/30 text-accent-blue">
           {team}
@@ -36,6 +36,6 @@ export function MetadataBadges({ metadata }: { metadata: JobMetadata | null | un
           {label}
         </Badge>
       ))}
-    </span>
+    </div>
   )
 }

@@ -697,41 +697,31 @@ class BulkDeleteRequest(BaseModel):
     )
 
 
-class JobMetadata(BaseModel):
+class _JobMetadataFields(BaseModel):
+    """Shared metadata fields for job metadata request/response models."""
+
+    team: str | None = Field(default=None, description="Team owning this job")
+    tier: str | None = Field(
+        default=None, description="Service tier (e.g. critical, standard, low)"
+    )
+    version: str | None = Field(default=None, description="Version or release label")
+    labels: list[str] = Field(
+        default_factory=list, description="Arbitrary labels for categorization"
+    )
+
+
+class JobMetadata(_JobMetadataFields):
     """Metadata for a Jenkins job used for filtering and organization."""
 
     job_name: str = Field(description="Jenkins job name (primary key)")
-    team: str | None = Field(default=None, description="Team owning this job")
-    tier: str | None = Field(
-        default=None, description="Service tier (e.g. critical, standard, low)"
-    )
-    version: str | None = Field(default=None, description="Version or release label")
-    labels: list[str] = Field(
-        default_factory=list, description="Arbitrary labels for categorization"
-    )
 
 
-class JobMetadataInput(BaseModel):
+class JobMetadataInput(_JobMetadataFields):
     """Input model for setting job metadata (no job_name — taken from URL path)."""
 
-    team: str | None = Field(default=None, description="Team owning this job")
-    tier: str | None = Field(
-        default=None, description="Service tier (e.g. critical, standard, low)"
-    )
-    version: str | None = Field(default=None, description="Version or release label")
-    labels: list[str] = Field(
-        default_factory=list, description="Arbitrary labels for categorization"
-    )
 
-
-class BulkJobMetadataEntry(BaseModel):
+class BulkJobMetadataEntry(JobMetadata):
     """A single entry in a bulk metadata import."""
-
-    job_name: str = Field(description="Jenkins job name")
-    team: str | None = Field(default=None)
-    tier: str | None = Field(default=None)
-    version: str | None = Field(default=None)
-    labels: list[str] = Field(default_factory=list)
 
 
 class BulkJobMetadataRequest(BaseModel):

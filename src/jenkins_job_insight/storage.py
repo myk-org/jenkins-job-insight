@@ -2746,6 +2746,22 @@ def _job_metadata_row_to_dict(row) -> dict:
     return d
 
 
+async def _upsert_job_metadata_row(db: aiosqlite.Connection, item: dict) -> None:
+    """Upsert a single job metadata row."""
+    labels_json = json.dumps(item.get("labels") or [])
+    await db.execute(
+        "INSERT OR REPLACE INTO job_metadata (job_name, team, tier, version, labels) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (
+            item["job_name"],
+            item.get("team"),
+            item.get("tier"),
+            item.get("version"),
+            labels_json,
+        ),
+    )
+
+
 async def set_job_metadata(
     job_name: str,
     *,
@@ -2768,12 +2784,16 @@ async def set_job_metadata(
     Returns:
         The stored metadata dict.
     """
-    labels_json = json.dumps(labels or [])
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT OR REPLACE INTO job_metadata (job_name, team, tier, version, labels) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (job_name, team, tier, version, labels_json),
+        await _upsert_job_metadata_row(
+            db,
+            {
+                "job_name": job_name,
+                "team": team,
+                "tier": tier,
+                "version": version,
+                "labels": labels or [],
+            },
         )
         await db.commit()
     return {
@@ -2838,7 +2858,7 @@ async def list_jobs_with_metadata(
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            f"SELECT job_name, team, tier, version, labels FROM job_metadata WHERE {where} ORDER BY job_name",
+            f"SELECT job_name, team, tier, version, labels FROM job_metadata WHERE {where} ORDER BY job_name",  # noqa: S608
             params,
         )
         rows = await cursor.fetchall()
@@ -2865,17 +2885,6 @@ async def bulk_set_metadata(items: list[dict]) -> dict:
     """
     async with aiosqlite.connect(DB_PATH) as db:
         for item in items:
-            labels_json = json.dumps(item.get("labels", []))
-            await db.execute(
-                "INSERT OR REPLACE INTO job_metadata (job_name, team, tier, version, labels) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (
-                    item["job_name"],
-                    item.get("team"),
-                    item.get("tier"),
-                    item.get("version"),
-                    labels_json,
-                ),
-            )
+            await _upsert_job_metadata_row(db, item)
         await db.commit()
     return {"updated": len(items)}

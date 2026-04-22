@@ -186,6 +186,9 @@ class TestJobMetadataStorage:
 # --- API endpoint tests ---
 
 
+_ADMIN_KEY = "test-admin-key-16chars"  # pragma: allowlist secret
+
+
 @pytest.fixture
 def mock_settings():
     env = {
@@ -193,6 +196,7 @@ def mock_settings():
         "JENKINS_USER": "testuser",
         "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
         "GEMINI_API_KEY": "test-key",  # pragma: allowlist secret
+        "ADMIN_KEY": _ADMIN_KEY,
     }
     with patch.dict(os.environ, env, clear=True):
         from jenkins_job_insight.config import get_settings
@@ -211,6 +215,24 @@ def api_client(mock_settings, temp_db_path: Path):
         from jenkins_job_insight.main import app
 
         with TestClient(app) as client:
+            # Inject admin auth header for mutation endpoints
+            _original_put = client.put
+            _original_delete = client.delete
+
+            def _put_with_auth(*args, **kwargs):
+                kwargs.setdefault("headers", {})["Authorization"] = (
+                    f"Bearer {_ADMIN_KEY}"
+                )
+                return _original_put(*args, **kwargs)
+
+            def _delete_with_auth(*args, **kwargs):
+                kwargs.setdefault("headers", {})["Authorization"] = (
+                    f"Bearer {_ADMIN_KEY}"
+                )
+                return _original_delete(*args, **kwargs)
+
+            client.put = _put_with_auth
+            client.delete = _delete_with_auth
             yield client
 
 

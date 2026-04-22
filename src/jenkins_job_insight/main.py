@@ -4078,14 +4078,27 @@ async def rotate_key_endpoint(request: Request, username: str) -> JSONResponse:
 # -- Job Metadata Endpoints ---------------------------------------------------
 
 
-@app.get("/api/jobs/metadata")
-async def list_jobs_metadata(
+async def _metadata_filters(
     team: str = Query(default=""),
     tier: str = Query(default=""),
     version: str = Query(default=""),
     label: list[str] = Query(default=[]),
+) -> dict:
+    """Shared dependency for metadata filter query parameters."""
+    return {"team": team, "tier": tier, "version": version, "label": label}
+
+
+@app.get("/api/jobs/metadata")
+async def list_jobs_metadata(
+    filters: dict = Depends(_metadata_filters),
 ) -> list[dict]:
     """List all job metadata, optionally filtered by team, tier, version, or labels."""
+    team, tier, version, label = (
+        filters["team"],
+        filters["tier"],
+        filters["version"],
+        filters["label"],
+    )
     logger.debug(
         f"GET /api/jobs/metadata: team={team!r}, tier={tier!r}, version={version!r}, label={label!r}"
     )
@@ -4106,10 +4119,12 @@ async def get_job_metadata_endpoint(job_name: str) -> dict:
 
 @app.put("/api/jobs/{job_name:path}/metadata")
 async def set_job_metadata_endpoint(
+    request: Request,
     job_name: str,
     body: JobMetadataInput,
 ) -> dict:
     """Set or update metadata for a job."""
+    _require_admin(request)
     logger.debug(f"PUT /api/jobs/{job_name}/metadata")
     return await storage.set_job_metadata(
         job_name,
@@ -4121,8 +4136,9 @@ async def set_job_metadata_endpoint(
 
 
 @app.delete("/api/jobs/{job_name:path}/metadata")
-async def delete_job_metadata_endpoint(job_name: str) -> dict:
+async def delete_job_metadata_endpoint(request: Request, job_name: str) -> dict:
     """Delete metadata for a job."""
+    _require_admin(request)
     logger.debug(f"DELETE /api/jobs/{job_name}/metadata")
     deleted = await storage.delete_job_metadata(job_name)
     if not deleted:
@@ -4132,9 +4148,11 @@ async def delete_job_metadata_endpoint(job_name: str) -> dict:
 
 @app.put("/api/jobs/metadata/bulk")
 async def bulk_set_job_metadata(
+    request: Request,
     body: BulkJobMetadataRequest,
 ) -> dict:
     """Bulk import job metadata."""
+    _require_admin(request)
     logger.debug(f"PUT /api/jobs/metadata/bulk: {len(body.items)} items")
     items = [item.model_dump() for item in body.items]
     return await storage.bulk_set_metadata(items)
@@ -4142,10 +4160,7 @@ async def bulk_set_job_metadata(
 
 @app.get("/api/dashboard/filtered")
 async def api_dashboard_filtered(
-    team: str = Query(default=""),
-    tier: str = Query(default=""),
-    version: str = Query(default=""),
-    label: list[str] = Query(default=[]),
+    filters: dict = Depends(_metadata_filters),
 ) -> list[dict]:
     """Return dashboard job list filtered by metadata.
 
@@ -4153,6 +4168,12 @@ async def api_dashboard_filtered(
     provided, returns all jobs (same as /api/dashboard but with
     metadata attached).
     """
+    team, tier, version, label = (
+        filters["team"],
+        filters["tier"],
+        filters["version"],
+        filters["label"],
+    )
     logger.debug(
         f"GET /api/dashboard/filtered: team={team!r}, tier={tier!r}, version={version!r}, label={label!r}"
     )

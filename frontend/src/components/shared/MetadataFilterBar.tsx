@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
 
@@ -88,57 +87,36 @@ export function MetadataFilterBar({
     return null
   }
 
+  const selectFilters = [
+    { key: 'team', value: team, options: options.teams, allLabel: 'All teams', aria: 'Filter by team', onChange: onTeamChange },
+    { key: 'tier', value: tier, options: options.tiers, allLabel: 'All tiers', aria: 'Filter by tier', onChange: onTierChange },
+    { key: 'version', value: version, options: options.versions, allLabel: 'All versions', aria: 'Filter by version', onChange: onVersionChange },
+  ]
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {options.teams.length > 0 && (
-        <Select value={team || ALL_VALUE} onValueChange={(v) => onTeamChange(v === ALL_VALUE ? '' : v)}>
-          <SelectTrigger aria-label="Filter by team" className="w-32">
-            <SelectValue placeholder="Team" />
+      {selectFilters.filter((f) => f.options.length > 0).map((f) => (
+        <Select key={f.key} value={f.value || ALL_VALUE} onValueChange={(v) => f.onChange(v === ALL_VALUE ? '' : v)}>
+          <SelectTrigger aria-label={f.aria} className="w-32">
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL_VALUE}>All teams</SelectItem>
-            {options.teams.map((t) => (
-              <SelectItem key={t} value={t}>{t}</SelectItem>
+            <SelectItem value={ALL_VALUE}>{f.allLabel}</SelectItem>
+            {f.options.map((option) => (
+              <SelectItem key={option} value={option}>{option}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-      )}
-
-      {options.tiers.length > 0 && (
-        <Select value={tier || ALL_VALUE} onValueChange={(v) => onTierChange(v === ALL_VALUE ? '' : v)}>
-          <SelectTrigger aria-label="Filter by tier" className="w-32">
-            <SelectValue placeholder="Tier" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_VALUE}>All tiers</SelectItem>
-            {options.tiers.map((t) => (
-              <SelectItem key={t} value={t}>{t}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
-      {options.versions.length > 0 && (
-        <Select value={version || ALL_VALUE} onValueChange={(v) => onVersionChange(v === ALL_VALUE ? '' : v)}>
-          <SelectTrigger aria-label="Filter by version" className="w-32">
-            <SelectValue placeholder="Version" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_VALUE}>All versions</SelectItem>
-            {options.versions.map((v) => (
-              <SelectItem key={v} value={v}>{v}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+      ))}
 
       {options.allLabels.length > 0 && (
         <div className="flex flex-wrap items-center gap-1">
           {options.allLabels.map((label) => (
-            <Badge
+            <button
+              type="button"
               key={label}
-              variant={labels.includes(label) ? 'default' : 'outline'}
-              className={`cursor-pointer text-xs px-2 py-0.5 transition-colors ${
+              aria-pressed={labels.includes(label)}
+              className={`cursor-pointer text-xs px-2 py-0.5 rounded-md border transition-colors ${
                 labels.includes(label)
                   ? 'bg-signal-green/20 text-signal-green border-signal-green/40 hover:bg-signal-green/30'
                   : 'border-border-muted text-text-tertiary hover:bg-surface-hover hover:text-text-secondary'
@@ -146,7 +124,7 @@ export function MetadataFilterBar({
               onClick={() => toggleLabel(label)}
             >
               {label}
-            </Badge>
+            </button>
           ))}
         </div>
       )}

@@ -122,7 +122,7 @@ export function DashboardPage() {
   const metaTeam = searchParams.get('team') ?? ''
   const metaTier = searchParams.get('tier') ?? ''
   const metaVersion = searchParams.get('version') ?? ''
-  const metaLabels = searchParams.getAll('label')
+  const metaLabels = useMemo(() => searchParams.getAll('label'), [searchParams])
   const setMetaParam = useCallback((key: string, value: string) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
@@ -183,11 +183,8 @@ export function DashboardPage() {
   }, [isAdmin, selectedIds])
 
   const fetchSeqRef = useRef(0)
-  const inFlightRef = useRef(false)
 
   const fetchJobs = useCallback(async () => {
-    if (inFlightRef.current) return
-    inFlightRef.current = true
     const thisSeq = ++fetchSeqRef.current
     try {
       let url = '/api/dashboard/filtered'
@@ -208,7 +205,6 @@ export function DashboardPage() {
         setError(err instanceof Error ? err.message : 'Failed to load dashboard')
       }
     } finally {
-      inFlightRef.current = false
       if (thisSeq === fetchSeqRef.current) {
         setLoading(false)
       }
