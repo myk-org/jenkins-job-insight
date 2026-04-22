@@ -324,8 +324,8 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
                   content={[
                     analysis.code_fix?.file ? `${analysis.code_fix.file}${analysis.code_fix.line ? `:${analysis.code_fix.line}` : ''}` : '',
                     analysis.code_fix?.change ?? '',
-                    analysis.code_fix?.original_code ? `Original Code:\n${analysis.code_fix.original_code}` : '',
-                    analysis.code_fix?.suggested_code ? `Suggested Code:\n${analysis.code_fix.suggested_code}` : '',
+                    analysis.code_fix.original_code != null ? `Original Code:\n${analysis.code_fix.original_code}` : '',
+                    analysis.code_fix.suggested_code != null ? `Suggested Code:\n${analysis.code_fix.suggested_code}` : '',
                   ].filter(Boolean).join('\n\n')}
                   sectionId="suggested_fix"
                   copiedSection={copiedSection}
@@ -357,10 +357,10 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
                     </p>
                   )}
                   {analysis.code_fix.change && <p className="mt-1 text-text-secondary whitespace-pre-wrap"><LinkedText text={analysis.code_fix.change} repoUrls={repoUrls} /></p>}
-                  {analysis.code_fix.original_code && (
+                  {analysis.code_fix.original_code != null && (
                     <CodeFixLiteralBlock title="Original Code" content={analysis.code_fix.original_code} className="text-text-secondary" />
                   )}
-                  {analysis.code_fix.suggested_code && (
+                  {analysis.code_fix.suggested_code != null && (
                     <CodeFixLiteralBlock title="Suggested Code" content={analysis.code_fix.suggested_code} className="text-signal-green" />
                   )}
                 </div>
