@@ -57,20 +57,18 @@ def parse_additional_repos(raw: str) -> list[dict]:
     for i, entry in enumerate(raw.split(",")):
         entry = entry.strip()
         if not entry:
-            raise ValueError(
-                f"Empty entry at position {i + 1} in additional repos: '{raw}'"
-            )
+            raise ValueError(f"Empty entry at position {i + 1} in additional repos")
         if ":" not in entry:
             raise ValueError(
-                f"Invalid additional repo at position {i + 1}: '{entry}' (expected 'name:url')"
+                f"Invalid additional repo at position {i + 1} (expected 'name:url')"
             )
         name, url_raw = entry.split(":", 1)
         name = name.strip()
         url_raw = url_raw.strip()
         if not name:
-            raise ValueError(f"Empty name at position {i + 1}: '{entry}'")
+            raise ValueError(f"Empty name at position {i + 1}")
         if not url_raw:
-            raise ValueError(f"Empty URL at position {i + 1}: '{entry}'")
+            raise ValueError(f"Empty URL at position {i + 1}")
         # Extract token: look for @token after the path (not in the netloc)
         token = _extract_token_from_url_spec(url_raw)
         if token:

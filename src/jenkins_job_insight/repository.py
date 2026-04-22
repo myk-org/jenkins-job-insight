@@ -113,15 +113,14 @@ def _inject_token_into_url(url: str, token: str) -> str:
     For HTTPS URLs, embeds the token as ``x-token-auth:<token>@host``.
     Non-HTTPS URLs are returned unchanged (token is ignored).
     """
-    from urllib.parse import urlparse, urlunparse
+    from urllib.parse import quote, urlparse, urlunparse
 
     parsed = urlparse(url)
     if parsed.scheme != "https" or not token:
         return url
     # Replace any existing userinfo with token-based auth
-    netloc = f"x-token-auth:{token}@{parsed.hostname}"
-    if parsed.port:
-        netloc += f":{parsed.port}"
+    host_port = parsed.netloc.rsplit("@", 1)[-1]
+    netloc = f"x-token-auth:{quote(token, safe='')}@{host_port}"
     return urlunparse(parsed._replace(netloc=netloc))
 
 
@@ -236,6 +235,16 @@ class RepositoryManager:
             clone_url = _inject_token_into_url(clone_url, token)
         logger.info(f"Cloning repository into {target_dir}")
         _clone_with_ssl_retry(clone_url, target_dir, depth, branch=branch)
+        # Scrub credentials from .git/config to prevent at-rest exposure
+        if token:
+            import subprocess
+
+            subprocess.run(
+                ["git", "remote", "set-url", "origin", str(repo_url)],
+                cwd=target_dir,
+                check=False,
+                capture_output=True,
+            )
         return target_dir
 
     def create_workspace(self) -> Path:

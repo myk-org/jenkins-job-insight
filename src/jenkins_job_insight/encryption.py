@@ -18,6 +18,7 @@ import os
 import re
 import secrets
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -145,18 +146,20 @@ def _get_fernet() -> Fernet:
     return Fernet(_derive_fernet_key(_resolve_encryption_secret()))
 
 
+def _map_additional_repo_entries(
+    repos: list, transform: Callable[[dict], dict]
+) -> list:
+    """Apply *transform* to dict additional_repos entries, preserving non-dict items."""
+    return [transform(entry) if isinstance(entry, dict) else entry for entry in repos]
+
+
 def _encrypt_additional_repos_tokens(
     repos: list, fernet: Fernet | None
 ) -> tuple[list, Fernet | None]:
-    """Encrypt token fields inside additional_repos entries.
+    """Encrypt token fields inside additional_repos entries."""
 
-    Returns the updated list and the (possibly lazily-created) Fernet instance.
-    """
-    result = []
-    for entry in repos:
-        if not isinstance(entry, dict):
-            result.append(entry)
-            continue
+    def _encrypt_entry(entry: dict) -> dict:
+        nonlocal fernet
         token_val = entry.get("token")
         if (
             isinstance(token_val, str)
@@ -166,24 +169,19 @@ def _encrypt_additional_repos_tokens(
             if fernet is None:
                 fernet = _get_fernet()
             enc = fernet.encrypt(token_val.encode()).decode()
-            result.append({**entry, "token": f"{_ENCRYPTED_PREFIX}{enc}"})
-        else:
-            result.append(entry)
-    return result, fernet
+            return {**entry, "token": f"{_ENCRYPTED_PREFIX}{enc}"}
+        return entry
+
+    return _map_additional_repo_entries(repos, _encrypt_entry), fernet
 
 
 def _decrypt_additional_repos_tokens(
     repos: list, fernet: Fernet | None
 ) -> tuple[list, Fernet | None]:
-    """Decrypt token fields inside additional_repos entries.
+    """Decrypt token fields inside additional_repos entries."""
 
-    Returns the updated list and the (possibly lazily-created) Fernet instance.
-    """
-    result = []
-    for entry in repos:
-        if not isinstance(entry, dict):
-            result.append(entry)
-            continue
+    def _decrypt_entry(entry: dict) -> dict:
+        nonlocal fernet
         token_val = entry.get("token")
         if (
             isinstance(token_val, str)
@@ -195,27 +193,22 @@ def _decrypt_additional_repos_tokens(
             ciphertext = token_val[len(_ENCRYPTED_PREFIX) :]
             try:
                 decrypted = fernet.decrypt(ciphertext.encode()).decode()
-                result.append({**entry, "token": decrypted})
+                return {**entry, "token": decrypted}
             except InvalidToken:
                 logger.warning(
                     "Failed to decrypt additional_repos token: encryption key may have changed."
                 )
-                result.append(entry)
-        else:
-            result.append(entry)
-    return result, fernet
+        return entry
+
+    return _map_additional_repo_entries(repos, _decrypt_entry), fernet
 
 
 def _strip_additional_repos_tokens(repos: list) -> list:
     """Remove token fields from additional_repos entries for API responses."""
-    result = []
-    for entry in repos:
-        if isinstance(entry, dict):
-            stripped = {k: v for k, v in entry.items() if k != "token"}
-            result.append(stripped)
-        else:
-            result.append(entry)
-    return result
+    return _map_additional_repo_entries(
+        repos,
+        lambda entry: {k: v for k, v in entry.items() if k != "token"},
+    )
 
 
 def encrypt_sensitive_fields(params: dict) -> dict:

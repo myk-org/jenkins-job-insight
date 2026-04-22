@@ -298,8 +298,8 @@ class TestAdditionalReposTokenEncryption:
         encrypted = encrypt_sensitive_fields(params)
         decrypted = decrypt_sensitive_fields(encrypted)
         assert (
-            decrypted["additional_repos"][0]["token"] == "tok"
-        )  # pragma: allowlist secret
+            decrypted["additional_repos"][0]["token"] == "tok"  # noqa: S105  # pragma: allowlist secret
+        )
 
     def test_round_trip_additional_repos_tokens(self) -> None:
         """encrypt -> decrypt preserves additional_repos tokens."""
@@ -321,12 +321,12 @@ class TestAdditionalReposTokenEncryption:
         encrypted = encrypt_sensitive_fields(params)
         decrypted = decrypt_sensitive_fields(encrypted)
         assert (
-            decrypted["additional_repos"][0]["token"] == "tok1"
-        )  # pragma: allowlist secret
+            decrypted["additional_repos"][0]["token"] == "tok1"  # noqa: S105  # pragma: allowlist secret
+        )
         assert "token" not in decrypted["additional_repos"][1]
         assert (
-            decrypted["additional_repos"][2]["token"] == "tok3"
-        )  # pragma: allowlist secret
+            decrypted["additional_repos"][2]["token"] == "tok3"  # noqa: S105  # pragma: allowlist secret
+        )
 
     def test_strip_additional_repos_tokens(self) -> None:
         """strip_sensitive_from_response removes tokens from additional_repos."""

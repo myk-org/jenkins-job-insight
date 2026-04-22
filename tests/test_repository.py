@@ -746,7 +746,7 @@ class TestCloneIntoWithToken:
             "https://github.com/org/repo",
             target,
             depth=1,
-            token="tok123",  # pragma: allowlist secret
+            token="tok123",  # noqa: S106  # pragma: allowlist secret
         )
         mock_repo.clone_from.assert_called_once_with(
             "https://x-token-auth:tok123@github.com/org/repo",  # pragma: allowlist secret

@@ -438,7 +438,7 @@ class TestParseAdditionalRepos:
             "product:https://github.com/org/product"
         )
         assert len(result) == 2
-        assert result[0]["token"] == "tok1"  # pragma: allowlist secret
+        assert result[0]["token"] == "tok1"  # noqa: S105  # pragma: allowlist secret
         assert "token" not in result[1]
 
     def test_settings_loads_additional_repos(self) -> None:
