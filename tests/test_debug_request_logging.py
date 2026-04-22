@@ -30,13 +30,13 @@ class TestMaskSensitiveFields:
             "job_name": "my-job",
         }
         result = mask_sensitive_fields(data)
-        assert result["jenkins_password"] == "***"
-        assert result["jenkins_user"] == "***"
-        assert result["jira_api_token"] == "***"
-        assert result["jira_pat"] == "***"
-        assert result["jira_email"] == "***"
-        assert result["github_token"] == "***"
-        assert result["reportportal_api_token"] == "***"
+        assert result["jenkins_password"] == "***"  # noqa: S105
+        assert result["jenkins_user"] == "***"  # noqa: S105
+        assert result["jira_api_token"] == "***"  # noqa: S105
+        assert result["jira_pat"] == "***"  # noqa: S105
+        assert result["jira_email"] == "***"  # noqa: S105
+        assert result["github_token"] == "***"  # noqa: S105
+        assert result["reportportal_api_token"] == "***"  # noqa: S105
         # Non-sensitive field preserved
         assert result["job_name"] == "my-job"
 
@@ -49,10 +49,10 @@ class TestMaskSensitiveFields:
             "safe_field": "visible",
         }
         result = mask_sensitive_fields(data)
-        assert result["custom_password"] == "***"
-        assert result["my_token"] == "***"
-        assert result["api_secret"] == "***"
-        assert result["encryption_key"] == "***"
+        assert result["custom_password"] == "***"  # noqa: S105
+        assert result["my_token"] == "***"  # noqa: S105
+        assert result["api_secret"] == "***"  # noqa: S105
+        assert result["encryption_key"] == "***"  # noqa: S105
         assert result["safe_field"] == "visible"
 
     def test_handles_nested_dicts(self):
@@ -65,7 +65,7 @@ class TestMaskSensitiveFields:
         }
         result = mask_sensitive_fields(data)
         assert result["outer"] == "ok"
-        assert result["nested"]["jenkins_password"] == "***"
+        assert result["nested"]["jenkins_password"] == "***"  # noqa: S105
         assert result["nested"]["name"] == "visible"
 
     def test_handles_lists(self):
@@ -85,8 +85,8 @@ class TestMaskSensitiveFields:
         }
         result = mask_sensitive_fields(data)
         assert result["additional_repos"][0]["name"] == "repo1"
-        assert result["additional_repos"][0]["token"] == "***"
-        assert result["additional_repos"][1]["token"] == "***"
+        assert result["additional_repos"][0]["token"] == "***"  # noqa: S105
+        assert result["additional_repos"][1]["token"] == "***"  # noqa: S105
 
     def test_handles_deeply_nested_structures(self):
         data = {
@@ -102,7 +102,7 @@ class TestMaskSensitiveFields:
             }
         }
         result = mask_sensitive_fields(data)
-        assert result["level1"]["level2"][0]["level3"]["secret_key"] == "***"
+        assert result["level1"]["level2"][0]["level3"]["secret_key"] == "***"  # noqa: S105
         assert result["level1"]["level2"][0]["level3"]["name"] == "ok"
 
     def test_preserves_empty_and_falsy_values(self):
@@ -130,13 +130,38 @@ class TestMaskSensitiveFields:
             "name": "test",
         }
         _ = mask_sensitive_fields(original)
-        assert original["jenkins_password"] == "secret"  # pragma: allowlist secret
+        assert original["jenkins_password"] == "secret"  # noqa: S105  # pragma: allowlist secret
 
     def test_empty_dict(self):
         assert mask_sensitive_fields({}) == {}
 
     def test_empty_list(self):
         assert mask_sensitive_fields([]) == []
+
+    def test_masks_pydantic_error_input_for_sensitive_fields(self):
+        """Pydantic error input values for sensitive fields are masked."""
+        # Simulate a Pydantic v2 error dict with a sensitive input
+        pydantic_errors = [
+            {
+                "type": "string_too_short",
+                "loc": ["body", "github_token"],
+                "msg": "String should have at least 10 characters",
+                "input": "ghp_secret123",  # pragma: allowlist secret
+            },
+            {
+                "type": "missing",
+                "loc": ["body", "job_name"],
+                "msg": "Field required",
+                "input": None,
+            },
+        ]
+        from jenkins_job_insight.main import _mask_pydantic_error
+
+        masked = [_mask_pydantic_error(e) for e in pydantic_errors]
+        # Sensitive field input should be masked
+        assert masked[0]["input"] == "***"  # noqa: S105
+        # Non-sensitive field input should be preserved
+        assert masked[1]["input"] is None
 
 
 # ---------------------------------------------------------------------------

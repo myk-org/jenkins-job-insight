@@ -71,6 +71,10 @@ from jenkins_job_insight.models import (
     ReportPortalPushResult,
     SetReviewedRequest,
 )
+from jenkins_job_insight.utils import (
+    _is_sensitive_key,
+    mask_sensitive_fields,
+)
 from jenkins_job_insight.xml_enrichment import (
     build_enriched_xml,
     extract_test_failures,
@@ -633,8 +637,6 @@ class RequestBodyLoggingMiddleware(BaseHTTPMiddleware):
             if body_bytes:
                 try:
                     body_json = json.loads(body_bytes)
-                    from jenkins_job_insight.utils import mask_sensitive_fields
-
                     masked = mask_sensitive_fields(body_json)
                     logger.debug(
                         "Incoming %s %s body: %s",
@@ -655,6 +657,18 @@ class RequestBodyLoggingMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RequestBodyLoggingMiddleware)
 
 
+def _mask_pydantic_error(error: dict) -> dict:
+    """Mask sensitive input values in a Pydantic validation error dict."""
+    result = dict(error)
+    loc = error.get("loc") or ()
+    field = loc[-1] if loc else ""
+    if isinstance(field, str) and _is_sensitive_key(field) and "input" in result:
+        result["input"] = "***"
+    elif "input" in result:
+        result["input"] = mask_sensitive_fields(result["input"])
+    return result
+
+
 @app.exception_handler(RequestValidationError)
 async def _validation_error_handler(
     request: Request, exc: RequestValidationError
@@ -663,17 +677,14 @@ async def _validation_error_handler(
     from fastapi.encoders import jsonable_encoder
 
     if logger.isEnabledFor(logging.DEBUG):
-        from jenkins_job_insight.utils import mask_sensitive_fields
-
         masked_body = None
         if exc.body is not None:
             try:
-                masked_body = mask_sensitive_fields(
-                    exc.body if isinstance(exc.body, (dict, list)) else exc.body
-                )
+                masked_body = mask_sensitive_fields(exc.body)
             except Exception:
                 masked_body = "<unable to mask>"
-        masked_errors = mask_sensitive_fields(jsonable_encoder(exc.errors()))
+        raw_errors = jsonable_encoder(exc.errors())
+        masked_errors = [_mask_pydantic_error(e) for e in raw_errors]
         logger.debug(
             "RequestValidationError on %s %s: errors=%s body=%s",
             request.method,
