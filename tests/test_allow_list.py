@@ -42,14 +42,17 @@ def _seed_result(_init_db, temp_db_path):
 def _make_client(temp_db_path, allowed_users: str = "", admin_key: str = ""):
     """Create a test client with allow list configured."""
     env = {
-        "SECURE_COOKIES": "false",
+        k: v
+        for k, v in os.environ.items()
+        if k not in {"ALLOWED_USERS", "ADMIN_KEY", "JJI_ENCRYPTION_KEY"}
     }
+    env["SECURE_COOKIES"] = "false"
     if allowed_users:
         env["ALLOWED_USERS"] = allowed_users
     if admin_key:
         env["ADMIN_KEY"] = admin_key
         env["JJI_ENCRYPTION_KEY"] = "test-key-for-hmac"  # pragma: allowlist secret
-    with patch.dict(os.environ, env):
+    with patch.dict(os.environ, env, clear=True):
         get_settings.cache_clear()
         with patch.object(storage, "DB_PATH", temp_db_path):
             from jenkins_job_insight.main import app
@@ -79,7 +82,7 @@ class TestAllowListConfig:
     """Test ALLOWED_USERS parsing in Settings."""
 
     def test_empty_allowed_users(self):
-        with patch.dict(os.environ, {}, clear=False):
+        with patch.dict(os.environ, {"ALLOWED_USERS": ""}, clear=False):
             get_settings.cache_clear()
             s = Settings()
             assert s.allowed_users_set == frozenset()
