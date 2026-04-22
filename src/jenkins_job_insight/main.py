@@ -691,6 +691,7 @@ async def _validation_error_handler(
             masked_errors,
             masked_body,
         )
+    # Response body uses raw (unmasked) errors — only the DEBUG log path is masked.
     return JSONResponse(
         status_code=422,
         content={"detail": jsonable_encoder(exc.errors())},
