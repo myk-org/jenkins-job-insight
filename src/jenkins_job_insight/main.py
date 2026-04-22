@@ -284,6 +284,13 @@ def _reconstruct_from_params(
             raise ValueError(
                 f"Cannot resume waiting job: stored {_key} could not be decrypted"
             )
+    for _repo in params.get("additional_repos") or []:
+        if isinstance(_repo, dict):
+            _token = _repo.get("token")
+            if isinstance(_token, str) and _token.startswith("enc:"):
+                raise ValueError(
+                    "Cannot resume waiting job: stored additional_repos token could not be decrypted"
+                )
     body = AnalyzeRequest(
         job_name=result_data["job_name"],
         build_number=result_data["build_number"],

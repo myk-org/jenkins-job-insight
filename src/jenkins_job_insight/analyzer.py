@@ -95,7 +95,7 @@ async def clone_additional_repos(
             )
             cloned[ar.name] = target
             logger.info(f"Cloned additional repo '{ar.name}' into {target}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — non-fatal additional repo clone failure
             logger.warning(
                 "Failed to clone additional repo '%s' (%s)",
                 ar.name,

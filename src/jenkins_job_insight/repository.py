@@ -234,17 +234,22 @@ class RepositoryManager:
         if token:
             clone_url = _inject_token_into_url(clone_url, token)
         logger.info(f"Cloning repository into {target_dir}")
-        _clone_with_ssl_retry(clone_url, target_dir, depth, branch=branch)
-        # Scrub credentials from .git/config to prevent at-rest exposure
-        if token:
-            import subprocess
+        try:
+            _clone_with_ssl_retry(clone_url, target_dir, depth, branch=branch)
+        finally:
+            # Scrub credentials from .git/config to prevent at-rest exposure,
+            # including partial clones that failed after writing remote.origin.url.
+            if token and (target_dir / ".git").exists():
+                import subprocess
 
-            subprocess.run(
-                ["git", "remote", "set-url", "origin", str(repo_url)],
-                cwd=target_dir,
-                check=False,
-                capture_output=True,
-            )
+                git_executable = shutil.which("git")
+                if git_executable:
+                    subprocess.run(  # noqa: S603
+                        [git_executable, "remote", "set-url", "origin", str(repo_url)],
+                        cwd=target_dir,
+                        check=False,
+                        capture_output=True,
+                    )
         return target_dir
 
     def create_workspace(self) -> Path:

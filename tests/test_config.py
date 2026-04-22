@@ -408,7 +408,7 @@ class TestParseAdditionalRepos:
                 "name": "infra",
                 "url": "https://github.com/org/infra",
                 "ref": "",
-                "token": "ghp_secret123",  # pragma: allowlist secret
+                "token": "ghp_secret123",  # noqa: S105  # pragma: allowlist secret
             }
         ]
 
@@ -422,7 +422,7 @@ class TestParseAdditionalRepos:
                 "name": "infra",
                 "url": "https://github.com/org/infra",
                 "ref": "develop",
-                "token": "ghp_secret123",  # pragma: allowlist secret
+                "token": "ghp_secret123",  # noqa: S105  # pragma: allowlist secret
             }
         ]
 
