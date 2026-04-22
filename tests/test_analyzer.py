@@ -2749,6 +2749,23 @@ class TestRecoverFromDetailsCodeFields:
         assert result.code_fix.original_code == "old code"
         assert result.code_fix.suggested_code == "new code"
 
+    def test_recover_with_escaped_code_characters(self) -> None:
+        """Regex recovery correctly decodes JSON-escaped characters in code fields."""
+        from jenkins_job_insight.models import AnalysisDetail
+
+        raw = (
+            '{"classification": "CODE ISSUE", "affected_tests": ["test_x"], '
+            '"details": "broken", "code_fix": {"file": "a.py", "line": "1", '
+            '"change": "fix", '
+            '"original_code": "print(\\"x\\")", '
+            '"suggested_code": "print(\\"y\\")"}}'
+        )
+        fallback = AnalysisDetail(details=raw)
+        result = _recover_from_details(fallback)
+        assert result.code_fix
+        assert result.code_fix.original_code == 'print("x")'
+        assert result.code_fix.suggested_code == 'print("y")'
+
     def test_recover_without_code_fields(self) -> None:
         """Regex recovery works without original_code/suggested_code."""
         from jenkins_job_insight.models import AnalysisDetail

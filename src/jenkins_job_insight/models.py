@@ -270,11 +270,11 @@ class CodeFix(BaseModel):
     change: str = Field(default="", description="Specific code change")
     original_code: str | None = Field(
         default=None,
-        description="The original code being replaced (raw string, no markdown)",
+        description="Optional complete original file content for diff/editor display (raw string, no markdown)",
     )
     suggested_code: str | None = Field(
         default=None,
-        description="The suggested replacement code (raw string, no markdown)",
+        description="Complete replacement file content after applying the suggested fix (raw string, no markdown)",
     )
 
 

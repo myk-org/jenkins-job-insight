@@ -60,6 +60,25 @@ function CopyableSectionHeader({ title, content, sectionId, copiedSection, onCop
   )
 }
 
+function CodeFixLiteralBlock({
+  title,
+  content,
+  className,
+}: {
+  title: string
+  content: string
+  className: string
+}) {
+  return (
+    <div className="mt-2">
+      <p className="text-xs font-display uppercase tracking-widest text-text-tertiary mb-1">{title}</p>
+      <pre className={`overflow-x-auto max-h-96 overflow-y-auto rounded bg-surface-elevated p-2 text-xs font-mono whitespace-pre-wrap ${className}`}>
+        {content}
+      </pre>
+    </div>
+  )
+}
+
 interface FailureCardProps {
   group: GroupedFailure
   jobId: string
@@ -305,7 +324,9 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
                   content={[
                     analysis.code_fix?.file ? `${analysis.code_fix.file}${analysis.code_fix.line ? `:${analysis.code_fix.line}` : ''}` : '',
                     analysis.code_fix?.change ?? '',
-                  ].filter(Boolean).join('\n')}
+                    analysis.code_fix?.original_code ? `Original Code:\n${analysis.code_fix.original_code}` : '',
+                    analysis.code_fix?.suggested_code ? `Suggested Code:\n${analysis.code_fix.suggested_code}` : '',
+                  ].filter(Boolean).join('\n\n')}
                   sectionId="suggested_fix"
                   copiedSection={copiedSection}
                   onCopy={copyToClipboard}
@@ -337,16 +358,10 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
                   )}
                   {analysis.code_fix.change && <p className="mt-1 text-text-secondary whitespace-pre-wrap"><LinkedText text={analysis.code_fix.change} repoUrls={repoUrls} /></p>}
                   {analysis.code_fix.original_code && (
-                    <div className="mt-2">
-                      <p className="text-xs font-display uppercase tracking-widest text-text-tertiary mb-1">Original Code</p>
-                      <pre className="overflow-x-auto rounded bg-surface-elevated p-2 text-xs font-mono whitespace-pre-wrap text-text-secondary">{analysis.code_fix.original_code}</pre>
-                    </div>
+                    <CodeFixLiteralBlock title="Original Code" content={analysis.code_fix.original_code} className="text-text-secondary" />
                   )}
                   {analysis.code_fix.suggested_code && (
-                    <div className="mt-2">
-                      <p className="text-xs font-display uppercase tracking-widest text-text-tertiary mb-1">Suggested Code</p>
-                      <pre className="overflow-x-auto rounded bg-surface-elevated p-2 text-xs font-mono whitespace-pre-wrap text-signal-green">{analysis.code_fix.suggested_code}</pre>
-                    </div>
+                    <CodeFixLiteralBlock title="Suggested Code" content={analysis.code_fix.suggested_code} className="text-signal-green" />
                   )}
                 </div>
               </div>
