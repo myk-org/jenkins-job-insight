@@ -679,7 +679,17 @@ async def _validation_error_handler(
         masked_body = None
         if exc.body is not None:
             try:
-                masked_body = mask_sensitive_fields(exc.body)
+                if isinstance(exc.body, (dict, list)):
+                    masked_body = mask_sensitive_fields(exc.body)
+                elif isinstance(exc.body, (str, bytes, bytearray)):
+                    size = (
+                        len(exc.body.encode("utf-8"))
+                        if isinstance(exc.body, str)
+                        else len(exc.body)
+                    )
+                    masked_body = f"<non-JSON, {size} bytes>"
+                else:
+                    masked_body = f"<non-JSON body: {type(exc.body).__name__}>"
             except Exception:  # noqa: BLE001 — masking must never break the 422 response
                 masked_body = "<unable to mask>"
         raw_errors = jsonable_encoder(exc.errors())
