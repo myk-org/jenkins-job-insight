@@ -29,6 +29,7 @@ def client(_init_db, temp_db_path):
             "ADMIN_KEY": "test-admin-key-16chars",  # pragma: allowlist secret
             "JJI_ENCRYPTION_KEY": "test-encryption-key-for-hmac",  # pragma: allowlist secret
             "SECURE_COOKIES": "false",
+            "DB_PATH": str(temp_db_path),
         },
     ):
         get_settings.cache_clear()

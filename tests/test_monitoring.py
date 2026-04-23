@@ -504,6 +504,7 @@ class TestHealthEndpointIntegration:
             "JENKINS_USER": "testuser",
             "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
             "GEMINI_API_KEY": "test-key",  # pragma: allowlist secret
+            "DB_PATH": str(temp_db_path),
         }
         with mock_patch.dict(os.environ, env, clear=True):
             from jenkins_job_insight.config import get_settings

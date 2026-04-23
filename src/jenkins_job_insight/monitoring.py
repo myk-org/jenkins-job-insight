@@ -23,6 +23,18 @@ from simple_logger.logger import get_logger
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
+_APP_STARTED_AT = time.monotonic()
+
+
+def _get_app_version() -> str:
+    """Return the application version string."""
+    try:
+        from importlib.metadata import version
+
+        return version("jenkins-job-insight")
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
 
 # ---------------------------------------------------------------------------
 # Rolling-window error rate tracker
@@ -204,13 +216,21 @@ async def build_health_response(settings: Any, db_path: str) -> dict[str, Any]:
     checks: dict[str, dict] = {}
 
     # Run all checks concurrently
-    db_check, jenkins_check, ai_check, rp_check = await asyncio.gather(
-        check_db(db_path),
-        check_jenkins(settings),
-        check_ai_provider(),
-        check_reportportal(settings),
-        return_exceptions=True,
-    )
+    _HEALTH_CHECK_TIMEOUT = 6.0
+    try:
+        db_check, jenkins_check, ai_check, rp_check = await asyncio.wait_for(
+            asyncio.gather(
+                check_db(db_path),
+                check_jenkins(settings),
+                check_ai_provider(),
+                check_reportportal(settings),
+                return_exceptions=True,
+            ),
+            timeout=_HEALTH_CHECK_TIMEOUT,
+        )
+    except TimeoutError:
+        _timeout_result: dict = {"status": "error", "detail": "health check timed out"}
+        db_check = jenkins_check = ai_check = rp_check = _timeout_result
 
     def _safe(result: Any) -> dict:
         if isinstance(result, Exception):
@@ -235,6 +255,8 @@ async def build_health_response(settings: Any, db_path: str) -> dict[str, Any]:
 
     return {
         "status": overall,
+        "uptime_seconds": round(time.monotonic() - _APP_STARTED_AT, 3),
+        "version": _get_app_version(),
         "checks": checks,
         "error_rates": error_tracker.snapshot(),
     }

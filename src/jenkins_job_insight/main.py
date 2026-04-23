@@ -512,6 +512,8 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] %s", error)
     for warning in config_result.warnings:
         logger.warning("[startup] %s", warning)
+    if config_result.errors:
+        raise RuntimeError("Startup configuration validation failed")
 
     await init_db()
     await storage.cleanup_expired_sessions()
@@ -3576,7 +3578,8 @@ async def prometheus_metrics() -> Response:
     try:
         health = await build_health_response(settings, db_path)
         health_up = 0 if health["status"] == "unhealthy" else 1
-    except Exception:
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to compute health status for metrics", exc_info=True)
         health_up = 0
 
     # Count active analyses
@@ -3590,8 +3593,8 @@ async def prometheus_metrics() -> Response:
             )
             row = await cursor.fetchone()
             active_analyses = row[0] if row else 0
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to compute active analyses for metrics", exc_info=True)
 
     return Response(
         content=render_prometheus_metrics(
