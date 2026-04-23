@@ -106,6 +106,7 @@ function initFormState(p: AnalysisResult['request_params']) {
     jiraProjectKey: (p?.jira_project_key as string) || '',
     getArtifacts: p?.get_job_artifacts != null ? (p.get_job_artifacts as boolean) : undefined,
     maxArtifactsSize: p?.jenkins_artifacts_max_size_mb != null ? (p.jenkins_artifacts_max_size_mb as number) : undefined,
+    force: p?.force ?? false,
   }
 }
 
@@ -136,6 +137,8 @@ export function ReAnalyzeDialog({ open, onOpenChange, result, jobId }: ReAnalyze
   const [getArtifacts, setGetArtifacts] = useState<boolean | undefined>(init.getArtifacts)
   const [maxArtifactsSize, setMaxArtifactsSize] = useState<number | undefined>(init.maxArtifactsSize)
 
+  const [force, setForce] = useState(init.force)
+
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -158,6 +161,7 @@ export function ReAnalyzeDialog({ open, onOpenChange, result, jobId }: ReAnalyze
     setJiraProjectKey(s.jiraProjectKey)
     setGetArtifacts(s.getArtifacts)
     setMaxArtifactsSize(s.maxArtifactsSize)
+    setForce(s.force)
     setSubmitting(false)
     setError('')
   }, [open, result.request_params])
@@ -169,6 +173,7 @@ export function ReAnalyzeDialog({ open, onOpenChange, result, jobId }: ReAnalyze
       const body: Record<string, unknown> = {
         ai_provider: aiProvider,
         ai_model: aiModel,
+        force,
         ...(aiCliTimeout !== undefined && { ai_cli_timeout: aiCliTimeout }),
         ...(enableJira !== undefined && { enable_jira: enableJira }),
         ...(jiraUrl && { jira_url: jiraUrl }),
@@ -198,6 +203,7 @@ export function ReAnalyzeDialog({ open, onOpenChange, result, jobId }: ReAnalyze
   }, [
     aiProvider,
     aiModel,
+    force,
     aiCliTimeout,
     rawPrompt,
     enablePeers,
@@ -473,6 +479,19 @@ export function ReAnalyzeDialog({ open, onOpenChange, result, jobId }: ReAnalyze
                 </p>
               </>
             )}
+          </Section>
+
+          <hr className="border-border-muted" />
+
+          {/* Force Analysis */}
+          <Section title="Advanced" dotColor="bg-text-tertiary">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary">Force analysis on successful builds</span>
+              <Toggle checked={force} onChange={setForce} label="Force analysis on successful builds" />
+            </div>
+            <p className="text-[11px] text-text-tertiary">
+              When enabled, analysis runs even if Jenkins reports the build as SUCCESS.
+            </p>
           </Section>
 
           <hr className="border-border-muted" />

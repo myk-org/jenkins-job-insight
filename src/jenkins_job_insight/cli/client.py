@@ -159,8 +159,17 @@ class JJIClient:
     # -- Health ---------------------------------------------------------------
 
     def health(self) -> dict:
-        """Check server health. GET /health"""
-        return self._request("GET", "/health")
+        """Check server health. GET /api/health
+
+        Falls back to GET /health if /api/health returns 404.
+        Accepts both 200 (healthy/degraded) and 503 (unhealthy).
+        """
+        try:
+            return self._request("GET", "/api/health", accept_statuses=(200, 503))
+        except JJIError as exc:
+            if exc.status_code == 404:
+                return self._request("GET", "/health")
+            raise
 
     # -- Results --------------------------------------------------------------
 
@@ -179,6 +188,10 @@ class JJIClient:
     def delete_job(self, job_id: str) -> dict:
         """Delete a job and all related data. DELETE /results/{job_id}"""
         return self._request("DELETE", f"/results/{job_id}")
+
+    def delete_jobs_bulk(self, job_ids: list[str]) -> dict:
+        """Delete multiple jobs. DELETE /api/results/bulk"""
+        return self._request("DELETE", "/api/results/bulk", json={"job_ids": job_ids})
 
     # -- Analysis -------------------------------------------------------------
 
@@ -680,3 +693,55 @@ class JJIClient:
         return self._request(
             "PUT", f"/results/{job_id}/override-classification", json=payload
         )
+
+    # -- Job Metadata ---------------------------------------------------------
+
+    def list_jobs_metadata(
+        self,
+        team: str = "",
+        tier: str = "",
+        version: str = "",
+        labels: list[str] | None = None,
+    ) -> list[dict]:
+        """List job metadata with optional filters. GET /api/jobs/metadata"""
+        params: dict = {
+            "team": team,
+            "tier": tier,
+            "version": version,
+        }
+        if labels:
+            params["label"] = labels
+        return self._request("GET", "/api/jobs/metadata", params=params)
+
+    def get_job_metadata(self, job_name: str) -> dict:
+        """Get metadata for a job. GET /api/jobs/{job_name}/metadata"""
+        return self._request("GET", f"/api/jobs/{job_name}/metadata")
+
+    def set_job_metadata(
+        self,
+        job_name: str,
+        *,
+        team: str = "",
+        tier: str = "",
+        version: str = "",
+        labels: list[str] | None = None,
+    ) -> dict:
+        """Set metadata for a job. PUT /api/jobs/{job_name}/metadata"""
+        body: dict = {}
+        if team:
+            body["team"] = team
+        if tier:
+            body["tier"] = tier
+        if version:
+            body["version"] = version
+        if labels is not None:
+            body["labels"] = labels
+        return self._request("PUT", f"/api/jobs/{job_name}/metadata", json=body)
+
+    def delete_job_metadata(self, job_name: str) -> dict:
+        """Delete metadata for a job. DELETE /api/jobs/{job_name}/metadata"""
+        return self._request("DELETE", f"/api/jobs/{job_name}/metadata")
+
+    def bulk_set_metadata(self, items: list[dict]) -> dict:
+        """Bulk import job metadata. PUT /api/jobs/metadata/bulk"""
+        return self._request("PUT", "/api/jobs/metadata/bulk", json={"items": items})

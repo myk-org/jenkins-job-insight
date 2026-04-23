@@ -91,11 +91,16 @@ async def clone_additional_repos(
                 target,
                 depth=1,
                 branch=ar.ref,
+                token=ar.token or None,
             )
             cloned[ar.name] = target
             logger.info(f"Cloned additional repo '{ar.name}' into {target}")
-        except Exception as e:
-            logger.warning(f"Failed to clone additional repo '{ar.name}': {e}")
+        except Exception as e:  # noqa: BLE001 — non-fatal additional repo clone failure
+            logger.warning(
+                "Failed to clone additional repo '%s' (%s)",
+                ar.name,
+                type(e).__name__,
+            )
 
     await asyncio.gather(*[_clone_into_subdir(ar) for ar in additional_repos_list])
 
@@ -226,7 +231,9 @@ If CODE ISSUE:
   "code_fix": {
     "file": "exact/file/path.py",
     "line": "line number",
-    "change": "specific code change that fixes all affected tests"
+    "change": "specific code change that fixes all affected tests",
+    "original_code": "optional complete current contents of exact/file/path.py for diff/editor display (raw code string, NO markdown formatting)",
+    "suggested_code": "complete replacement contents of exact/file/path.py after applying the fix (raw code string, NO markdown formatting)"
   }
 }
 
@@ -347,6 +354,14 @@ def _parse_json_response(raw_text: str) -> AnalysisDetail:
     return _recover_from_details(fallback)
 
 
+def _decode_recovered_json_string(value: str) -> str:
+    """Decode a JSON string fragment captured by regex recovery."""
+    try:
+        return json.loads(f'"{value}"')
+    except json.JSONDecodeError:
+        return value.replace("\\n", "\n")
+
+
 def _recover_from_details(result: AnalysisDetail) -> AnalysisDetail:
     """Attempt to recover structured fields from a fallback result.
 
@@ -399,10 +414,26 @@ def _recover_from_details(result: AnalysisDetail) -> AnalysisDetail:
     change_match = re.search(r'"change"\s*:\s*"((?:[^"\\]|\\.)*)"', details)
     if file_match and change_match:
         line_match = re.search(r'"line"\s*:\s*"([^"]*)"', details)
+        original_code_match = re.search(
+            r'"original_code"\s*:\s*"((?:[^"\\]|\\.)*)"', details, re.DOTALL
+        )
+        suggested_code_match = re.search(
+            r'"suggested_code"\s*:\s*"((?:[^"\\]|\\.)*)"', details, re.DOTALL
+        )
         code_fix = CodeFix(
             file=file_match.group(1),
             line=line_match.group(1) if line_match else "",
             change=change_match.group(1).replace("\\n", "\n"),
+            original_code=(
+                _decode_recovered_json_string(original_code_match.group(1))
+                if original_code_match
+                else None
+            ),
+            suggested_code=(
+                _decode_recovered_json_string(suggested_code_match.group(1))
+                if suggested_code_match
+                else None
+            ),
         )
 
     # Extract artifacts_evidence (top-level field)
@@ -656,6 +687,15 @@ def handle_jenkins_exception(
                 status_code=502,
                 detail=f"Jenkins error: {e!s}",
             )
+
+    from jenkins_job_insight.utils import is_jenkins_connectivity_error
+
+    if is_jenkins_connectivity_error(e):
+        logger.error(f"Jenkins unreachable for {job_name} #{build_number}: {e!s}")
+        raise HTTPException(
+            status_code=504,
+            detail="Jenkins is unreachable or timed out. Check server connectivity.",
+        )
 
     # For any other exception type
     raise HTTPException(
@@ -1459,6 +1499,7 @@ async def analyze_job(
         username=settings.jenkins_user,
         password=settings.jenkins_password,
         ssl_verify=settings.jenkins_ssl_verify,
+        timeout=settings.jenkins_timeout,
     )
 
     # Construct full Jenkins URL for the result
@@ -1477,9 +1518,10 @@ async def analyze_job(
     except Exception as e:
         handle_jenkins_exception(e, job_name, build_number)
 
-    # Check if build passed - return early if yes
+    # Check if build passed - return early if yes (unless force is set)
     build_result = build_info.get("result")
-    if build_result == "SUCCESS":
+    force = getattr(request, "force", False) or settings.force_analysis
+    if build_result == "SUCCESS" and not force:
         return AnalysisResult(
             job_id=job_id,
             job_name=request.job_name,
@@ -1490,6 +1532,10 @@ async def analyze_job(
             ai_provider=ai_provider,
             ai_model=ai_model,
             failures=[],
+        )
+    if build_result == "SUCCESS" and force:
+        logger.info(
+            f"Build {job_name} #{build_number} passed but force=True, continuing analysis"
         )
 
     # Download build artifacts for context

@@ -114,13 +114,14 @@ def _build_wait_settings(**overrides) -> Settings:
 
 
 @pytest.fixture
-def mock_settings():
+def mock_settings(temp_db_path: Path):
     """Mock settings for tests."""
     env = {
         "JENKINS_URL": "https://jenkins.example.com",
         "JENKINS_USER": "testuser",
         "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
         "GEMINI_API_KEY": "test-key",  # pragma: allowlist secret
+        "DB_PATH": str(temp_db_path),
     }
     with patch.dict(os.environ, env, clear=True):
         # Clear the lru_cache to use fresh settings
@@ -2334,6 +2335,7 @@ class TestWaitForJenkinsCompletion:
                 username="user",
                 password=FAKE_JENKINS_PASSWORD,
                 ssl_verify=False,
+                timeout=30,
             )
 
     @pytest.mark.asyncio
@@ -2424,7 +2426,7 @@ class TestWaitForJenkinsCompletion:
                 max_wait_minutes=5,
             )
             assert result is False
-            assert "bad credentials" in error
+            assert error == "Jenkins poll failed; check server logs for details"
             mock_client.get_build_info_safe.assert_called_once()
 
     @pytest.mark.asyncio
@@ -2666,9 +2668,18 @@ class TestProcessAnalysisWaiting:
             patch(
                 "jenkins_job_insight.main.analyze_job", new_callable=AsyncMock
             ) as mock_analyze,
+            patch(
+                "jenkins_job_insight.main._preserve_request_params",
+                new_callable=AsyncMock,
+            ) as mock_preserve,
         ):
             await process_analysis_with_id("test-id", body, merged)
             mock_analyze.assert_not_called()
+            # _preserve_request_params should have been called with fail_data
+            mock_preserve.assert_called_once()
+            preserve_args = mock_preserve.call_args
+            assert preserve_args[0][0] == "test-id"
+            assert "error" in preserve_args[0][1]
             # The last update should be a failed status with timeout error
             last_status, last_result = stored[-1]
             assert last_status == "failed"
@@ -4226,3 +4237,66 @@ class TestJiraSecurityLevelsEndpoint:
             assert data[0]["name"] == "Internal"
         finally:
             app.dependency_overrides.pop(get_settings, None)
+
+
+class TestMergeSettingsForce:
+    """Tests for force -> force_analysis mapping in _merge_settings."""
+
+    def test_force_true_in_request_sets_force_analysis(self) -> None:
+        """When request.force=True is explicitly set, merged settings have force_analysis=True."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+            force=True,
+        )
+        settings = Settings()
+        merged = _merge_settings(body, settings)
+        assert merged.force_analysis is True
+
+    def test_force_false_in_request_sets_force_analysis_false(self) -> None:
+        """When request.force=False is explicitly set, merged settings have force_analysis=False."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+            force=False,
+        )
+        # Start with settings that have force_analysis=True
+        settings_data = Settings().model_dump(mode="python")
+        settings_data["force_analysis"] = True
+        settings = Settings.model_validate(settings_data)
+        merged = _merge_settings(body, settings)
+        assert merged.force_analysis is False
+
+    def test_force_omitted_preserves_settings_default(self) -> None:
+        """When force is omitted from request, settings.force_analysis is preserved."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+        )
+        settings_data = Settings().model_dump(mode="python")
+        settings_data["force_analysis"] = True
+        settings = Settings.model_validate(settings_data)
+        merged = _merge_settings(body, settings)
+        assert merged.force_analysis is True
+
+    def test_force_omitted_default_false(self) -> None:
+        """When force is omitted and settings default, force_analysis is False."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+        )
+        settings = Settings()
+        merged = _merge_settings(body, settings)
+        assert merged.force_analysis is False

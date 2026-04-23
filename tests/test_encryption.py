@@ -261,3 +261,114 @@ class TestStripSensitiveFromResponse:
         stripped = strip_sensitive_from_response(result_data)
         assert key not in stripped["request_params"]
         assert stripped["request_params"]["safe_key"] == "keep"
+
+
+@pytest.mark.usefixtures("_stable_encryption_key")
+class TestAdditionalReposTokenEncryption:
+    """Tests for encrypt/decrypt/strip of tokens nested in additional_repos."""
+
+    def test_encrypt_additional_repos_token(self) -> None:
+        """Tokens inside additional_repos entries are encrypted."""
+        params = {
+            "ai_provider": "claude",
+            "additional_repos": [
+                {
+                    "name": "infra",
+                    "url": "https://github.com/org/infra",
+                    "token": "tok",
+                },  # pragma: allowlist secret
+                {"name": "product", "url": "https://github.com/org/product"},
+            ],
+        }
+        encrypted = encrypt_sensitive_fields(params)
+        assert encrypted["additional_repos"][0]["token"].startswith(_ENCRYPTED_PREFIX)
+        assert "token" not in encrypted["additional_repos"][1]
+
+    def test_decrypt_additional_repos_token(self) -> None:
+        """Encrypted tokens in additional_repos are decrypted."""
+        params = {
+            "additional_repos": [
+                {
+                    "name": "infra",
+                    "url": "https://github.com/org/infra",
+                    "token": "tok",
+                },  # pragma: allowlist secret
+            ],
+        }
+        encrypted = encrypt_sensitive_fields(params)
+        decrypted = decrypt_sensitive_fields(encrypted)
+        assert (
+            decrypted["additional_repos"][0]["token"] == "tok"  # noqa: S105  # pragma: allowlist secret
+        )
+
+    def test_round_trip_additional_repos_tokens(self) -> None:
+        """encrypt -> decrypt preserves additional_repos tokens."""
+        params = {
+            "additional_repos": [
+                {
+                    "name": "a",
+                    "url": "https://github.com/org/a",
+                    "token": "tok1",
+                },  # pragma: allowlist secret
+                {"name": "b", "url": "https://github.com/org/b"},
+                {
+                    "name": "c",
+                    "url": "https://github.com/org/c",
+                    "token": "tok3",
+                },  # pragma: allowlist secret
+            ],
+        }
+        encrypted = encrypt_sensitive_fields(params)
+        decrypted = decrypt_sensitive_fields(encrypted)
+        assert (
+            decrypted["additional_repos"][0]["token"] == "tok1"  # noqa: S105  # pragma: allowlist secret
+        )
+        assert "token" not in decrypted["additional_repos"][1]
+        assert (
+            decrypted["additional_repos"][2]["token"] == "tok3"  # noqa: S105  # pragma: allowlist secret
+        )
+
+    def test_strip_additional_repos_tokens(self) -> None:
+        """strip_sensitive_from_response removes tokens from additional_repos."""
+        result_data = {
+            "request_params": {
+                "ai_provider": "claude",
+                "additional_repos": [
+                    {
+                        "name": "infra",
+                        "url": "https://github.com/org/infra",
+                        "token": "enc:xyz",
+                    },  # pragma: allowlist secret
+                    {"name": "product", "url": "https://github.com/org/product"},
+                ],
+            }
+        }
+        stripped = strip_sensitive_from_response(result_data)
+        assert "token" not in stripped["request_params"]["additional_repos"][0]
+        assert stripped["request_params"]["additional_repos"][0]["name"] == "infra"
+        assert (
+            stripped["request_params"]["additional_repos"][0]["url"]
+            == "https://github.com/org/infra"
+        )
+
+    def test_empty_token_not_encrypted(self) -> None:
+        """Empty string tokens are not encrypted."""
+        params = {
+            "additional_repos": [
+                {"name": "infra", "url": "https://github.com/org/infra", "token": ""},
+            ],
+        }
+        encrypted = encrypt_sensitive_fields(params)
+        assert encrypted["additional_repos"][0]["token"] == ""
+
+    def test_none_additional_repos_unchanged(self) -> None:
+        """None additional_repos passes through unchanged."""
+        params = {"additional_repos": None}
+        encrypted = encrypt_sensitive_fields(params)
+        assert encrypted["additional_repos"] is None
+
+    def test_no_additional_repos_key(self) -> None:
+        """Missing additional_repos key is fine."""
+        params = {"ai_provider": "claude"}
+        encrypted = encrypt_sensitive_fields(params)
+        assert "additional_repos" not in encrypted

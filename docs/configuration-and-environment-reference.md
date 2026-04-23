@@ -152,12 +152,14 @@ Bootstrap admin authentication, cookie security, and at-rest encryption.
 | Name | Type | Default | Loaded by | Description |
 | --- | --- | --- | --- | --- |
 | `ADMIN_KEY` | string | `""` | `Settings` | Bootstrap admin secret. `POST /api/auth/login` accepts it only with username `admin`. Bearer `Authorization: Bearer <ADMIN_KEY>` also authenticates as admin. |
+| `ALLOWED_USERS` | string | `""` | `Settings` | Comma-separated list of usernames allowed to create/modify data (analyses, comments, reviews, classifications). Empty = open access (all users allowed). Admin users always bypass. Case-insensitive. |
 | `SECURE_COOKIES` | boolean | `true` | `Settings` | `Secure` attribute for `jji_session` and `jji_username` cookies. |
 | `JJI_ENCRYPTION_KEY` | string | `unset` | `process env` | Secret used to encrypt stored sensitive values and HMAC-hash stored admin API keys. |
 | `XDG_DATA_HOME` | path | `~/.local/share` | `process env` | Base directory for the fallback encryption key file when `JJI_ENCRYPTION_KEY` is unset. |
 
 ```bash
 ADMIN_KEY=change-this-admin-secret
+ALLOWED_USERS=alice,bob,carol
 SECURE_COOKIES=true
 JJI_ENCRYPTION_KEY=change-this-encryption-secret
 XDG_DATA_HOME=/var/lib/jji

@@ -669,3 +669,107 @@ class TestCloneBranchParameter:
         call_kwargs = mock_repo.clone_from.call_args[1]
         assert "branch" not in call_kwargs
         manager.cleanup()
+
+
+class TestInjectTokenIntoUrl:
+    """Tests for _inject_token_into_url helper."""
+
+    def test_injects_token_into_https_url(self) -> None:
+        from jenkins_job_insight.repository import _inject_token_into_url
+
+        result = _inject_token_into_url(
+            "https://github.com/org/repo",
+            "tok123",  # pragma: allowlist secret
+        )
+        expected = "https://x-token-auth:tok123@github.com/org/repo"  # pragma: allowlist secret
+        assert result == expected
+
+    def test_replaces_existing_credentials(self) -> None:
+        from jenkins_job_insight.repository import _inject_token_into_url
+
+        result = _inject_token_into_url(
+            "https://user:pass@github.com/org/repo",  # pragma: allowlist secret
+            "new_token",  # pragma: allowlist secret
+        )
+        assert "user" not in result
+        assert "pass" not in result
+        assert "x-token-auth:new_token@github.com" in result  # pragma: allowlist secret
+
+    def test_preserves_port(self) -> None:
+        from jenkins_job_insight.repository import _inject_token_into_url
+
+        result = _inject_token_into_url(
+            "https://gitlab.internal:8443/org/repo",
+            "tok123",  # pragma: allowlist secret
+        )
+        assert (
+            "x-token-auth:tok123@gitlab.internal:8443" in result
+        )  # pragma: allowlist secret
+
+    def test_ignores_non_https_url(self) -> None:
+        from jenkins_job_insight.repository import _inject_token_into_url
+
+        result = _inject_token_into_url(
+            "git://github.com/org/repo",
+            "tok123",  # pragma: allowlist secret
+        )
+        assert result == "git://github.com/org/repo"
+
+    def test_empty_token_returns_original(self) -> None:
+        from jenkins_job_insight.repository import _inject_token_into_url
+
+        result = _inject_token_into_url("https://github.com/org/repo", "")
+        assert result == "https://github.com/org/repo"
+
+    def test_preserves_path_and_suffix(self) -> None:
+        from jenkins_job_insight.repository import _inject_token_into_url
+
+        result = _inject_token_into_url(
+            "https://github.com/org/repo.git",
+            "tok",  # pragma: allowlist secret
+        )
+        expected = "https://x-token-auth:tok@github.com/org/repo.git"  # pragma: allowlist secret
+        assert result == expected
+
+
+class TestCloneIntoWithToken:
+    """Tests for clone_into with token parameter."""
+
+    @patch("jenkins_job_insight.repository.Repo")
+    def test_clone_into_with_token_injects_into_url(
+        self, mock_repo: MagicMock, tmp_path
+    ) -> None:
+        """clone_into with token injects it into the clone URL."""
+        manager = RepositoryManager()
+        target = tmp_path / "my-repo"
+        manager.clone_into(
+            "https://github.com/org/repo",
+            target,
+            depth=1,
+            token="tok123",  # noqa: S106  # pragma: allowlist secret
+        )
+        mock_repo.clone_from.assert_called_once_with(
+            "https://x-token-auth:tok123@github.com/org/repo",  # pragma: allowlist secret
+            target,
+            depth=1,
+        )
+
+    @patch("jenkins_job_insight.repository.Repo")
+    def test_clone_into_without_token(self, mock_repo: MagicMock, tmp_path) -> None:
+        """clone_into without token uses original URL."""
+        manager = RepositoryManager()
+        target = tmp_path / "my-repo"
+        manager.clone_into("https://github.com/org/repo", target, depth=1)
+        mock_repo.clone_from.assert_called_once_with(
+            "https://github.com/org/repo", target, depth=1
+        )
+
+    @patch("jenkins_job_insight.repository.Repo")
+    def test_clone_into_with_none_token(self, mock_repo: MagicMock, tmp_path) -> None:
+        """clone_into with None token uses original URL."""
+        manager = RepositoryManager()
+        target = tmp_path / "my-repo"
+        manager.clone_into("https://github.com/org/repo", target, depth=1, token=None)
+        mock_repo.clone_from.assert_called_once_with(
+            "https://github.com/org/repo", target, depth=1
+        )

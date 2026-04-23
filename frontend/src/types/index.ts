@@ -70,6 +70,8 @@ export interface CodeFix {
   file: string
   line: string
   change: string
+  original_code?: string | null
+  suggested_code?: string | null
 }
 
 export interface AnalysisDetail {
@@ -139,6 +141,7 @@ export interface AnalysisResult {
     tests_repo_url?: string
     tests_repo_ref?: string
     additional_repos?: Array<{ name: string; url: string; ref?: string }>
+    force?: boolean
     [key: string]: unknown
   }
 }
@@ -305,4 +308,18 @@ export interface CommentEnrichment {
   type: 'github_pr' | 'github_issue' | 'jira'
   key: string
   status: string
+}
+
+// -- Job Metadata ---------------------------------------------------
+
+export interface JobMetadata {
+  job_name: string
+  team: string | null
+  tier: string | null
+  version: string | null
+  labels: string[]
+}
+
+export interface DashboardJobWithMetadata extends DashboardJob {
+  metadata?: JobMetadata | null
 }

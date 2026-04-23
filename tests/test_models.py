@@ -159,12 +159,53 @@ class TestCodeFix:
         assert fix.file == ""
         assert fix.line == ""
         assert fix.change == ""
+        assert fix.original_code is None
+        assert fix.suggested_code is None
 
     def test_creation_with_values(self) -> None:
         """Test creating with all fields."""
         fix = CodeFix(file="src/main.py", line="42", change="Fix the bug")
         assert fix.file == "src/main.py"
         assert fix.line == "42"
+
+    def test_creation_with_code_fields(self) -> None:
+        """Test creating with original_code and suggested_code."""
+        fix = CodeFix(
+            file="src/main.py",
+            line="42",
+            change="Replace broken assertion",
+            original_code="assert x == 1",
+            suggested_code="assert x == 2",
+        )
+        assert fix.original_code == "assert x == 1"
+        assert fix.suggested_code == "assert x == 2"
+
+    def test_code_fields_optional_backward_compatible(self) -> None:
+        """Test that existing data without code fields still works."""
+        data = {"file": "test.py", "line": "10", "change": "fix it"}
+        fix = CodeFix(**data)
+        assert fix.original_code is None
+        assert fix.suggested_code is None
+
+    def test_serialization_includes_code_fields(self) -> None:
+        """Test that code fields appear in serialized output when set."""
+        fix = CodeFix(
+            file="a.py",
+            line="1",
+            change="fix",
+            original_code="old",
+            suggested_code="new",
+        )
+        data = fix.model_dump()
+        assert data["original_code"] == "old"
+        assert data["suggested_code"] == "new"
+
+    def test_serialization_with_none_code_fields(self) -> None:
+        """Test that None code fields are serialized as None."""
+        fix = CodeFix(file="a.py", line="1", change="fix")
+        data = fix.model_dump()
+        assert data["original_code"] is None
+        assert data["suggested_code"] is None
 
 
 class TestAnalysisDetail:
@@ -901,6 +942,36 @@ class TestAdditionalRepo:
         )
         assert repo.ref == ""
 
+    def test_token_optional(self) -> None:
+        """Token defaults to None when not provided."""
+        repo = AdditionalRepo(name="infra", url="https://github.com/org/infra")
+        assert repo.token is None
+
+    def test_token_accepted(self) -> None:
+        """Token field accepts a string value."""
+        repo = AdditionalRepo(
+            name="infra",
+            url="https://github.com/org/infra",
+            token="tok",  # noqa: S106
+        )
+        assert repo.token == "tok"  # noqa: S105
+
+    def test_token_none_explicit(self) -> None:
+        """Explicitly passing None for token is accepted."""
+        repo = AdditionalRepo(
+            name="infra", url="https://github.com/org/infra", token=None
+        )
+        assert repo.token is None
+
+    def test_backward_compat_no_token(self) -> None:
+        """AdditionalRepo created without token field is backward compatible."""
+        data = {"name": "infra", "url": "https://github.com/org/infra"}
+        repo = AdditionalRepo(**data)
+        assert repo.token is None
+        dumped = repo.model_dump(mode="json")
+        assert "token" in dumped
+        assert dumped["token"] is None
+
 
 class TestAdditionalReposDuplicateNames:
     """Tests for duplicate name rejection in additional_repos."""
@@ -1010,3 +1081,32 @@ class TestBaseAnalysisRequestPeerFields:
             job_name="j", build_number=1, peer_analysis_max_rounds=10
         )
         assert req10.peer_analysis_max_rounds == 10
+
+
+class TestAnalyzeRequestForce:
+    """Tests for the force field on AnalyzeRequest."""
+
+    def test_force_defaults_to_false(self) -> None:
+        """force defaults to False for backward compatibility."""
+        req = AnalyzeRequest(job_name="j", build_number=1)
+        assert req.force is False
+
+    def test_force_true(self) -> None:
+        """force can be set to True."""
+        req = AnalyzeRequest(job_name="j", build_number=1, force=True)
+        assert req.force is True
+
+    def test_force_false_explicit(self) -> None:
+        """force can be explicitly set to False."""
+        req = AnalyzeRequest(job_name="j", build_number=1, force=False)
+        assert req.force is False
+
+    def test_force_in_model_fields_set_when_provided(self) -> None:
+        """force appears in model_fields_set when explicitly provided."""
+        req = AnalyzeRequest(job_name="j", build_number=1, force=True)
+        assert "force" in req.model_fields_set
+
+    def test_force_not_in_model_fields_set_when_omitted(self) -> None:
+        """force does not appear in model_fields_set when omitted."""
+        req = AnalyzeRequest(job_name="j", build_number=1)
+        assert "force" not in req.model_fields_set

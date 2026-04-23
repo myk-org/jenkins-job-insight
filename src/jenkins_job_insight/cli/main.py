@@ -35,10 +35,13 @@ auth_app = typer.Typer(help="Authentication commands.", no_args_is_help=True)
 admin_app = typer.Typer(help="Admin management commands.", no_args_is_help=True)
 admin_users_app = typer.Typer(help="Manage admin users.", no_args_is_help=True)
 
+metadata_app = typer.Typer(help="Manage job metadata.", no_args_is_help=True)
+
 app.add_typer(results_app, name="results")
 app.add_typer(history_app, name="history")
 app.add_typer(comments_app, name="comments")
 app.add_typer(classifications_app, name="classifications")
+app.add_typer(metadata_app, name="metadata")
 app.add_typer(config_app, name="config")
 app.add_typer(auth_app, name="auth")
 app.add_typer(admin_app, name="admin")
@@ -51,6 +54,8 @@ _state: dict = {}
 # Shared option definition reused across leaf commands so --json works
 # both globally (before the subcommand) and per-command (after it).
 _JSON_OPTION = typer.Option(False, "--json", help="Output as JSON instead of table.")
+_JOB_IDS_ARGUMENT = typer.Argument(default=None, help="Job ID(s) to delete.")
+_BULK_DELETE_BATCH_SIZE = 500
 
 
 def _set_json(json_output: bool) -> None:
@@ -79,10 +84,17 @@ def _handle_error(err: JJIError) -> None:
             err=True,
         )
     elif err.status_code == 403:
-        typer.echo(
-            "Hint: This action requires admin access. Use --api-key or set JJI_API_KEY.",
-            err=True,
-        )
+        detail = err.detail.lower() if err.detail else ""
+        if "allow list" in detail:
+            typer.echo(
+                "Hint: Your user is not on the server's allow list. Contact an administrator.",
+                err=True,
+            )
+        else:
+            typer.echo(
+                "Hint: This action requires admin access. Use --api-key or set JJI_API_KEY.",
+                err=True,
+            )
     raise typer.Exit(code=1)
 
 
@@ -289,7 +301,25 @@ def health(
     json_output: bool = _JSON_OPTION,
 ):
     """Check server health."""
-    _run_client_command(json_output, lambda c: c.health(), columns=["status"])
+    data = _run_client_command(json_output, lambda c: c.health(), emit_output=False)
+    if not _state.get("json", False):
+        status = data.get("status", "unknown")
+        typer.echo(f"Status: {status}")
+        checks = data.get("checks", {})
+        if checks:
+            typer.echo("\nChecks:")
+            for name, check in checks.items():
+                detail = check.get("detail", "")
+                suffix = f" ({detail})" if detail else ""
+                typer.echo(f"  {name}: {check.get('status', 'unknown')}{suffix}")
+        error_rates = data.get("error_rates", {})
+        if error_rates:
+            typer.echo(
+                f"\nError rate: {error_rates.get('error_rate', 0):.1%} "
+                f"({error_rates.get('total_errors', 0)}/"
+                f"{error_rates.get('total_requests', 0)} in "
+                f"{error_rates.get('window_seconds', 0):.0f}s window)"
+            )
 
 
 # -- Results ------------------------------------------------------------------
@@ -381,20 +411,78 @@ def results_show(
 
 @results_app.command("delete")
 def results_delete(
-    job_id: str = typer.Argument(help="Job ID to delete."),
+    job_ids: list[str] | None = _JOB_IDS_ARGUMENT,
+    all_jobs: bool = typer.Option(False, "--all", help="Delete all jobs."),
+    confirm: bool = typer.Option(
+        False, "--confirm", help="Confirm deleting all jobs (required with --all)."
+    ),
     json_output: bool = _JSON_OPTION,
 ):
-    """Delete a job and all related data."""
+    """Delete one or more jobs and all related data."""
     _set_json(json_output)
     try:
         client = _get_client()
-        data = client.delete_job(job_id)
+        if all_jobs and job_ids:
+            typer.echo(
+                "Error: --all cannot be combined with explicit JOB_ID values.", err=True
+            )
+            raise typer.Exit(code=1)
+        if all_jobs:
+            if not confirm:
+                typer.echo("Error: --all requires --confirm.", err=True)
+                raise typer.Exit(code=1)
+            # Fetch all job IDs from the dashboard
+            dashboard_jobs = client.dashboard()
+            job_ids = [j["job_id"] for j in dashboard_jobs]
+            if not job_ids:
+                if _state.get("json", False):
+                    print_output(
+                        {"deleted": [], "failed": [], "total": 0},
+                        columns=[],
+                        as_json=True,
+                    )
+                else:
+                    typer.echo("No jobs to delete.")
+                raise typer.Exit()
+        elif not job_ids:
+            typer.echo("Error: provide at least one JOB_ID or use --all.", err=True)
+            raise typer.Exit(code=1)
+
+        job_ids = list(dict.fromkeys(job_ids))
+
+        if len(job_ids) == 1:
+            data = client.delete_job(job_ids[0])
+            if _state.get("json", False):
+                print_output(data, columns=[], as_json=True)
+            else:
+                typer.echo(f"Deleted job {data.get('job_id', job_ids[0])}")
+        else:
+            deleted: list[str] = []
+            failed: list[dict] = []
+            for start in range(0, len(job_ids), _BULK_DELETE_BATCH_SIZE):
+                chunk = job_ids[start : start + _BULK_DELETE_BATCH_SIZE]
+                try:
+                    chunk_data = client.delete_jobs_bulk(chunk)
+                    deleted.extend(chunk_data.get("deleted", []))
+                    failed.extend(chunk_data.get("failed", []))
+                except JJIError as err:
+                    if err.status_code in (401, 403):
+                        raise
+                    failed.extend(
+                        {"job_id": jid, "reason": "batch request failed"}
+                        for jid in chunk
+                    )
+            data = {"deleted": deleted, "failed": failed, "total": len(job_ids)}
+            if _state.get("json", False):
+                print_output(data, columns=[], as_json=True)
+            else:
+                typer.echo(
+                    f"Deleted {len(deleted)} of {data.get('total', len(job_ids))} jobs"
+                )
+                for f in failed:
+                    typer.echo(f"  Failed: {f['job_id']} - {f['reason']}", err=True)
     except JJIError as err:
         _handle_error(err)
-    if _state.get("json", False):
-        print_output(data, columns=[], as_json=True)
-    else:
-        typer.echo(f"Deleted job {data.get('job_id', job_id)}")
 
 
 # -- Review -------------------------------------------------------------------
@@ -501,6 +589,11 @@ def analyze(
         "--jenkins-ssl-verify/--no-jenkins-ssl-verify",
         help="Jenkins SSL certificate verification.",
     ),
+    jenkins_timeout: int | None = typer.Option(
+        None,
+        "--jenkins-timeout",
+        help="Jenkins API request timeout in seconds.",
+    ),
     jenkins_artifacts_max_size_mb: int = typer.Option(
         None,
         "--jenkins-artifacts-max-size-mb",
@@ -578,6 +671,11 @@ def analyze(
     max_wait: int = typer.Option(
         None, "--max-wait", help="Maximum minutes to wait for completion."
     ),
+    force: bool | None = typer.Option(
+        None,
+        "--force/--no-force",
+        help="Force analysis even if the build succeeded.",
+    ),
     json_output: bool = _JSON_OPTION,
 ):
     """Submit a Jenkins job for analysis."""
@@ -589,6 +687,7 @@ def analyze(
         "--jira-max-results": jira_max_results,
         "--ai-cli-timeout": ai_cli_timeout,
         "--jenkins-artifacts-max-size-mb": jenkins_artifacts_max_size_mb,
+        "--jenkins-timeout": jenkins_timeout,
     }
     for flag_name, flag_value in _positive_int_fields.items():
         if flag_value is not None and flag_value <= 0:
@@ -626,12 +725,14 @@ def analyze(
         _cfg_int_fields = {
             "ai_cli_timeout": cfg.ai_cli_timeout,
             "jira_max_results": cfg.jira_max_results,
+            "jenkins_timeout": cfg.jenkins_timeout,
             "poll_interval_minutes": cfg.poll_interval_minutes,
             "max_wait_minutes": cfg.max_wait_minutes,
         }
         _cfg_int_defaults = {
             "ai_cli_timeout": ServerConfig.ai_cli_timeout,
             "jira_max_results": ServerConfig.jira_max_results,
+            "jenkins_timeout": ServerConfig.jenkins_timeout,
             "poll_interval_minutes": ServerConfig.poll_interval_minutes,
             "max_wait_minutes": ServerConfig.max_wait_minutes,
         }
@@ -658,6 +759,8 @@ def analyze(
             extras["jira_ssl_verify"] = cfg.jira_ssl_verify
         if cfg.wait_for_completion is not None:
             extras["wait_for_completion"] = cfg.wait_for_completion
+        if cfg.force is not None:
+            extras["force"] = cfg.force
 
     # CLI flags override config (highest priority).
     if provider:
@@ -690,6 +793,7 @@ def analyze(
         "jira_max_results": jira_max_results,
         "ai_cli_timeout": ai_cli_timeout,
         "jenkins_artifacts_max_size_mb": jenkins_artifacts_max_size_mb,
+        "jenkins_timeout": jenkins_timeout,
         "poll_interval_minutes": poll_interval,
         "max_wait_minutes": max_wait,
     }
@@ -703,6 +807,7 @@ def analyze(
         "jira_ssl_verify": jira_ssl_verify,
         "get_job_artifacts": get_job_artifacts,
         "wait_for_completion": wait_for_completion,
+        "force": force,
     }
     for key, value in _bool_fields.items():
         if value is not None:
@@ -1734,6 +1839,143 @@ def admin_users_change_role(
             typer.echo(
                 "\u26a0\ufe0f  Save this API key now \u2014 it cannot be retrieved later."
             )
+
+
+# -- Metadata -----------------------------------------------------------------
+
+
+_METADATA_COLUMNS = ["job_name", "team", "tier", "version", "labels"]
+_METADATA_COLUMN_LABELS = {"job_name": "JOB NAME"}
+
+
+@metadata_app.command("list")
+def metadata_list(
+    team: str = typer.Option("", "--team", help="Filter by team."),
+    tier: str = typer.Option("", "--tier", help="Filter by tier."),
+    version: str = typer.Option("", "--version", help="Filter by version."),
+    label: list[str] = typer.Option(  # noqa: B008
+        [], "--label", "-l", help="Filter by label (can repeat)."
+    ),
+    json_output: bool = _JSON_OPTION,
+):
+    """List job metadata with optional filters."""
+    _run_client_command(
+        json_output,
+        lambda c: c.list_jobs_metadata(
+            team=team, tier=tier, version=version, labels=label or None
+        ),
+        columns=_METADATA_COLUMNS,
+        labels=_METADATA_COLUMN_LABELS,
+    )
+
+
+@metadata_app.command("get")
+def metadata_get(
+    job_name: str = typer.Argument(help="Job name."),
+    json_output: bool = _JSON_OPTION,
+):
+    """Show metadata for a specific job."""
+    _run_client_command(
+        json_output,
+        lambda c: c.get_job_metadata(job_name),
+        columns=_METADATA_COLUMNS,
+    )
+
+
+@metadata_app.command("set")
+def metadata_set(
+    job_name: str = typer.Argument(help="Job name."),
+    team: str = typer.Option("", "--team", help="Team owning this job."),
+    tier: str = typer.Option("", "--tier", help="Service tier."),
+    version: str = typer.Option("", "--version", help="Version label."),
+    label: list[str] = typer.Option(  # noqa: B008
+        [], "--label", "-l", help="Label (can repeat)."
+    ),
+    json_output: bool = _JSON_OPTION,
+):
+    """Set or update metadata for a job."""
+    data = _run_client_command(
+        json_output,
+        lambda c: c.set_job_metadata(
+            job_name, team=team, tier=tier, version=version, labels=label or None
+        ),
+        emit_output=False,
+    )
+    if not _state.get("json", False):
+        typer.echo(f"Metadata set for {data.get('job_name', job_name)}")
+
+
+@metadata_app.command("delete")
+def metadata_delete(
+    job_name: str = typer.Argument(help="Job name."),
+    json_output: bool = _JSON_OPTION,
+):
+    """Delete metadata for a job."""
+    data = _run_client_command(
+        json_output,
+        lambda c: c.delete_job_metadata(job_name),
+        emit_output=False,
+    )
+    if not _state.get("json", False):
+        typer.echo(f"Metadata deleted for {data.get('job_name', job_name)}")
+
+
+@metadata_app.command("import")
+def metadata_import(
+    file_path: str = typer.Argument(help="Path to JSON or YAML file."),
+    json_output: bool = _JSON_OPTION,
+):
+    """Bulk import metadata from a JSON or YAML file.
+
+    File format: a list of objects with job_name, team, tier, version, labels.
+    """
+    import json as json_mod
+    from pathlib import Path
+
+    _set_json(json_output)
+    path = Path(file_path)
+    if not path.exists():
+        typer.echo(f"Error: file not found: {file_path}", err=True)
+        raise typer.Exit(code=1)
+
+    content = path.read_text(encoding="utf-8")
+    items: list[dict] = []
+
+    if path.suffix.lower() in (".yaml", ".yml"):
+        try:
+            import yaml
+
+            items = yaml.safe_load(content)
+        except ImportError:
+            typer.echo(
+                "Error: PyYAML is required for YAML files. Install with: pip install pyyaml",
+                err=True,
+            )
+            raise typer.Exit(code=1) from None
+        except yaml.YAMLError as exc:
+            typer.echo(f"Error: invalid YAML: {exc}", err=True)
+            raise typer.Exit(code=1) from None
+    else:
+        try:
+            items = json_mod.loads(content)
+        except json_mod.JSONDecodeError as exc:
+            typer.echo(f"Error: invalid JSON: {exc}", err=True)
+            raise typer.Exit(code=1) from None
+
+    if not isinstance(items, list):
+        typer.echo("Error: file must contain a JSON/YAML array of objects.", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        client = _get_client()
+        data = client.bulk_set_metadata(items)
+    except JJIError as err:
+        _handle_error(err)
+
+    if _state.get("json", False):
+        print_output(data, columns=[], as_json=True)
+    else:
+        typer.echo(f"Imported {data.get('updated', 0)} metadata entries.")
 
 
 # -- Config -------------------------------------------------------------------

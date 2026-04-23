@@ -367,6 +367,23 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at)"
         )
 
+        # Job metadata table for filtering and organization
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS job_metadata (
+                job_name TEXT PRIMARY KEY,
+                team TEXT,
+                tier TEXT,
+                version TEXT,
+                labels TEXT NOT NULL DEFAULT '[]'
+            )
+        """)
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jm_team ON job_metadata (team)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jm_tier ON job_metadata (tier)"
+        )
+
         await db.commit()
 
     # Backfill failure_history from existing results (runs once when table is empty).
@@ -1944,19 +1961,56 @@ async def get_all_failures(
         }
 
 
+async def _delete_job_rows(db: aiosqlite.Connection, job_id: str) -> bool:
+    """Delete all rows for a job across related tables. Returns True if the job existed."""
+    await db.execute("DELETE FROM comments WHERE job_id = ?", (job_id,))
+    await db.execute("DELETE FROM failure_reviews WHERE job_id = ?", (job_id,))
+    await db.execute("DELETE FROM failure_history WHERE job_id = ?", (job_id,))
+    await db.execute("DELETE FROM test_classifications WHERE job_id = ?", (job_id,))
+    cursor = await db.execute("DELETE FROM results WHERE job_id = ?", (job_id,))
+    return cursor.rowcount > 0
+
+
 async def delete_job(job_id: str) -> bool:
     """Delete an analyzed job and all its related data."""
     async with aiosqlite.connect(DB_PATH) as db:
-        # Delete from all related tables
-        await db.execute("DELETE FROM comments WHERE job_id = ?", (job_id,))
-        await db.execute("DELETE FROM failure_reviews WHERE job_id = ?", (job_id,))
-        await db.execute("DELETE FROM failure_history WHERE job_id = ?", (job_id,))
-        await db.execute("DELETE FROM test_classifications WHERE job_id = ?", (job_id,))
-        cursor = await db.execute("DELETE FROM results WHERE job_id = ?", (job_id,))
-        job_existed = cursor.rowcount > 0
+        job_existed = await _delete_job_rows(db, job_id)
         await db.commit()
-
         return job_existed
+
+
+async def delete_jobs_bulk(job_ids: list[str]) -> dict:
+    """Delete multiple jobs and all their related data in a single transaction.
+
+    Returns dict with 'deleted' (list of successfully deleted job_ids) and
+    'failed' (list of dicts with 'job_id' and 'reason' for failures).
+    """
+    deleted = []
+    failed = []
+    # Preserve order while dropping duplicates
+    unique_ids = list(dict.fromkeys(job_ids))
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("BEGIN IMMEDIATE")
+        try:
+            for idx, job_id in enumerate(unique_ids):
+                savepoint = f"delete_job_{idx}"
+                await db.execute(f"SAVEPOINT {savepoint}")
+                try:
+                    if await _delete_job_rows(db, job_id):
+                        deleted.append(job_id)
+                    else:
+                        failed.append({"job_id": job_id, "reason": "not found"})
+                    await db.execute(f"RELEASE SAVEPOINT {savepoint}")
+                except Exception:
+                    logger.exception("delete_jobs_bulk: failed to delete %s", job_id)
+                    await db.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    await db.execute(f"RELEASE SAVEPOINT {savepoint}")
+                    failed.append({"job_id": job_id, "reason": "deletion failed"})
+            await db.commit()
+        except Exception:
+            await db.execute("ROLLBACK")
+            raise
+    return {"deleted": deleted, "failed": failed, "total": len(unique_ids)}
 
 
 async def override_classification(
@@ -2655,3 +2709,188 @@ async def get_user_tokens(username: str) -> dict[str, str]:
             "jira_email": decrypt_value(row[1] or ""),
             "jira_token": decrypt_value(row[2] or ""),
         }
+
+
+# --- Job Metadata ---
+
+
+async def get_job_metadata(job_name: str) -> dict | None:
+    """Get metadata for a specific job.
+
+    Args:
+        job_name: The Jenkins job name.
+
+    Returns:
+        Metadata dict if found, None otherwise.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT job_name, team, tier, version, labels FROM job_metadata WHERE job_name = ?",
+            (job_name,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return _job_metadata_row_to_dict(row)
+
+
+def _job_metadata_row_to_dict(row) -> dict:
+    """Convert a job_metadata row to a dict, parsing the labels JSON."""
+    d = dict(row)
+    labels_raw = d.get("labels", "[]")
+    try:
+        parsed = json.loads(labels_raw) if labels_raw else []
+        d["labels"] = parsed if isinstance(parsed, list) else []
+    except (json.JSONDecodeError, TypeError):
+        d["labels"] = []
+    return d
+
+
+async def _upsert_job_metadata_row(db: aiosqlite.Connection, item: dict) -> None:
+    """Upsert a single job metadata row."""
+    labels_json = json.dumps(item.get("labels") or [])
+    await db.execute(
+        "INSERT OR REPLACE INTO job_metadata (job_name, team, tier, version, labels) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (
+            item["job_name"],
+            item.get("team"),
+            item.get("tier"),
+            item.get("version"),
+            labels_json,
+        ),
+    )
+
+
+async def set_job_metadata(
+    job_name: str,
+    *,
+    team: str | None = None,
+    tier: str | None = None,
+    version: str | None = None,
+    labels: list[str] | None = None,
+) -> dict:
+    """Set or update metadata for a job.
+
+    Uses INSERT OR REPLACE to upsert.
+
+    Args:
+        job_name: The Jenkins job name.
+        team: Team owning this job.
+        tier: Service tier.
+        version: Version or release label.
+        labels: Arbitrary labels.
+
+    Returns:
+        The stored metadata dict.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _upsert_job_metadata_row(
+            db,
+            {
+                "job_name": job_name,
+                "team": team,
+                "tier": tier,
+                "version": version,
+                "labels": labels or [],
+            },
+        )
+        await db.commit()
+    return {
+        "job_name": job_name,
+        "team": team,
+        "tier": tier,
+        "version": version,
+        "labels": labels or [],
+    }
+
+
+async def delete_job_metadata(job_name: str) -> bool:
+    """Delete metadata for a job.
+
+    Returns:
+        True if deleted, False if not found.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "DELETE FROM job_metadata WHERE job_name = ?",
+            (job_name,),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def list_jobs_with_metadata(
+    *,
+    team: str = "",
+    tier: str = "",
+    version: str = "",
+    labels: list[str] | None = None,
+) -> list[dict]:
+    """List all job metadata entries, optionally filtered.
+
+    Filters combine with AND logic. Multiple labels require all to match.
+
+    Args:
+        team: Filter by team (exact match).
+        tier: Filter by tier (exact match).
+        version: Filter by version (exact match).
+        labels: Filter by labels (all must be present).
+
+    Returns:
+        List of metadata dicts.
+    """
+    conditions: list[str] = []
+    params: list[str] = []
+
+    if team:
+        conditions.append("team = ?")
+        params.append(team)
+    if tier:
+        conditions.append("tier = ?")
+        params.append(tier)
+    if version:
+        conditions.append("version = ?")
+        params.append(version)
+
+    where = " AND ".join(conditions) if conditions else "1=1"
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"SELECT job_name, team, tier, version, labels FROM job_metadata WHERE {where} ORDER BY job_name",  # noqa: S608
+            params,
+        )
+        rows = await cursor.fetchall()
+
+    result = [_job_metadata_row_to_dict(row) for row in rows]
+
+    # Filter by labels in Python (JSON array matching)
+    if labels:
+        result = [
+            r for r in result if all(lbl in r.get("labels", []) for lbl in labels)
+        ]
+
+    return result
+
+
+async def bulk_set_metadata(items: list[dict]) -> dict:
+    """Bulk upsert job metadata.
+
+    Args:
+        items: List of dicts with job_name, team, tier, version, labels.
+
+    Returns:
+        Dict with 'updated' count.
+    """
+    for idx, item in enumerate(items):
+        if not item.get("job_name"):
+            raise ValueError(
+                f"bulk_set_metadata: item at index {idx} is missing 'job_name'"
+            )
+    async with aiosqlite.connect(DB_PATH) as db:
+        for item in items:
+            await _upsert_job_metadata_row(db, item)
+        await db.commit()
+    return {"updated": len(items)}

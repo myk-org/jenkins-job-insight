@@ -43,6 +43,11 @@ class AdditionalRepo(BaseModel):
         default="",
         description="Git ref (branch/tag) for clone checkout and UI file links; empty = remote default branch",
     )
+    token: str | None = Field(
+        default=None,
+        description="Authentication token for cloning private repos",
+        json_schema_extra={"format": "password"},
+    )
 
     @field_validator("ref")
     @classmethod
@@ -173,6 +178,10 @@ class AnalyzeRequest(BaseAnalysisRequest):
         description="Jenkins job name (can include folders like 'folder/job-name')"
     )
     build_number: int = Field(description="Build number to analyze")
+    force: bool = Field(
+        default=False,
+        description="Force analysis even if the build succeeded (bypass SUCCESS early-return)",
+    )
     wait_for_completion: bool = Field(
         default=True,
         description="Wait for Jenkins job to complete before analyzing",
@@ -201,6 +210,10 @@ class AnalyzeRequest(BaseAnalysisRequest):
     jenkins_ssl_verify: bool | None = Field(
         default=None,
         description="Jenkins SSL verification (overrides JENKINS_SSL_VERIFY env var)",
+    )
+    jenkins_timeout: Annotated[int, Field(gt=0)] | None = Field(
+        default=None,
+        description="Jenkins API request timeout in seconds (overrides JENKINS_TIMEOUT env var).",
     )
     jenkins_artifacts_max_size_mb: Annotated[int, Field(gt=0)] | None = Field(
         default=None,
@@ -264,6 +277,14 @@ class CodeFix(BaseModel):
     file: str = Field(default="", description="File path to fix")
     line: str = Field(default="", description="Line number")
     change: str = Field(default="", description="Specific code change")
+    original_code: str | None = Field(
+        default=None,
+        description="Optional complete original file content for diff/editor display (raw string, no markdown)",
+    )
+    suggested_code: str | None = Field(
+        default=None,
+        description="Complete replacement file content after applying the suggested fix (raw string, no markdown)",
+    )
 
 
 class AnalysisDetail(BaseModel):
@@ -663,3 +684,52 @@ class ReportPortalPushResult(BaseModel):
         description="Error messages from failed RP API calls",
     )
     launch_id: int | None = Field(default=None, description="Report Portal launch ID")
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request body for bulk-deleting jobs."""
+
+    job_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Job IDs to delete (1-500 per request).",
+    )
+
+
+class _JobMetadataFields(BaseModel):
+    """Shared metadata fields for job metadata request/response models."""
+
+    team: str | None = Field(default=None, description="Team owning this job")
+    tier: str | None = Field(
+        default=None, description="Service tier (e.g. critical, standard, low)"
+    )
+    version: str | None = Field(default=None, description="Version or release label")
+    labels: list[str] = Field(
+        default_factory=list, description="Arbitrary labels for categorization"
+    )
+
+
+class JobMetadata(_JobMetadataFields):
+    """Metadata for a Jenkins job used for filtering and organization."""
+
+    job_name: str = Field(description="Jenkins job name (primary key)")
+
+
+class JobMetadataInput(_JobMetadataFields):
+    """Input model for setting job metadata (no job_name — taken from URL path)."""
+
+
+class BulkJobMetadataEntry(JobMetadata):
+    """A single entry in a bulk metadata import."""
+
+
+class BulkJobMetadataRequest(BaseModel):
+    """Request body for bulk-importing job metadata."""
+
+    items: list[BulkJobMetadataEntry] = Field(
+        ...,
+        min_length=1,
+        max_length=1000,
+        description="Metadata entries to import (1-1000 per request).",
+    )

@@ -1,0 +1,41 @@
+---
+# PrometheusRule manifest for OpenShift alerting.
+# Deploy with: oc apply -f openshift-prometheus-rule.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: jenkins-job-insight-alerts
+  labels:
+    app: jenkins-job-insight
+spec:
+  groups:
+    - name: jenkins-job-insight.rules
+      rules:
+        - alert: JJIHighErrorRate
+          expr: jji_error_rate > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "JJI high error rate"
+            description: >
+              JJI error rate is {{ $value | humanizePercentage }} over the
+              rolling window (threshold 10%).
+        - alert: JJIVeryHighErrorRate
+          expr: jji_error_rate > 0.5
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "JJI critical error rate"
+            description: >
+              JJI error rate is {{ $value | humanizePercentage }} over the
+              rolling window (threshold 50%).
+        - alert: JJIHealthUnhealthy
+          expr: jji_health_up == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "JJI health check failing"
+            description: "JJI /api/health is returning 503 (unhealthy) for over 5 minutes."

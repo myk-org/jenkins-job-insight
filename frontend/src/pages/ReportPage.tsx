@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
+import { useClipboard } from '@/lib/useClipboard'
 import { parseApiTimestamp, isAnalysisTimeout, formatDuration, formatTimestamp } from '@/lib/utils'
 import { buildRepoUrls, type RepoUrl } from '@/lib/autoLink'
 import { groupFailures } from '@/lib/grouping'
@@ -17,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusChip } from '@/components/shared/StatusChip'
 import { ExpandCollapseButtons } from '@/components/shared/ExpandCollapseButtons'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, CheckCircle2, Clock, Calendar, Cpu, Timer, FolderGit2, RotateCw } from 'lucide-react'
+import { ExternalLink, CheckCircle2, Clock, Calendar, Cpu, Timer, FolderGit2, RotateCw, Copy, Check } from 'lucide-react'
 import { ReAnalyzeDialog } from './report/ReAnalyzeDialog'
 import { ReportPortalButton } from './report/ReportPortalButton'
 import { reviewKey } from './report/ReportContext'
@@ -76,6 +77,27 @@ export function ReportPage() {
     <ReportProvider key={jobId ?? 'unknown'}>
       <ReportContent />
     </ReportProvider>
+  )
+}
+
+function CliCommand({ jobId }: { jobId: string }) {
+  const { isCopied, copy } = useClipboard()
+  const command = `jji results show ${jobId} --json`
+
+  return (
+    <p className="flex items-center gap-1.5">
+      CLI:{' '}
+      <code className="font-mono bg-background-offset px-1.5 py-0.5 rounded">{command}</code>
+      <button
+        type="button"
+        onClick={() => copy(command)}
+        className="inline-flex items-center hover:text-text-secondary transition-colors"
+        title="Copy CLI command"
+        aria-label={isCopied() ? 'CLI command copied' : 'Copy CLI command'}
+      >
+        {isCopied() ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </p>
   )
 }
 
@@ -397,7 +419,7 @@ function ReportContent() {
           )}
           <div className="ml-auto flex items-center gap-3">
             {state.reportportalAvailable && (result.child_job_analyses ?? []).length === 0 && (
-              <ReportPortalButton jobId={result.job_id} jobName={result.job_name ?? result.job_id} buildNumber={result.build_number} />
+              <ReportPortalButton jobId={result.job_id} jobName={result.job_name ?? result.job_id} buildNumber={result.build_number} hasFailures={(result.failures ?? []).length > 0} />
             )}
             {result.request_params && (
               <Button
@@ -536,6 +558,7 @@ function ReportContent() {
         <p>
           Job ID: <span className="font-mono">{result.job_id}</span>
         </p>
+        <CliCommand jobId={result.job_id} />
         {state.completedAt && <p>Completed: {formatTimestamp(state.completedAt)}</p>}
         {result.ai_provider && (
           <p>

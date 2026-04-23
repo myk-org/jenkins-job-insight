@@ -10,6 +10,8 @@ from jenkins_job_insight.analyzer import (
     _JSON_RESPONSE_SCHEMA,
     _build_resources_section,
     _call_ai_cli_with_retry,
+    _parse_json_response,
+    _recover_from_details,
     handle_jenkins_exception,
 )
 from jenkins_job_insight.config import Settings
@@ -70,11 +72,41 @@ class TestHandleJenkinsException:
 
     def test_handle_non_jenkins_exception(self) -> None:
         """Test that non-Jenkins exceptions return 502 with connection error."""
-        exc = ConnectionError("Failed to connect")
+        exc = ValueError("Some other error")
         with pytest.raises(HTTPException) as exc_info:
             handle_jenkins_exception(exc, "my-job", 123)
         assert exc_info.value.status_code == 502
         assert "Failed to connect to Jenkins" in exc_info.value.detail
+
+    def test_handle_timeout_exception(self) -> None:
+        """Test that timeout returns 504 with generic message."""
+        import requests
+
+        exc = requests.exceptions.Timeout("Connection timed out")
+        with pytest.raises(HTTPException) as exc_info:
+            handle_jenkins_exception(exc, "my-job", 123)
+        assert exc_info.value.status_code == 504
+        assert (
+            exc_info.value.detail
+            == "Jenkins is unreachable or timed out. Check server connectivity."
+        )
+        # Raw exception message must not leak into the HTTP response
+        assert "Connection timed out" not in exc_info.value.detail
+
+    def test_handle_connection_error_exception(self) -> None:
+        """Test that connection error returns 504 with generic message."""
+        import requests
+
+        exc = requests.exceptions.ConnectionError("Connection refused")
+        with pytest.raises(HTTPException) as exc_info:
+            handle_jenkins_exception(exc, "my-job", 123)
+        assert exc_info.value.status_code == 504
+        assert (
+            exc_info.value.detail
+            == "Jenkins is unreachable or timed out. Check server connectivity."
+        )
+        # Raw exception message must not leak into the HTTP response
+        assert "Connection refused" not in exc_info.value.detail
 
 
 class TestCallAiCliWithRetry:
@@ -1046,6 +1078,191 @@ class TestAnalyzeJobProgressPhases:
         mock_update.assert_not_called()
 
 
+class TestForceAnalysisSuccessfulBuild:
+    """Tests for force-analyzing builds that passed (SUCCESS)."""
+
+    @pytest.mark.asyncio
+    async def test_success_build_returns_early_without_force(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When build is SUCCESS and force is False, returns early with no-failures summary."""
+        from jenkins_job_insight.analyzer import analyze_job
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="my-job",
+            build_number=123,
+            force=False,
+        )
+        settings = Settings()
+        settings_data = settings.model_dump(mode="python")
+        settings_data["jenkins_url"] = "https://jenkins.example.com"
+        settings_data["jenkins_user"] = "user"
+        settings_data["jenkins_password"] = _FAKE_JENKINS_PASSWORD
+        merged = Settings.model_validate(settings_data)
+
+        mock_client = MagicMock()
+        mock_client.get_build_info_safe.return_value = {
+            "result": "SUCCESS",
+            "building": False,
+        }
+
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.JenkinsClient",
+            lambda **kwargs: mock_client,
+        )
+
+        async def fake_to_thread(func, *args, **kwargs):
+            return func(*args, **kwargs)
+
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.asyncio.to_thread",
+            fake_to_thread,
+        )
+
+        result = await analyze_job(
+            body,
+            merged,
+            ai_provider="claude",
+            ai_model="test-model",
+            job_id=None,
+        )
+
+        assert result.status == "completed"
+        assert "Build passed successfully" in result.summary
+        assert result.failures == []
+
+    @pytest.mark.asyncio
+    async def test_success_build_continues_with_force_on_request(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When build is SUCCESS and request.force is True, analysis continues past the early return."""
+        from jenkins_job_insight.analyzer import analyze_job
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="my-job",
+            build_number=123,
+            force=True,
+        )
+        settings = Settings()
+        settings_data = settings.model_dump(mode="python")
+        settings_data["jenkins_url"] = "https://jenkins.example.com"
+        settings_data["jenkins_user"] = "user"
+        settings_data["jenkins_password"] = _FAKE_JENKINS_PASSWORD
+        merged = Settings.model_validate(settings_data)
+
+        mock_client = MagicMock()
+        mock_client.get_build_info_safe.return_value = {
+            "result": "SUCCESS",
+            "building": False,
+            "artifacts": [],
+        }
+        mock_client.get_build_console.return_value = "Build finished successfully"
+        mock_client.get_test_report.return_value = None
+
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.JenkinsClient",
+            lambda **kwargs: mock_client,
+        )
+
+        async def fake_to_thread(func, *args, **kwargs):
+            return func(*args, **kwargs)
+
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.asyncio.to_thread",
+            fake_to_thread,
+        )
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.check_ai_cli_available",
+            AsyncMock(return_value=(True, "")),
+        )
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer._call_ai_cli_with_retry",
+            AsyncMock(
+                return_value=(True, '{"classification": "CODE ISSUE", "details": "d"}')
+            ),
+        )
+
+        # With force=True, it should NOT return the early "Build passed" result.
+        # It will proceed into the analysis flow.
+        # The key assertion: get_build_console was called, proving it went past
+        # the SUCCESS early-return guard.
+        await analyze_job(
+            body,
+            merged,
+            ai_provider="claude",
+            ai_model="test-model",
+            job_id=None,
+        )
+
+        mock_client.get_build_console.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_success_build_continues_with_force_on_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When build is SUCCESS and settings.force_analysis is True, analysis continues."""
+        from jenkins_job_insight.analyzer import analyze_job
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="my-job",
+            build_number=123,
+            # force intentionally omitted — settings.force_analysis should drive behavior
+        )
+        settings = Settings()
+        settings_data = settings.model_dump(mode="python")
+        settings_data["jenkins_url"] = "https://jenkins.example.com"
+        settings_data["jenkins_user"] = "user"
+        settings_data["jenkins_password"] = _FAKE_JENKINS_PASSWORD
+        settings_data["force_analysis"] = True  # env-level force is on
+        merged = Settings.model_validate(settings_data)
+
+        mock_client = MagicMock()
+        mock_client.get_build_info_safe.return_value = {
+            "result": "SUCCESS",
+            "building": False,
+            "artifacts": [],
+        }
+        mock_client.get_build_console.return_value = "Build finished successfully"
+        mock_client.get_test_report.return_value = None
+
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.JenkinsClient",
+            lambda **kwargs: mock_client,
+        )
+
+        async def fake_to_thread(func, *args, **kwargs):
+            return func(*args, **kwargs)
+
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.asyncio.to_thread",
+            fake_to_thread,
+        )
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer.check_ai_cli_available",
+            AsyncMock(return_value=(True, "")),
+        )
+        monkeypatch.setattr(
+            "jenkins_job_insight.analyzer._call_ai_cli_with_retry",
+            AsyncMock(
+                return_value=(True, '{"classification": "CODE ISSUE", "details": "d"}')
+            ),
+        )
+
+        await analyze_job(
+            body,
+            merged,
+            ai_provider="claude",
+            ai_model="test-model",
+            job_id=None,
+        )
+
+        # Verify it went past the SUCCESS early-return guard
+        mock_client.get_build_console.assert_called_once()
+
+
 class TestResolveAdditionalRepos:
     """Tests for resolve_additional_repos."""
 
@@ -1128,7 +1345,7 @@ class TestCloneAdditionalRepos:
 
         manager = MagicMock(spec=RepositoryManager)
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             target.mkdir(parents=True, exist_ok=True)
             return target
 
@@ -1170,7 +1387,7 @@ class TestCloneAdditionalRepos:
 
         manager = MagicMock(spec=RepositoryManager)
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             target.mkdir(parents=True, exist_ok=True)
             return target
 
@@ -1212,7 +1429,7 @@ class TestCloneAdditionalRepos:
 
         manager = MagicMock(spec=RepositoryManager)
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             target.mkdir(parents=True, exist_ok=True)
             return target
 
@@ -1256,7 +1473,7 @@ class TestCloneAdditionalRepos:
             ),
         ]
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             if "bad" in str(url):
                 raise RuntimeError("Clone failed")
             target.mkdir(parents=True, exist_ok=True)
@@ -1304,7 +1521,7 @@ class TestCloneAdditionalRepos:
 
         manager = MagicMock(spec=RepositoryManager)
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             target.mkdir(parents=True, exist_ok=True)
             return target
 
@@ -1353,7 +1570,7 @@ class TestCloneAdditionalRepos:
 
         manager = MagicMock(spec=RepositoryManager)
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             target.mkdir(parents=True, exist_ok=True)
             return target
 
@@ -1558,7 +1775,7 @@ class TestAnalyzeJobWorkspacePattern:
         mock_repo_manager = MagicMock()
         mock_repo_manager.create_workspace.return_value = workspace_dir
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             clone_into_calls.append({"url": url, "target": target, "depth": depth})
             target.mkdir(parents=True, exist_ok=True)
             # Create .git to simulate a real clone
@@ -1655,7 +1872,7 @@ class TestAnalyzeJobWorkspacePattern:
         mock_repo_manager = MagicMock()
         mock_repo_manager.create_workspace.return_value = workspace_dir
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             clone_into_calls.append({"url": url, "target": target, "depth": depth})
             target.mkdir(parents=True, exist_ok=True)
             (target / ".git").mkdir(exist_ok=True)
@@ -1745,7 +1962,7 @@ class TestAnalyzeJobWorkspacePattern:
         mock_repo_manager = MagicMock()
         mock_repo_manager.create_workspace.return_value = workspace_dir
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             target.mkdir(parents=True, exist_ok=True)
             (target / ".git").mkdir(exist_ok=True)
             return target
@@ -1848,7 +2065,7 @@ class TestAnalyzeJobWorkspacePattern:
         mock_repo_manager = MagicMock()
         mock_repo_manager.create_workspace.return_value = workspace_dir
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             clone_into_calls.append({"url": url, "target": target, "depth": depth})
             target.mkdir(parents=True, exist_ok=True)
             (target / ".git").mkdir(exist_ok=True)
@@ -1965,7 +2182,7 @@ class TestAnalyzeJobWorkspacePattern:
         mock_repo_manager = MagicMock()
         mock_repo_manager.create_workspace.return_value = workspace_dir
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             target.mkdir(parents=True, exist_ok=True)
             (target / ".git").mkdir(exist_ok=True)
             return target
@@ -2045,7 +2262,7 @@ class TestAnalyzeFailuresWorkspacePattern:
         mock_repo_manager.create_workspace.return_value = workspace_dir
         mock_repo_manager.cleanup.return_value = None
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             clone_into_calls.append({"url": url, "target": target, "depth": depth})
             target.mkdir(parents=True, exist_ok=True)
             (target / ".git").mkdir(exist_ok=True)
@@ -2362,7 +2579,7 @@ class TestCloneAdditionalReposPassesRef:
 
         manager = MagicMock(spec=RepositoryManager)
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             target.mkdir(parents=True, exist_ok=True)
             return target
 
@@ -2469,7 +2686,7 @@ class TestAnalyzeJobParsesRepoRef:
         mock_repo_manager = MagicMock()
         mock_repo_manager.create_workspace.return_value = workspace_dir
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             clone_into_calls.append(
                 {"url": url, "target": target, "depth": depth, "branch": branch}
             )
@@ -2566,7 +2783,7 @@ class TestAnalyzeJobParsesRepoRef:
         mock_repo_manager = MagicMock()
         mock_repo_manager.create_workspace.return_value = workspace_dir
 
-        def fake_clone_into(url, target, depth=1, branch=""):
+        def fake_clone_into(url, target, depth=1, branch="", token=None):
             clone_into_calls.append(
                 {"url": url, "target": target, "depth": depth, "branch": branch}
             )
@@ -2634,3 +2851,118 @@ class TestJsonResponseSchemaParagraphBreaks:
     ) -> None:
         """product_bug_report description field instructs AI to use paragraph breaks."""
         assert "paragraph breaks between sections" in _JSON_RESPONSE_SCHEMA
+
+
+class TestJsonResponseSchemaCodeFields:
+    """Tests that _JSON_RESPONSE_SCHEMA includes original_code and suggested_code."""
+
+    def test_schema_includes_original_code(self) -> None:
+        """Schema instructs AI to produce original_code field."""
+        assert "original_code" in _JSON_RESPONSE_SCHEMA
+
+    def test_schema_includes_suggested_code(self) -> None:
+        """Schema instructs AI to produce suggested_code field."""
+        assert "suggested_code" in _JSON_RESPONSE_SCHEMA
+
+    def test_schema_specifies_no_markdown(self) -> None:
+        """Schema instructs AI to produce raw code with no markdown."""
+        assert "NO markdown" in _JSON_RESPONSE_SCHEMA
+
+
+class TestParseJsonResponseCodeFields:
+    """Tests that _parse_json_response handles original_code and suggested_code."""
+
+    def test_parse_code_fix_with_code_fields(self) -> None:
+        """JSON with original_code and suggested_code parses correctly."""
+        import json
+
+        data = {
+            "classification": "CODE ISSUE",
+            "affected_tests": ["test_foo"],
+            "details": "Missing import",
+            "artifacts_evidence": "",
+            "code_fix": {
+                "file": "src/app.py",
+                "line": "10",
+                "change": "Add import os",
+                "original_code": "import sys",
+                "suggested_code": "import sys\nimport os",
+            },
+        }
+        result = _parse_json_response(json.dumps(data))
+        assert result.code_fix
+        assert result.code_fix.original_code == "import sys"
+        assert result.code_fix.suggested_code == "import sys\nimport os"
+
+    def test_parse_code_fix_without_code_fields(self) -> None:
+        """JSON without original_code/suggested_code still parses (backward compat)."""
+        import json
+
+        data = {
+            "classification": "CODE ISSUE",
+            "affected_tests": ["test_foo"],
+            "details": "Bug found",
+            "artifacts_evidence": "",
+            "code_fix": {
+                "file": "src/app.py",
+                "line": "10",
+                "change": "Fix it",
+            },
+        }
+        result = _parse_json_response(json.dumps(data))
+        assert result.code_fix
+        assert result.code_fix.original_code is None
+        assert result.code_fix.suggested_code is None
+
+
+class TestRecoverFromDetailsCodeFields:
+    """Tests that _recover_from_details extracts original_code and suggested_code."""
+
+    def test_recover_with_code_fields(self) -> None:
+        """Regex recovery extracts original_code and suggested_code."""
+        from jenkins_job_insight.models import AnalysisDetail
+
+        raw = (
+            '{"classification": "CODE ISSUE", "affected_tests": ["test_x"], '
+            '"details": "broken", "code_fix": {"file": "a.py", "line": "1", '
+            '"change": "fix", "original_code": "old code", "suggested_code": "new code"}}'
+        )
+        fallback = AnalysisDetail(details=raw)
+        result = _recover_from_details(fallback)
+        assert result.classification == "CODE ISSUE"
+        assert result.code_fix
+        assert result.code_fix.original_code == "old code"
+        assert result.code_fix.suggested_code == "new code"
+
+    def test_recover_with_escaped_code_characters(self) -> None:
+        """Regex recovery correctly decodes JSON-escaped characters in code fields."""
+        from jenkins_job_insight.models import AnalysisDetail
+
+        raw = (
+            '{"classification": "CODE ISSUE", "affected_tests": ["test_x"], '
+            '"details": "broken", "code_fix": {"file": "a.py", "line": "1", '
+            '"change": "fix", '
+            '"original_code": "print(\\"x\\")", '
+            '"suggested_code": "print(\\"y\\")"}}'
+        )
+        fallback = AnalysisDetail(details=raw)
+        result = _recover_from_details(fallback)
+        assert result.code_fix
+        assert result.code_fix.original_code == 'print("x")'
+        assert result.code_fix.suggested_code == 'print("y")'
+
+    def test_recover_without_code_fields(self) -> None:
+        """Regex recovery works without original_code/suggested_code."""
+        from jenkins_job_insight.models import AnalysisDetail
+
+        raw = (
+            '{"classification": "CODE ISSUE", "affected_tests": ["test_x"], '
+            '"details": "broken", "code_fix": {"file": "a.py", "line": "1", '
+            '"change": "fix"}}'
+        )
+        fallback = AnalysisDetail(details=raw)
+        result = _recover_from_details(fallback)
+        assert result.classification == "CODE ISSUE"
+        assert result.code_fix
+        assert result.code_fix.original_code is None
+        assert result.code_fix.suggested_code is None

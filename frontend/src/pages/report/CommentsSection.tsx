@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { LinkedText } from '@/components/shared/LinkedText'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Trash2, MessageSquare } from 'lucide-react'
 import type { Comment } from '@/types'
 
@@ -145,6 +146,7 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
   }
 
   const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set())
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null)
 
   async function handleDelete(id: number) {
     if (deletingIds.has(id)) return
@@ -156,6 +158,7 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to delete comment')
     } finally {
+      setDeleteTarget(null)
       setDeletingIds((prev) => {
         const next = new Set(prev)
         next.delete(id)
@@ -214,7 +217,7 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
                   <button
                     type="button"
                     aria-label="Delete comment"
-                    onClick={() => handleDelete(c.id)}
+                    onClick={() => setDeleteTarget(c.id)}
                     disabled={deletingIds.has(c.id)}
                     className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue disabled:opacity-50"
                     title="Delete comment"
@@ -255,6 +258,17 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
           </span>
         )}
       </div>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="Delete comment"
+        description="Are you sure you want to delete this comment? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => { if (deleteTarget !== null) handleDelete(deleteTarget) }}
+        loading={deleteTarget !== null && deletingIds.has(deleteTarget)}
+      />
     </div>
   )
 }

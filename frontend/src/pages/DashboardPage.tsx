@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
-import type { DashboardJob } from '@/types'
+import { GITHUB_REPO_URL } from '@/lib/constants'
+import type { DashboardJob, DashboardJobWithMetadata } from '@/types'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -26,17 +27,25 @@ import {
 } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { parseApiTimestamp, isAnalysisTimeout, formatDuration, formatTimestamp } from '@/lib/utils'
+import { utcStartOfDateInput, utcEndOfDateInput } from '@/lib/dateRange'
 import { StatusChip } from '@/components/shared/StatusChip'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { Pagination } from '@/components/shared/Pagination'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { SortableHeader } from '@/components/shared/SortableHeader'
+import { DateRangeFilter } from '@/components/shared/DateRangeFilter'
 import { useTableSort } from '@/lib/useTableSort'
-import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle } from 'lucide-react'
+import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle, Github } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
+import { MetadataFilterBar } from '@/components/shared/MetadataFilterBar'
+import { MetadataBadges } from '@/components/shared/MetadataBadges'
 
 const STATUS_FILTER_ALL = 'ALL'
 const STATUS_FILTER_OPTIONS = [STATUS_FILTER_ALL, 'completed', 'running', 'waiting', 'pending', 'failed', 'timeout'] as const
+const BULK_DELETE_LIMIT = 500
+
+const BULK_SELECT_CHECKBOX_CLASS =
+  "h-4 w-4 cursor-pointer appearance-none rounded border border-text-tertiary bg-surface-elevated checked:bg-signal-blue checked:border-signal-blue checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-no-repeat checked:bg-center transition-all"
 
 function MetricCell({ value, displayValue, icon, tone, tooltipText }: {
   value: number | null | undefined
@@ -98,26 +107,95 @@ function getJobDisplayName(job: DashboardJob | null | undefined): string {
 export function DashboardPage() {
   const navigate = useNavigate()
   const { isAdmin } = useAuth()
-  const [jobs, setJobs] = useState<DashboardJob[]>([])
+  const [jobs, setJobs] = useState<DashboardJobWithMetadata[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(STATUS_FILTER_ALL)
   const { sortKey, sortDir, handleSort } = useTableSort('dash', 'created_at', 'desc', ['created_at'])
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(20)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dateFrom = searchParams.get('date_from') ?? ''
+  const dateTo = searchParams.get('date_to') ?? ''
+
+  // Metadata filter state — persisted in URL query params
+  const metaTeam = searchParams.get('team') ?? ''
+  const metaTier = searchParams.get('tier') ?? ''
+  const metaVersion = searchParams.get('version') ?? ''
+  const metaLabels = useMemo(() => searchParams.getAll('label'), [searchParams])
+  const setMetaParam = useCallback((key: string, value: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set(key, value)
+      else next.delete(key)
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+  const setMetaLabels = useCallback((labels: string[]) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('label')
+      for (const l of labels) next.append('label', l)
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+  const hasMetadataFilters = !!(metaTeam || metaTier || metaVersion || metaLabels.length > 0)
+  const setDateFrom = useCallback((value: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set('date_from', value)
+      else next.delete('date_from')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+  const setDateTo = useCallback((value: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set('date_to', value)
+      else next.delete('date_to')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+  const clearDates = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('date_from')
+      next.delete('date_to')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
   const [deleteTarget, setDeleteTarget] = useState<DashboardJob | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [bulkResultMessage, setBulkResultMessage] = useState<string | null>(null)
+  const selectAllRef = useRef<HTMLInputElement>(null)
+
+  const showCheckboxes = selectedIds.size > 0
+
+  useEffect(() => {
+    if (!isAdmin && selectedIds.size > 0) {
+      clearSelection()
+      setBulkDeleteConfirm(false)
+    }
+  }, [isAdmin, selectedIds])
 
   const fetchSeqRef = useRef(0)
-  const inFlightRef = useRef(false)
 
   const fetchJobs = useCallback(async () => {
-    if (inFlightRef.current) return
-    inFlightRef.current = true
     const thisSeq = ++fetchSeqRef.current
     try {
-      const data = await api.get<DashboardJob[]>('/api/dashboard')
+      let url = '/api/dashboard/filtered'
+      const params = new URLSearchParams()
+      if (metaTeam) params.set('team', metaTeam)
+      if (metaTier) params.set('tier', metaTier)
+      if (metaVersion) params.set('version', metaVersion)
+      for (const l of metaLabels) params.append('label', l)
+      const qs = params.toString()
+      if (qs) url += `?${qs}`
+      const data = await api.get<DashboardJobWithMetadata[]>(url)
       if (thisSeq === fetchSeqRef.current) {
         setError(null)
         setJobs(data)
@@ -127,29 +205,39 @@ export function DashboardPage() {
         setError(err instanceof Error ? err.message : 'Failed to load dashboard')
       }
     } finally {
-      inFlightRef.current = false
       if (thisSeq === fetchSeqRef.current) {
         setLoading(false)
       }
     }
-  }, [])
+  }, [metaTeam, metaTier, metaVersion, metaLabels])
 
   useEffect(() => {
     fetchJobs()
     const interval = setInterval(fetchJobs, 10_000)
     return () => clearInterval(interval)
   }, [fetchJobs])
-  useEffect(() => { setPage(1) }, [search, statusFilter, perPage])
+  useEffect(() => { setPage(1) }, [search, statusFilter, perPage, dateFrom, dateTo, metaTeam, metaTier, metaVersion, metaLabels])
 
   const filtered = useMemo(() => {
+    const fromBound = dateFrom ? utcStartOfDateInput(dateFrom) : null
+    const toBound = dateTo ? utcEndOfDateInput(dateTo) : null
+
     return jobs.filter((j) => {
       const displayStatus = isAnalysisTimeout(j.status, j.error, j.summary) ? 'timeout' : j.status
       if (statusFilter !== STATUS_FILTER_ALL && displayStatus !== statusFilter) return false
+
+      if (fromBound || toBound) {
+        const jobDate = parseApiTimestamp(j.created_at)
+        if (Number.isNaN(jobDate.getTime())) return false
+        if (fromBound && jobDate < fromBound) return false
+        if (toBound && jobDate > toBound) return false
+      }
+
       if (!search) return true
       const q = search.toLowerCase()
       return (j.job_name ?? '').toLowerCase().includes(q) || j.job_id.toLowerCase().includes(q)
     })
-  }, [jobs, search, statusFilter])
+  }, [jobs, search, statusFilter, dateFrom, dateTo])
 
   const sorted = useMemo(() => {
     const copy = [...filtered]
@@ -180,9 +268,87 @@ export function DashboardPage() {
   const safePage = Math.min(page, totalPages)
   const pageJobs = sorted.slice((safePage - 1) * perPage, safePage * perPage)
 
+  const pageJobIds = useMemo(() => pageJobs.map(j => j.job_id), [pageJobs])
+  const allPageSelected = pageJobIds.length > 0 && pageJobIds.every(id => selectedIds.has(id))
+  const somePageSelected = pageJobIds.some(id => selectedIds.has(id))
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = somePageSelected && !allPageSelected
+    }
+  }, [somePageSelected, allPageSelected])
+
   useEffect(() => {
     if (page !== safePage) setPage(safePage)
   }, [page, safePage])
+
+  function toggleSelect(jobId: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(jobId)) next.delete(jobId)
+      else next.add(jobId)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (allPageSelected) {
+        pageJobIds.forEach(id => next.delete(id))
+      } else {
+        pageJobIds.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+    setBulkResultMessage(null)
+  }
+
+  const bulkDeleteDescription = useMemo(() => {
+    const names = jobs.filter((j) => selectedIds.has(j.job_id)).map((j) => j.job_name || j.job_id)
+    return `Permanently delete ${names.join(', ')}? This cannot be undone.`
+  }, [jobs, selectedIds])
+
+  function enforceBulkDeleteLimit(count: number, closeConfirm = false): boolean {
+    if (count <= BULK_DELETE_LIMIT) return true
+    setBulkResultMessage(`Select ${BULK_DELETE_LIMIT} or fewer jobs to bulk delete.`)
+    if (closeConfirm) setBulkDeleteConfirm(false)
+    return false
+  }
+
+  async function handleBulkDelete() {
+    const jobIdsToDelete = [...selectedIds]
+    if (jobIdsToDelete.length === 0) return
+    if (!enforceBulkDeleteLimit(jobIdsToDelete.length, true)) return
+    setBulkDeleting(true)
+    try {
+      const data = await api.delete<{ deleted: string[]; failed: { job_id: string; reason: string }[]; total?: number }>(
+        '/api/results/bulk',
+        { job_ids: jobIdsToDelete },
+      )
+      const deletedSet = new Set(data.deleted)
+      fetchSeqRef.current += 1
+      setJobs(prev => prev.filter(j => !deletedSet.has(j.job_id)))
+      if (data.failed.length > 0) {
+        const details = data.failed.map(f => `${f.job_id}: ${f.reason}`).join('; ')
+        setSelectedIds(new Set(data.failed.map(f => f.job_id)))
+        setBulkResultMessage(
+          `Deleted ${data.deleted.length} of ${data.total ?? jobIdsToDelete.length}. Failed: ${details}`
+        )
+      } else {
+        clearSelection()
+      }
+    } catch (err) {
+      setBulkResultMessage(err instanceof Error ? err.message : 'Failed to bulk delete')
+    } finally {
+      setBulkDeleting(false)
+      setBulkDeleteConfirm(false)
+    }
+  }
 
   async function handleDelete() {
     if (!deleteTarget) return
@@ -216,9 +382,21 @@ export function DashboardPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="font-display text-xl font-bold text-text-primary">Dashboard</h1>
-            <p className="mt-0.5 text-sm text-text-tertiary">
-              {filtered.length} analysis {filtered.length === 1 ? 'run' : 'runs'}
-            </p>
+            <div className="mt-0.5 flex items-center gap-3">
+              <p className="text-sm text-text-tertiary">
+                {filtered.length} analysis {filtered.length === 1 ? 'run' : 'runs'}
+              </p>
+              <a
+                href={`${GITHUB_REPO_URL}/issues`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="View GitHub issues"
+                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-text-tertiary transition-colors duration-150 hover:bg-surface-hover hover:text-text-secondary"
+              >
+                <Github className="h-3 w-3" />
+                View Issues
+              </a>
+            </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <SearchInput value={search} onChange={setSearch} placeholder="Filter jobs..." className="w-full sm:w-64" />
@@ -234,6 +412,7 @@ export function DashboardPage() {
                 ))}
               </SelectContent>
             </Select>
+            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDates} />
             <Select value={String(perPage)} onValueChange={(v) => setPerPage(Number(v))}>
               <SelectTrigger aria-label="Rows per page" className="w-full sm:w-20">
                 <SelectValue />
@@ -244,8 +423,36 @@ export function DashboardPage() {
                 <SelectItem value="50">50</SelectItem>
               </SelectContent>
             </Select>
+
           </div>
         </div>
+
+        {/* Metadata filters */}
+        <MetadataFilterBar
+          team={metaTeam}
+          tier={metaTier}
+          version={metaVersion}
+          labels={metaLabels}
+          onTeamChange={(v) => setMetaParam('team', v)}
+          onTierChange={(v) => setMetaParam('tier', v)}
+          onVersionChange={(v) => setMetaParam('version', v)}
+          onLabelsChange={setMetaLabels}
+        />
+
+        {/* Bulk result message */}
+        {bulkResultMessage && (
+          <div role="alert" className="flex items-center justify-between rounded-lg border border-signal-red/30 bg-signal-red/10 px-4 py-3 text-sm text-signal-red">
+            <span>{bulkResultMessage}</span>
+            <button
+              type="button"
+              onClick={() => setBulkResultMessage(null)}
+              className="ml-4 shrink-0 rounded p-1 hover:bg-signal-red/20 transition-colors"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -264,13 +471,27 @@ export function DashboardPage() {
         ) : pageJobs.length === 0 && (!error || jobs.length > 0) ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-border-muted bg-surface-card py-16 text-center animate-fade-in">
             <p className="text-text-secondary">
-              {search ? 'No jobs match your search.' : 'No analysis runs yet.'}
+              {search || statusFilter !== STATUS_FILTER_ALL || dateFrom || dateTo || hasMetadataFilters
+                ? 'No jobs match your filters.'
+                : 'No analysis runs yet.'}
             </p>
           </div>
         ) : error && jobs.length === 0 ? null : (
           <Table>
             <TableHeader>
               <TableRow className="bg-surface-card hover:bg-surface-card">
+                {isAdmin && (
+                  <TableHead className="w-10">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={toggleSelectAll}
+                      className={BULK_SELECT_CHECKBOX_CLASS}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                )}
                 <SortableHeader label="Job" sortKey="job_name" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="w-[40%]" />
                 <SortableHeader label="Status" sortKey="status" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} />
                 <SortableHeader label="Failures" sortKey="failure_count" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-center" />
@@ -296,10 +517,22 @@ export function DashboardPage() {
                 return (
                   <TableRow
                     key={job.job_id}
-                    className={`group cursor-pointer animate-slide-up ${i % 2 === 0 ? 'bg-surface-card' : 'bg-surface-elevated/40'}`}
+                    className={`group cursor-pointer animate-slide-up ${selectedIds.has(job.job_id) ? 'bg-accent-blue/10' : i % 2 === 0 ? 'bg-surface-card' : 'bg-surface-elevated/40'}`}
                     style={{ animationDelay: `${i * 30}ms`, animationFillMode: 'backwards' }}
-                    onClick={() => handleRowClick(job)}
+                    onClick={() => isAdmin && selectedIds.size > 0 ? toggleSelect(job.job_id) : handleRowClick(job)}
                   >
+                    {isAdmin && (
+                      <TableCell className="w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(job.job_id)}
+                          onChange={(e) => { e.stopPropagation(); toggleSelect(job.job_id) }}
+                          onClick={(e) => e.stopPropagation()}
+                          className={`${BULK_SELECT_CHECKBOX_CLASS} ${showCheckboxes ? '' : 'opacity-0 group-hover:opacity-100'}`}
+                          aria-label={`Select ${getJobDisplayName(job)}`}
+                        />
+                      </TableCell>
+                    )}
                     {/* Job name + build (with left accent border) */}
                     <TableCell className={`border-l-4 ${borderColor}`}>
                       <div>
@@ -314,6 +547,7 @@ export function DashboardPage() {
                         {job.build_number !== undefined && (
                           <span className="ml-2 font-mono text-xs text-text-tertiary">#{job.build_number}</span>
                         )}
+                        <MetadataBadges metadata={job.metadata} />
                       </div>
                       {failureHint && (
                         <Tooltip>
@@ -429,6 +663,32 @@ export function DashboardPage() {
           <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
         )}
 
+        {isAdmin && selectedIds.size > 0 && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border-muted bg-surface-card/95 backdrop-blur-sm px-6 py-3 animate-slide-up">
+            <div className="mx-auto flex max-w-screen-xl items-center justify-between">
+              <span className="text-sm text-text-secondary">
+                {selectedIds.size} {selectedIds.size === 1 ? 'job' : 'jobs'} selected
+              </span>
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" size="sm" onClick={clearSelection}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    if (!enforceBulkDeleteLimit(selectedIds.size)) return
+                    setBulkDeleteConfirm(true)
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  Delete ({selectedIds.size})
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <ConfirmDialog
           open={deleteTarget !== null}
           onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
@@ -438,6 +698,17 @@ export function DashboardPage() {
           variant="destructive"
           onConfirm={handleDelete}
           loading={deleting}
+        />
+
+        <ConfirmDialog
+          open={isAdmin && bulkDeleteConfirm}
+          onOpenChange={(open) => { if (!open) setBulkDeleteConfirm(false) }}
+          title="Delete selected analyses"
+          description={bulkDeleteDescription}
+          confirmLabel={`Delete ${selectedIds.size}`}
+          variant="destructive"
+          onConfirm={handleBulkDelete}
+          loading={bulkDeleting}
         />
       </div>
     </TooltipProvider>

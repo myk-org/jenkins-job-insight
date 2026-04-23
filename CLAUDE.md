@@ -183,6 +183,7 @@ When adding a new analysis setting:
 
 Exceptions (server-level only, no payload equivalent):
 - `ADMIN_KEY` — server-only bootstrap secret for admin superuser authentication; never expose via request payloads, CLI flags, or shared config files. Rotating `ADMIN_KEY` only affects the bootstrap admin login — delegated admin API keys use `JJI_ENCRYPTION_KEY` for HMAC hashing and are not affected by `ADMIN_KEY` rotation.
+- `ALLOWED_USERS` — server-only comma-separated allow list of usernames permitted to create/modify data; empty = open access (backward compatible); admin users always bypass; never expose via request payloads or CLI flags. Note: this is a trusted-network access guard, not a cryptographic security boundary — enforcement reads the client-supplied `jji_username` cookie, so protection relies on network-level trust rather than server-verified identity
 - `DEBUG` — server reload toggle
 - `ENABLE_GITHUB_ISSUES` — server capability toggle for GitHub issue creation
 - `ENABLE_REPORTPORTAL` — server capability toggle for Report Portal integration

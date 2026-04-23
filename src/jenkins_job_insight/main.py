@@ -10,11 +10,13 @@ import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Coroutine, Literal
+from typing import Annotated, Any, Coroutine, Literal
 from xml.etree.ElementTree import ParseError
 
 import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -44,6 +46,13 @@ from jenkins_job_insight.encryption import (
     encrypt_sensitive_fields,
 )
 from jenkins_job_insight.jira import enrich_with_jira_matches
+from jenkins_job_insight.monitoring import (
+    build_health_response,
+    dispatch_alert,
+    error_tracker,
+    render_prometheus_metrics,
+    validate_startup_config,
+)
 from jenkins_job_insight.reportportal import AmbiguousLaunchError, ReportPortalClient
 from jenkins_job_insight.bug_creation import (
     _parse_github_repo_url,
@@ -59,15 +68,22 @@ from jenkins_job_insight.models import (
     AnalyzeFailuresRequest,
     AnalyzeRequest,
     BaseAnalysisRequest,
+    BulkDeleteRequest,
+    BulkJobMetadataRequest,
     ChildJobAnalysis,
     ClassifyTestRequest,
     CreateIssueRequest,
     FailureAnalysis,
     FailureAnalysisResult,
+    JobMetadataInput,
     OverrideClassificationRequest,
     PreviewIssueRequest,
     ReportPortalPushResult,
     SetReviewedRequest,
+)
+from jenkins_job_insight.utils import (
+    _is_sensitive_key,
+    mask_sensitive_fields,
 )
 from jenkins_job_insight.xml_enrichment import (
     build_enriched_xml,
@@ -263,6 +279,11 @@ def _recompose_repo_spec(url: str, ref: str) -> str:
     return f"{url}:{ref}" if ref else url
 
 
+def _is_encrypted_value(value: Any) -> bool:
+    """Return True if *value* looks like an undecrypted encrypted field."""
+    return isinstance(value, str) and value.startswith("enc:")
+
+
 def _reconstruct_from_params(
     result_data: dict,
 ) -> tuple[AnalyzeRequest, Settings]:
@@ -279,10 +300,17 @@ def _reconstruct_from_params(
     # Fail fast if any sensitive field is still encrypted (key changed / corrupt)
     for _key in SENSITIVE_KEYS:
         _val = params.get(_key)
-        if isinstance(_val, str) and _val.startswith("enc:"):
+        if _is_encrypted_value(_val):
             raise ValueError(
                 f"Cannot resume waiting job: stored {_key} could not be decrypted"
             )
+    for _repo in params.get("additional_repos") or []:
+        if isinstance(_repo, dict):
+            _token = _repo.get("token")
+            if _is_encrypted_value(_token):
+                raise ValueError(
+                    "Cannot resume waiting job: stored additional_repos token could not be decrypted"
+                )
     body = AnalyzeRequest(
         job_name=result_data["job_name"],
         build_number=result_data["build_number"],
@@ -304,6 +332,7 @@ def _reconstruct_from_params(
         additional_repos=(
             params["additional_repos"] if "additional_repos" in params else None
         ),
+        **({"force": params["force"]} if "force" in params else {}),
     )
     # Build Settings from env defaults, then layer stored overrides
     base_settings = get_settings()
@@ -313,6 +342,7 @@ def _reconstruct_from_params(
         "jenkins_user",
         "jenkins_password",
         "jenkins_ssl_verify",
+        "jenkins_timeout",
         "wait_for_completion",
         "poll_interval_minutes",
         "max_wait_minutes",
@@ -325,10 +355,15 @@ def _reconstruct_from_params(
         "jenkins_artifacts_max_size_mb",
         "get_job_artifacts",
         "peer_analysis_max_rounds",
+        "force_analysis",
     ]
     for field in settings_fields:
         if field in params:
             overrides[field] = params[field]
+
+    # Map stored 'force' flag to Settings.force_analysis
+    if "force" in params:
+        overrides["force_analysis"] = params["force"]
 
     # Tests repo URL
     recomposed = _recompose_repo_spec(
@@ -496,6 +531,16 @@ async def _deferred_resume_waiting_jobs(waiting_jobs: list[dict]) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _install_job_id_filter()
+
+    # Startup config validation
+    config_result = validate_startup_config()
+    for error in config_result.errors:
+        logger.error("[startup] %s", error)
+    for warning in config_result.warnings:
+        logger.warning("[startup] %s", warning)
+    if config_result.errors:
+        raise RuntimeError("Startup configuration validation failed")
+
     await init_db()
     await storage.cleanup_expired_sessions()
     waiting_jobs = await storage.mark_stale_results_failed()
@@ -525,6 +570,47 @@ if _FRONTEND_DIR.is_dir():
     )
 
 
+class ErrorTrackingMiddleware(BaseHTTPMiddleware):
+    """Track request counts and error rates for monitoring."""
+
+    _SKIP_PATHS = frozenset({"/health", "/api/health", "/metrics", "/favicon.ico"})
+
+    def _schedule_high_error_rate_alert(self) -> None:
+        """Check 5xx error rate and schedule an alert if it exceeds the threshold."""
+        try:
+            snap = error_tracker.snapshot()
+            total_requests = snap["total_requests"]
+            server_errors = snap.get("error_counts", {}).get("5xx", 0)
+            server_error_rate = server_errors / total_requests if total_requests else 0
+            if server_error_rate > 0.5 and total_requests >= 10:
+                task = asyncio.create_task(
+                    dispatch_alert(
+                        "high_error_rate",
+                        f"\u26a0\ufe0f JJI high 5xx error rate: {server_error_rate:.0%} "
+                        f"({server_errors}/{total_requests} requests "
+                        f"in {snap['window_seconds']}s window)",
+                    )
+                )
+                _background_tasks.add(task)
+                task.add_done_callback(_background_tasks.discard)
+        except Exception:  # noqa: BLE001 — alert scheduling must never break request handling
+            logger.debug("Failed to schedule high-error-rate alert", exc_info=True)
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in self._SKIP_PATHS:
+            return await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            error_tracker.record_request(500)
+            self._schedule_high_error_rate_alert()
+            raise
+        error_tracker.record_request(response.status_code)
+        if response.status_code >= 500:
+            self._schedule_high_error_rate_alert()
+        return response
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     """Authenticate requests: admin via session/Bearer, regular users via cookie."""
 
@@ -532,6 +618,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         {
             "/register",
             "/health",
+            "/api/health",
+            "/metrics",
             "/favicon.ico",
         }
     )
@@ -615,6 +703,93 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(AuthMiddleware)
+app.add_middleware(ErrorTrackingMiddleware)
+
+
+class RequestBodyLoggingMiddleware(BaseHTTPMiddleware):
+    """Log incoming request bodies at DEBUG level with sensitive data masked."""
+
+    async def dispatch(self, request: Request, call_next):
+        if logger.isEnabledFor(logging.DEBUG) and request.method in (
+            "POST",
+            "PUT",
+            "PATCH",
+        ):
+            content_type = request.headers.get("content-type", "")
+            if "application/json" not in content_type.lower():
+                return await call_next(request)
+            body_bytes = await request.body()
+            if body_bytes:
+                try:
+                    body_json = json.loads(body_bytes)
+                    masked = mask_sensitive_fields(body_json)
+                    logger.debug(
+                        "Incoming %s %s body: %s",
+                        request.method,
+                        request.url.path,
+                        json.dumps(masked),
+                    )
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    logger.debug(
+                        "Incoming %s %s body: <non-JSON, %d bytes>",
+                        request.method,
+                        request.url.path,
+                        len(body_bytes),
+                    )
+        return await call_next(request)
+
+
+app.add_middleware(RequestBodyLoggingMiddleware)
+
+
+def _mask_pydantic_error(error: dict) -> dict:
+    """Mask sensitive input values in a Pydantic validation error dict."""
+    result = dict(error)
+    loc = error.get("loc") or ()
+    field = loc[-1] if loc else ""
+    if isinstance(field, str) and _is_sensitive_key(field) and "input" in result:
+        result["input"] = "***"
+    elif "input" in result:
+        result["input"] = mask_sensitive_fields(result["input"])
+    return result
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Log 422 validation error details at DEBUG level, then return standard response."""
+    if logger.isEnabledFor(logging.DEBUG):
+        masked_body = None
+        if exc.body is not None:
+            try:
+                if isinstance(exc.body, (dict, list)):
+                    masked_body = mask_sensitive_fields(exc.body)
+                elif isinstance(exc.body, (str, bytes, bytearray)):
+                    size = (
+                        len(exc.body.encode("utf-8"))
+                        if isinstance(exc.body, str)
+                        else len(exc.body)
+                    )
+                    masked_body = f"<non-JSON, {size} bytes>"
+                else:
+                    masked_body = f"<non-JSON body: {type(exc.body).__name__}>"
+            except Exception:  # noqa: BLE001 — masking must never break the 422 response
+                masked_body = "<unable to mask>"
+        raw_errors = jsonable_encoder(exc.errors())
+        masked_errors = [_mask_pydantic_error(e) for e in raw_errors]
+        logger.debug(
+            "RequestValidationError on %s %s: errors=%s body=%s",
+            request.method,
+            request.url.path,
+            masked_errors,
+            masked_body,
+        )
+    # Response body uses raw (unmasked) errors — only the DEBUG log path is masked.
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(exc.errors())},
+    )
 
 
 @app.get("/", include_in_schema=False)
@@ -774,6 +949,7 @@ def _merge_settings(body: BaseAnalysisRequest, settings: Settings) -> Settings:
             "jenkins_user",
             "jenkins_password",
             "jenkins_ssl_verify",
+            "jenkins_timeout",
         ]
         for field in jenkins_fields:
             value = getattr(body, field, None)
@@ -792,6 +968,11 @@ def _merge_settings(body: BaseAnalysisRequest, settings: Settings) -> Settings:
         ):
             if field in body.model_fields_set:
                 overrides[field] = getattr(body, field)
+
+        # force has a non-None default (False); only override when
+        # explicitly sent so that omitted requests inherit from env/settings.
+        if "force" in body.model_fields_set:
+            overrides["force_analysis"] = body.force
 
     if overrides:
         merged_data = settings.model_dump(mode="python") | overrides
@@ -844,6 +1025,8 @@ async def _wait_for_jenkins_completion(
     jenkins_ssl_verify: bool,
     poll_interval_minutes: int,
     max_wait_minutes: int,
+    jenkins_timeout: int = 30,
+    max_consecutive_failures: int = 5,
 ) -> tuple[bool, str]:
     """Poll Jenkins until the build finishes.
 
@@ -857,6 +1040,9 @@ async def _wait_for_jenkins_completion(
         poll_interval_minutes: Minutes between polls.
         max_wait_minutes: Maximum minutes to wait before timing out.
             0 means no limit (poll forever until job finishes).
+        jenkins_timeout: Jenkins API request timeout in seconds.
+        max_consecutive_failures: Number of consecutive transient errors
+            allowed before giving up. Defaults to 5.
 
     Returns:
         A tuple of (success, error_message). success is True if the build
@@ -865,24 +1051,45 @@ async def _wait_for_jenkins_completion(
     import jenkins
 
     from jenkins_job_insight.jenkins import JenkinsClient
+    from jenkins_job_insight.utils import is_jenkins_connectivity_error
 
     client = JenkinsClient(
         url=jenkins_url,
         username=jenkins_user,
         password=jenkins_password,
         ssl_verify=jenkins_ssl_verify,
+        timeout=jenkins_timeout,
     )
+
+    unreachable_error = (
+        "Cannot reach Jenkins; please verify the Jenkins URL, credentials, "
+        "and network connectivity"
+    )
+
+    try:
+        await asyncio.to_thread(client.get_whoami)
+    except Exception as e:
+        if not is_jenkins_connectivity_error(e):
+            raise
+        logger.error("Cannot reach Jenkins at %s: %s", jenkins_url, e, exc_info=True)
+        return False, (
+            "Jenkins reachability check failed; please verify the Jenkins URL, "
+            "credentials, and network connectivity"
+        )
 
     if max_wait_minutes > 0:
         deadline: float | None = _time.monotonic() + max_wait_minutes * 60
     else:
         deadline = None  # No limit
 
+    consecutive_failures = 0
+
     while True:
         try:
             build_info = await asyncio.to_thread(
                 client.get_build_info_safe, job_name, build_number
             )
+            consecutive_failures = 0
 
             if build_info and not build_info.get("building", True):
                 logger.info(
@@ -900,12 +1107,27 @@ async def _wait_for_jenkins_completion(
             )
             return False, f"Jenkins job {job_name} #{build_number} not found (404)"
 
-        except (OSError, TimeoutError) as e:
-            logger.warning(f"Transient error checking Jenkins status: {e}")
-
         except Exception as e:
-            logger.error(f"Non-transient error checking Jenkins status: {e}")
-            return False, f"Jenkins poll failed: {e}"
+            if not is_jenkins_connectivity_error(e):
+                logger.error(
+                    "Non-transient error checking Jenkins status", exc_info=True
+                )
+                return False, "Jenkins poll failed; check server logs for details"
+            consecutive_failures += 1
+            logger.warning(
+                "Transient error checking Jenkins status (%d/%d): %s",
+                consecutive_failures,
+                max_consecutive_failures,
+                e,
+            )
+            if consecutive_failures >= max_consecutive_failures:
+                logger.error(
+                    "Cannot reach Jenkins at %s after %d consecutive failures",
+                    jenkins_url,
+                    consecutive_failures,
+                    exc_info=True,
+                )
+                return False, unreachable_error
 
         if deadline is not None:
             remaining = deadline - _time.monotonic()
@@ -972,17 +1194,20 @@ async def process_analysis_with_id(
                 jenkins_ssl_verify=settings.jenkins_ssl_verify,
                 poll_interval_minutes=settings.poll_interval_minutes,
                 max_wait_minutes=settings.max_wait_minutes,
+                jenkins_timeout=settings.jenkins_timeout,
             )
 
             if not completed:
+                fail_data = {
+                    "job_name": body.job_name,
+                    "build_number": body.build_number,
+                    "error": wait_error,
+                }
+                await _preserve_request_params(job_id, fail_data)
                 await update_status(
                     job_id,
                     "failed",
-                    {
-                        "job_name": body.job_name,
-                        "build_number": body.build_number,
-                        "error": wait_error,
-                    },
+                    fail_data,
                 )
                 return
 
@@ -1060,13 +1285,13 @@ async def process_analysis_with_id(
     except Exception as e:
         logger.exception(f"Analysis failed for job {job_id}")
         error_detail = format_exception_with_type(e)
-        fail_data: dict = {
+        error_data: dict = {
             "job_name": body.job_name,
             "build_number": body.build_number,
             "error": error_detail,
         }
-        await _preserve_request_params(job_id, fail_data)
-        await update_status(job_id, "failed", fail_data)
+        await _preserve_request_params(job_id, error_data)
+        await update_status(job_id, "failed", error_data)
 
 
 def _build_base_request_params(
@@ -1157,6 +1382,7 @@ def _build_request_params(
             "jenkins_user": merged.jenkins_user,
             "jenkins_password": merged.jenkins_password,
             "jenkins_ssl_verify": merged.jenkins_ssl_verify,
+            "jenkins_timeout": merged.jenkins_timeout,
             "wait_for_completion": merged.wait_for_completion,
             "poll_interval_minutes": merged.poll_interval_minutes,
             "max_wait_minutes": merged.max_wait_minutes,
@@ -1180,6 +1406,7 @@ def _build_request_params(
             "get_job_artifacts": merged.get_job_artifacts,
             "raw_prompt": body.raw_prompt or "",
             "peer_analysis_max_rounds": merged.peer_analysis_max_rounds,
+            "force": merged.force_analysis,
             "wait_started_at": _time.time(),
         }
     )
@@ -1244,6 +1471,7 @@ async def analyze(
 
     Returns immediately with a job_id. Poll /results/{job_id} for status.
     """
+    _check_allow_list(request)
     logger.debug(f"Starting analysis for {body.job_name} #{body.build_number}")
     base_url = _extract_base_url()
 
@@ -1277,6 +1505,7 @@ async def analyze_failures(
     When raw_xml is provided, failures are extracted from the XML and the enriched
     XML with analysis results is included in the response.
     """
+    _check_allow_list(request)
     logger.debug(
         f"POST /analyze-failures: failures_count={len(body.failures) if body.failures else 0}, has_raw_xml={body.raw_xml is not None}"
     )
@@ -1493,6 +1722,7 @@ async def re_analyze(
     overrides from the request body, and queues a new analysis with a
     fresh job_id.
     """
+    _check_allow_list(request)
     base_url = _extract_base_url()
 
     # Load the original result (with sensitive fields for credential reuse)
@@ -1743,6 +1973,7 @@ async def add_comment(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Add a comment to a test failure."""
+    _check_allow_list(request)
     logger.debug(f"POST /results/{job_id}/comments: test_name={body.test_name}")
     await _validate_test_name_in_result(
         job_id, body.test_name, body.child_job_name, body.child_build_number
@@ -1777,6 +2008,7 @@ async def delete_comment_endpoint(
     Admin users can delete any comment. Regular users can only delete
     their own comments (matched by username).
     """
+    _check_allow_list(request)
     logger.debug(f"DELETE /results/{job_id}/comments/{comment_id}")
     username = request.state.username
     if not username:
@@ -1804,6 +2036,7 @@ async def set_reviewed(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Toggle the reviewed state for a test failure."""
+    _check_allow_list(request)
     logger.debug(
         f"PUT /results/{job_id}/reviewed: test_name={body.test_name}, reviewed={body.reviewed}"
     )
@@ -1831,10 +2064,12 @@ async def set_reviewed(
 @app.post("/results/{job_id}/enrich-comments")
 async def enrich_comments(
     job_id: str,
+    request: Request,
     settings: Settings = Depends(get_settings),
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Fetch live statuses for GitHub PRs and Jira tickets found in comments."""
+    _check_allow_list(request)
     logger.debug(f"POST /results/{job_id}/enrich-comments")
     from jenkins_job_insight.comment_enrichment import (
         detect_github_issues,
@@ -2031,6 +2266,7 @@ async def preview_github_issue(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Generate preview content for a GitHub issue from a failure analysis."""
+    _check_allow_list(request)
     logger.debug(
         f"POST /results/{job_id}/preview-github-issue: test_name={body.test_name}"
     )
@@ -2102,6 +2338,7 @@ async def preview_jira_bug(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Generate preview content for a Jira bug from a failure analysis."""
+    _check_allow_list(request)
     logger.debug(f"POST /results/{job_id}/preview-jira-bug: test_name={body.test_name}")
     if not _jira_issue_creation_enabled(settings):
         raise HTTPException(
@@ -2315,6 +2552,7 @@ async def create_github_issue_endpoint(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Create a GitHub issue from a failure analysis."""
+    _check_allow_list(request)
     logger.debug(
         f"POST /results/{job_id}/create-github-issue: test_name={body.test_name}"
     )
@@ -2407,6 +2645,7 @@ async def create_jira_bug_endpoint(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Create a Jira bug from a failure analysis."""
+    _check_allow_list(request)
     logger.debug(f"POST /results/{job_id}/create-jira-bug: test_name={body.test_name}")
 
     if not _jira_issue_creation_enabled(settings):
@@ -2486,6 +2725,7 @@ async def create_jira_bug_endpoint(
 @app.post("/results/{job_id}/push-reportportal", response_model=ReportPortalPushResult)
 async def push_to_reportportal(
     job_id: str,
+    request: Request,
     child_job_name: str | None = Query(
         default=None, description="Child job name for pipeline child push"
     ),
@@ -2500,6 +2740,7 @@ async def push_to_reportportal(
     Finds the matching RP launch, matches failed items to JJI failures,
     and updates each item's defect type and comment.
     """
+    _check_allow_list(request)
     if not settings.reportportal_enabled:
         raise HTTPException(
             status_code=400,
@@ -2991,6 +3232,7 @@ async def override_classification_endpoint(
     _: None = Depends(_bind_job_id),
 ) -> dict:
     """Override the classification of a failure (CODE ISSUE, PRODUCT BUG, or INFRASTRUCTURE)."""
+    _check_allow_list(request)
     logger.debug(
         f"PUT /results/{job_id}/override-classification: test_name={body.test_name}, "
         f"classification={body.classification}"
@@ -3054,6 +3296,20 @@ async def list_job_results(limit: int = Query(50, le=100)) -> list[dict]:
     """List recent analysis jobs."""
     logger.debug(f"GET /results: limit={limit}")
     return await list_results(limit)
+
+
+@app.delete("/api/results/bulk")
+async def bulk_delete_jobs_endpoint(body: BulkDeleteRequest, request: Request) -> dict:
+    """Delete multiple jobs and all related data. Admin only."""
+    _require_admin(request)
+
+    result = await storage.delete_jobs_bulk(body.job_ids)
+
+    # Audit log each deletion individually
+    for job_id in result["deleted"]:
+        logger.info(f"[AUDIT] Admin '{request.state.username}' deleted job {job_id}")
+
+    return result
 
 
 @app.delete("/results/{job_id}")
@@ -3342,6 +3598,7 @@ async def get_job_stats_endpoint(
 @app.post("/history/classify", status_code=201)
 async def classify_test(request: Request, body: ClassifyTestRequest) -> dict:
     """Classify a test as FLAKY, REGRESSION, etc. Used by AI and humans."""
+    _check_allow_list(request)
     logger.debug(
         f"POST /history/classify: test_name={body.test_name!r}, classification={body.classification!r}"
     )
@@ -3428,8 +3685,57 @@ async def get_ai_configs_endpoint() -> list[dict]:
 
 @app.get("/health")
 async def health_check() -> dict:
-    """Health check endpoint."""
+    """Basic health check endpoint (legacy, lightweight)."""
     return {"status": "healthy"}
+
+
+@app.get("/api/health")
+async def health_check_detailed() -> Response:
+    """Detailed health endpoint with dependency checks and error rates.
+
+    Returns:
+        200 for healthy/degraded, 503 for unhealthy.
+    """
+    settings = get_settings()
+    db_path = str(storage.DB_PATH)
+    result = await build_health_response(settings, db_path)
+    status_code = 503 if result["status"] == "unhealthy" else 200
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@app.get("/metrics")
+async def prometheus_metrics() -> Response:
+    """Prometheus metrics endpoint."""
+    # Compute health_up from a lightweight health check
+    settings = get_settings()
+    db_path = str(storage.DB_PATH)
+    try:
+        health = await build_health_response(settings, db_path)
+        health_up = 0 if health["status"] == "unhealthy" else 1
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to compute health status for metrics", exc_info=True)
+        health_up = 0
+
+    # Count active analyses
+    active_analyses: int | None = None
+    try:
+        import aiosqlite
+
+        async with aiosqlite.connect(db_path) as db:
+            cursor = await db.execute(
+                "SELECT COUNT(*) FROM results WHERE status IN ('pending', 'running', 'waiting')"
+            )
+            row = await cursor.fetchone()
+            active_analyses = row[0] if row else 0
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to compute active analyses for metrics", exc_info=True)
+
+    return Response(
+        content=render_prometheus_metrics(
+            health_up=health_up, active_analyses=active_analyses
+        ),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -3468,6 +3774,26 @@ def _require_admin(request: Request) -> None:
     """Raise 403 if the request is not from an authenticated admin."""
     if not request.state.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def _check_allow_list(request: Request) -> None:
+    """Raise 403 if the requesting user is not on the allow list.
+
+    When the allow list is empty (default), all users are permitted.
+    Admin users always bypass the allow list check.
+    """
+    settings = get_settings()
+    allowed = settings.allowed_users_set
+    if not allowed:
+        return  # Open access — no restriction
+    if request.state.is_admin:
+        return  # Admins always bypass
+    username = (request.state.username or "").strip().lower()
+    if not username or username not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="User not allowed. Contact an administrator to be added to the allow list.",
+        )
 
 
 @app.post("/api/auth/login")
@@ -3747,6 +4073,160 @@ async def rotate_key_endpoint(request: Request, username: str) -> JSONResponse:
         content={"username": username, "new_api_key": new_key},
         headers={"Cache-Control": "no-store"},
     )
+
+
+# -- Job Metadata Endpoints ---------------------------------------------------
+
+
+async def _metadata_filters(
+    team: Annotated[str, Query()] = "",
+    tier: Annotated[str, Query()] = "",
+    version: Annotated[str, Query()] = "",
+    label: Annotated[list[str] | None, Query()] = None,
+) -> dict:
+    """Shared dependency for metadata filter query parameters."""
+    return {"team": team, "tier": tier, "version": version, "label": label or []}
+
+
+def _unpack_metadata_filters(
+    filters: dict, endpoint: str
+) -> tuple[str, str, str, list[str]]:
+    """Unpack metadata filter dict and log at DEBUG level."""
+    team, tier, version, label = (
+        filters["team"],
+        filters["tier"],
+        filters["version"],
+        filters["label"],
+    )
+    logger.debug(
+        "%s: team=%r, tier=%r, version=%r, label=%r",
+        endpoint,
+        team,
+        tier,
+        version,
+        label,
+    )
+    return team, tier, version, label
+
+
+@app.get("/api/jobs/metadata")
+async def list_jobs_metadata(
+    filters: Annotated[dict, Depends(_metadata_filters)],
+) -> list[dict]:
+    """List all job metadata, optionally filtered by team, tier, version, or labels."""
+    team, tier, version, label = _unpack_metadata_filters(
+        filters, "GET /api/jobs/metadata"
+    )
+    return await storage.list_jobs_with_metadata(
+        team=team, tier=tier, version=version, labels=label or None
+    )
+
+
+@app.get("/api/jobs/{job_name:path}/metadata")
+async def get_job_metadata_endpoint(job_name: str) -> dict:
+    """Get metadata for a specific job."""
+    logger.debug(f"GET /api/jobs/{job_name}/metadata")
+    result = await storage.get_job_metadata(job_name)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"No metadata for job '{job_name}'")
+    return result
+
+
+@app.put("/api/jobs/{job_name:path}/metadata")
+async def set_job_metadata_endpoint(
+    request: Request,
+    job_name: str,
+    body: JobMetadataInput,
+) -> dict:
+    """Set or update metadata for a job."""
+    _require_admin(request)
+    logger.debug(f"PUT /api/jobs/{job_name}/metadata")
+    current = await storage.get_job_metadata(job_name) or {}
+    return await storage.set_job_metadata(
+        job_name,
+        team=body.team if "team" in body.model_fields_set else current.get("team"),
+        tier=body.tier if "tier" in body.model_fields_set else current.get("tier"),
+        version=body.version
+        if "version" in body.model_fields_set
+        else current.get("version"),
+        labels=body.labels
+        if "labels" in body.model_fields_set
+        else current.get("labels", []),
+    )
+
+
+@app.delete("/api/jobs/{job_name:path}/metadata")
+async def delete_job_metadata_endpoint(request: Request, job_name: str) -> dict:
+    """Delete metadata for a job."""
+    _require_admin(request)
+    logger.debug(f"DELETE /api/jobs/{job_name}/metadata")
+    deleted = await storage.delete_job_metadata(job_name)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No metadata for job '{job_name}'")
+    return {"status": "deleted", "job_name": job_name}
+
+
+@app.put("/api/jobs/metadata/bulk")
+async def bulk_set_job_metadata(
+    request: Request,
+    body: BulkJobMetadataRequest,
+) -> dict:
+    """Bulk import job metadata.
+
+    Unlike PUT /api/jobs/{job_name}/metadata which preserves omitted fields,
+    bulk import performs a full replace — omitted optional fields are set to
+    their defaults (None/empty list).
+    """
+    _require_admin(request)
+    logger.debug(f"PUT /api/jobs/metadata/bulk: {len(body.items)} items")
+    try:
+        items = [item.model_dump() for item in body.items]
+        return await storage.bulk_set_metadata(items)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+@app.get("/api/dashboard/filtered")
+async def api_dashboard_filtered(
+    filters: Annotated[dict, Depends(_metadata_filters)],
+) -> list[dict]:
+    """Return dashboard job list filtered by metadata.
+
+    Joins dashboard results with job_metadata. When no filters are
+    provided, returns all jobs (same as /api/dashboard but with
+    metadata attached).
+    """
+    team, tier, version, label = _unpack_metadata_filters(
+        filters, "GET /api/dashboard/filtered"
+    )
+    jobs = await list_results_for_dashboard()
+
+    # If no filters, attach metadata and return all
+    has_filters = bool(team or tier or version or label)
+
+    # Build a lookup of job metadata
+    all_metadata = await storage.list_jobs_with_metadata(
+        team=team if has_filters else "",
+        tier=tier if has_filters else "",
+        version=version if has_filters else "",
+        labels=label if has_filters and label else None,
+    )
+    metadata_by_name = {m["job_name"]: m for m in all_metadata}
+
+    if has_filters:
+        # Only include jobs whose job_name matches filtered metadata
+        filtered_names = set(metadata_by_name.keys())
+        jobs = [j for j in jobs if j.get("job_name", "") in filtered_names]
+
+    # Attach metadata to each job
+    for job in jobs:
+        jn = job.get("job_name", "")
+        if jn in metadata_by_name:
+            job["metadata"] = metadata_by_name[jn]
+        else:
+            job["metadata"] = None
+
+    return jobs
 
 
 # SPA catch-all routes — must be AFTER all API routes

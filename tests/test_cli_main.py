@@ -136,6 +136,49 @@ class TestResultsCommands:
         assert result.exit_code == 0
         assert "deleted" in result.output.lower()
 
+    def test_results_delete_bulk(self, mock_client):
+        mock_client.delete_jobs_bulk.return_value = {
+            "deleted": ["abc", "def"],
+            "failed": [],
+            "total": 2,
+        }
+        result = runner.invoke(app, ["results", "delete", "abc", "def"])
+        assert result.exit_code == 0
+        assert "Deleted 2 of 2 jobs" in result.output
+        mock_client.delete_jobs_bulk.assert_called_once_with(["abc", "def"])
+
+    def test_results_delete_bulk_with_failures(self, mock_client):
+        mock_client.delete_jobs_bulk.return_value = {
+            "deleted": ["abc"],
+            "failed": [{"job_id": "def", "reason": "not found"}],
+            "total": 2,
+        }
+        result = runner.invoke(app, ["results", "delete", "abc", "def"])
+        assert result.exit_code == 0
+        assert "Deleted 1 of 2 jobs" in result.output
+        assert "Failed: def" in result.output
+
+    def test_results_delete_all(self, mock_client):
+        mock_client.dashboard.return_value = [
+            {"job_id": "a"},
+            {"job_id": "b"},
+            {"job_id": "c"},
+        ]
+        mock_client.delete_jobs_bulk.return_value = {
+            "deleted": ["a", "b", "c"],
+            "failed": [],
+            "total": 3,
+        }
+        result = runner.invoke(app, ["results", "delete", "--all", "--confirm"])
+        assert result.exit_code == 0
+        assert "Deleted 3 of 3 jobs" in result.output
+
+    def test_results_delete_all_empty(self, mock_client):
+        mock_client.dashboard.return_value = []
+        result = runner.invoke(app, ["results", "delete", "--all", "--confirm"])
+        assert result.exit_code == 0
+        assert "No jobs to delete" in result.output
+
 
 class TestReviewStatusCommand:
     def test_review_status(self, mock_client):
@@ -524,6 +567,21 @@ class TestErrorHandling:
         assert "admin access" in result.output.lower()
         assert "--api-key" in result.output
 
+    def test_403_allow_list_hints_about_allow_list(self, mock_client):
+        """_handle_error should hint about allow list when detail mentions it."""
+        mock_client.add_comment.side_effect = JJIError(
+            status_code=403,
+            detail="User not allowed. Contact an administrator to be added to the allow list.",
+        )
+        result = runner.invoke(
+            app,
+            ["comments", "add", "job-1", "--test", "test_foo", "-m", "my comment"],
+        )
+        assert result.exit_code == 1
+        assert "allow list" in result.output.lower()
+        # Should NOT hint about --api-key for allow list errors
+        assert "--api-key" not in result.output
+
 
 class TestNullFieldHandling:
     def test_history_test_with_null_failure_rate(self, mock_client):
@@ -854,6 +912,7 @@ class TestAnalyzeAllOptions:
                 "jenkins_artifacts_max_size_mb",
                 50,
             ),
+            ("--jenkins-timeout", "60", "jenkins_timeout", 60),
         ],
     )
     def test_int_options(
@@ -1495,6 +1554,7 @@ class TestAnalyzeConfigDefaults:
         jenkins_user="cfg-jenkins-user",
         jenkins_password=_FAKE_JENKINS_PASSWORD,
         jenkins_ssl_verify=False,
+        jenkins_timeout=45,
         tests_repo_url="https://github.com/cfg/tests",
         ai_provider="gemini",
         ai_model="2.5-pro",
@@ -1556,6 +1616,7 @@ class TestAnalyzeConfigDefaults:
         kwargs = client.analyze.call_args[1]
         assert kwargs["ai_cli_timeout"] == 20
         assert kwargs["jira_max_results"] == 40
+        assert kwargs["jenkins_timeout"] == 45
 
     def test_config_boolean_fields_used_as_defaults(self):
         """Boolean config fields are sent when CLI flags are absent."""
@@ -2158,6 +2219,95 @@ class TestAnalyzeWaitFlags:
         assert result.exit_code == 0
         kwargs = mock_client.analyze.call_args[1]
         assert "wait_for_completion" not in kwargs
+
+
+class TestAnalyzeForceFlag:
+    """Tests for --force/--no-force CLI flag."""
+
+    def test_force_flag(self, mock_client):
+        """--force should send force=True."""
+        mock_client.analyze.return_value = {"status": "queued", "job_id": "j1"}
+        result = runner.invoke(
+            app,
+            ["analyze", "--job-name", "my-job", "--build-number", "1", "--force"],
+        )
+        assert result.exit_code == 0
+        kwargs = mock_client.analyze.call_args[1]
+        assert kwargs["force"] is True
+
+    def test_no_force_flag(self, mock_client):
+        """--no-force should send force=False."""
+        mock_client.analyze.return_value = {"status": "queued", "job_id": "j1"}
+        result = runner.invoke(
+            app,
+            ["analyze", "--job-name", "my-job", "--build-number", "1", "--no-force"],
+        )
+        assert result.exit_code == 0
+        kwargs = mock_client.analyze.call_args[1]
+        assert kwargs["force"] is False
+
+    def test_force_omitted_not_in_extras(self, mock_client):
+        """When --force/--no-force is not given, force is not sent."""
+        mock_client.analyze.return_value = {"status": "queued", "job_id": "j1"}
+        with patch.dict(os.environ, _env_without_analyze_bindings(), clear=True):
+            result = runner.invoke(
+                app,
+                ["analyze", "--job-name", "my-job", "--build-number", "1"],
+            )
+        assert result.exit_code == 0
+        kwargs = mock_client.analyze.call_args[1]
+        assert "force" not in kwargs
+
+    def test_force_from_config(self, mock_client):
+        """Config force=true is used as default when CLI flag is absent."""
+        cfg = ServerConfig(url=_TEST_SERVER, force=True)
+        with (
+            patch(
+                "jenkins_job_insight.cli.main.get_server_config",
+                return_value=cfg,
+            ),
+            patch("jenkins_job_insight.cli.main._get_client") as mock_fn,
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            client = MagicMock()
+            client.analyze.return_value = {"status": "queued", "job_id": "j1"}
+            mock_fn.return_value = client
+            result = runner.invoke(
+                app,
+                ["analyze", "--job-name", "my-job", "--build-number", "1"],
+            )
+            assert result.exit_code == 0
+            kwargs = client.analyze.call_args[1]
+            assert kwargs["force"] is True
+
+    def test_cli_force_overrides_config(self, mock_client):
+        """CLI --no-force overrides config force=true."""
+        cfg = ServerConfig(url=_TEST_SERVER, force=True)
+        with (
+            patch(
+                "jenkins_job_insight.cli.main.get_server_config",
+                return_value=cfg,
+            ),
+            patch("jenkins_job_insight.cli.main._get_client") as mock_fn,
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            client = MagicMock()
+            client.analyze.return_value = {"status": "queued", "job_id": "j1"}
+            mock_fn.return_value = client
+            result = runner.invoke(
+                app,
+                [
+                    "analyze",
+                    "--job-name",
+                    "my-job",
+                    "--build-number",
+                    "1",
+                    "--no-force",
+                ],
+            )
+            assert result.exit_code == 0
+            kwargs = client.analyze.call_args[1]
+            assert kwargs["force"] is False
 
 
 class TestValidateTokenCommand:

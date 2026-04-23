@@ -107,6 +107,23 @@ def _validate_repo_url(repo_url: str | HttpUrl) -> None:
         )
 
 
+def _inject_token_into_url(url: str, token: str) -> str:
+    """Inject an authentication token into a clone URL.
+
+    For HTTPS URLs, embeds the token as ``x-token-auth:<token>@host``.
+    Non-HTTPS URLs are returned unchanged (token is ignored).
+    """
+    from urllib.parse import quote, urlparse, urlunparse
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not token:
+        return url
+    # Replace any existing userinfo with token-based auth
+    host_port = parsed.netloc.rsplit("@", 1)[-1]
+    netloc = f"x-token-auth:{quote(token, safe='')}@{host_port}"
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
 def _clone_with_ssl_retry(
     repo_url: str, clone_dir: Path, depth: int, branch: str = ""
 ) -> None:
@@ -189,6 +206,7 @@ class RepositoryManager:
         target_dir: Path,
         depth: int = 1,
         branch: str = "",
+        token: str | None = None,
     ) -> Path:
         """Clone repository into a specific target directory.
 
@@ -202,6 +220,7 @@ class RepositoryManager:
             target_dir: Exact directory to clone into.
             depth: Number of commits to fetch (default 1 for shallow).
             branch: Git ref (branch/tag) to check out. Empty string means default branch.
+            token: Authentication token for private repos (injected into URL).
 
         Returns:
             Path to the cloned repository (same as target_dir).
@@ -211,8 +230,26 @@ class RepositoryManager:
         """
         _validate_repo_url(repo_url)
         target_dir.mkdir(parents=True, exist_ok=True)
+        clone_url = str(repo_url)
+        if token:
+            clone_url = _inject_token_into_url(clone_url, token)
         logger.info(f"Cloning repository into {target_dir}")
-        _clone_with_ssl_retry(str(repo_url), target_dir, depth, branch=branch)
+        try:
+            _clone_with_ssl_retry(clone_url, target_dir, depth, branch=branch)
+        finally:
+            # Scrub credentials from .git/config to prevent at-rest exposure,
+            # including partial clones that failed after writing remote.origin.url.
+            if token and (target_dir / ".git").exists():
+                import subprocess
+
+                git_executable = shutil.which("git")
+                if git_executable:
+                    subprocess.run(  # noqa: S603
+                        [git_executable, "remote", "set-url", "origin", str(repo_url)],
+                        cwd=target_dir,
+                        check=False,
+                        capture_output=True,
+                    )
         return target_dir
 
     def create_workspace(self) -> Path:

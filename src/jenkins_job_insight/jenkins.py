@@ -16,7 +16,12 @@ class JenkinsClient(jenkins.Jenkins):
     """Extended Jenkins client with helper methods."""
 
     def __init__(
-        self, url: str, username: str, password: str, ssl_verify: bool = True
+        self,
+        url: str,
+        username: str,
+        password: str,
+        ssl_verify: bool = True,
+        timeout: int = 30,
     ) -> None:
         """Initialize Jenkins client.
 
@@ -25,8 +30,9 @@ class JenkinsClient(jenkins.Jenkins):
             username: Jenkins username.
             password: Jenkins password or API token.
             ssl_verify: Whether to verify SSL certificates. Set to False for self-signed certs.
+            timeout: HTTP request timeout in seconds.
         """
-        super().__init__(url=url, username=username, password=password)
+        super().__init__(url=url, username=username, password=password, timeout=timeout)
         logger.info(f"Connecting to Jenkins: {url}")
         if not ssl_verify:
             self._session.verify = False

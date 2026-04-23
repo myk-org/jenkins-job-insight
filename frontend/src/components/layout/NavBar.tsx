@@ -1,8 +1,21 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Bug } from 'lucide-react'
+import { BookOpen, Bug, type LucideIcon } from 'lucide-react'
 import { UserBadge } from './UserBadge'
 import { useAuth } from '@/lib/auth'
+import { GITHUB_REPO_URL } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+
+interface ExternalNavLink {
+  href: string
+  label: string
+  title: string
+  icon: LucideIcon
+}
+
+const EXTERNAL_NAV_LINKS: ExternalNavLink[] = [
+  { href: 'https://myk-org.github.io/jenkins-job-insight/', label: 'User Guide', title: 'User Guide', icon: BookOpen },
+  { href: `${GITHUB_REPO_URL}/issues/new`, label: 'Report Bug', title: 'Report a bug on GitHub', icon: Bug },
+]
 
 const BASE_NAV_LINKS = [
   { to: '/', label: 'Dashboard' },
@@ -45,16 +58,19 @@ export function NavBar() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <a
-            href="https://github.com/myk-org/jenkins-job-insight/issues/new"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Report a bug on GitHub"
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-text-tertiary transition-colors duration-150 hover:bg-surface-hover hover:text-text-secondary"
-          >
-            <Bug className="h-4 w-4 shrink-0" />
-            Report Bug
-          </a>
+          {EXTERNAL_NAV_LINKS.map(({ href, label, title, icon: Icon }) => (
+            <a
+              key={href}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={title}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-text-tertiary transition-colors duration-150 hover:bg-surface-hover hover:text-text-secondary"
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
+            </a>
+          ))}
           <UserBadge />
         </div>
       </div>
