@@ -2740,7 +2740,8 @@ def _job_metadata_row_to_dict(row) -> dict:
     d = dict(row)
     labels_raw = d.get("labels", "[]")
     try:
-        d["labels"] = json.loads(labels_raw) if labels_raw else []
+        parsed = json.loads(labels_raw) if labels_raw else []
+        d["labels"] = parsed if isinstance(parsed, list) else []
     except (json.JSONDecodeError, TypeError):
         d["labels"] = []
     return d
@@ -2883,6 +2884,11 @@ async def bulk_set_metadata(items: list[dict]) -> dict:
     Returns:
         Dict with 'updated' count.
     """
+    for idx, item in enumerate(items):
+        if not item.get("job_name"):
+            raise ValueError(
+                f"bulk_set_metadata: item at index {idx} is missing 'job_name'"
+            )
     async with aiosqlite.connect(DB_PATH) as db:
         for item in items:
             await _upsert_job_metadata_row(db, item)

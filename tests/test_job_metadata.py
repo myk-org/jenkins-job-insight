@@ -329,15 +329,53 @@ class TestJobMetadataAPI:
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
-    def test_dashboard_filtered_with_team(self, api_client) -> None:
-        # Set metadata for a job
-        api_client.put("/api/jobs/my-job/metadata", json={"team": "alpha"})
+    def test_dashboard_filtered_by_metadata(self, api_client, temp_db_path) -> None:
+        """Verify dashboard filter returns only jobs matching metadata."""
+        import asyncio
 
+        async def _seed():
+            with patch.object(storage, "DB_PATH", temp_db_path):
+                await storage.save_result(
+                    "id-alpha",
+                    "https://jenkins.example.com/job/alpha-job/1",
+                    "completed",
+                    {"job_name": "alpha-job", "build_number": 1, "failures": []},
+                )
+                await storage.save_result(
+                    "id-beta",
+                    "https://jenkins.example.com/job/beta-job/2",
+                    "completed",
+                    {"job_name": "beta-job", "build_number": 2, "failures": []},
+                )
+
+        asyncio.run(_seed())
+
+        # Attach metadata only to alpha-job
+        api_client.put("/api/jobs/alpha-job/metadata", json={"team": "alpha"})
+        api_client.put("/api/jobs/beta-job/metadata", json={"team": "beta"})
+
+        # Filter by team=alpha → only alpha-job returned
         resp = api_client.get("/api/dashboard/filtered", params={"team": "alpha"})
         assert resp.status_code == 200
         data = resp.json()
-        # Even if no analysis results, the response should be a list
-        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["job_name"] == "alpha-job"
+        assert data[0]["metadata"]["team"] == "alpha"
+
+    def test_partial_update_preserves_omitted_fields(self, api_client) -> None:
+        """PUT with a subset of fields should not clear the others."""
+        api_client.put(
+            "/api/jobs/my-job/metadata",
+            json={"team": "alpha", "tier": "critical", "labels": ["nightly"]},
+        )
+        # Update only team — tier and labels should be preserved
+        api_client.put("/api/jobs/my-job/metadata", json={"team": "beta"})
+        resp = api_client.get("/api/jobs/my-job/metadata")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["team"] == "beta"
+        assert data["tier"] == "critical"
+        assert data["labels"] == ["nightly"]
 
     def test_folder_style_job_name(self, api_client) -> None:
         """Test that folder-style job names (with /) work correctly."""
@@ -351,6 +389,44 @@ class TestJobMetadataAPI:
         resp = api_client.get("/api/jobs/folder/subfolder/my-job/metadata")
         assert resp.status_code == 200
         assert resp.json()["team"] == "platform"
+
+
+# --- Non-admin access tests ---
+
+
+@pytest.fixture
+def noauth_client(mock_settings, temp_db_path: Path):
+    """Test client with NO admin credentials."""
+    with patch.object(storage, "DB_PATH", temp_db_path):
+        from starlette.testclient import TestClient
+        from jenkins_job_insight.main import app
+
+        with TestClient(app) as client:
+            yield client
+
+
+class TestJobMetadataNoAdmin:
+    """Mutation endpoints must return 403 without admin auth."""
+
+    def test_put_metadata_forbidden(self, noauth_client) -> None:
+        resp = noauth_client.put("/api/jobs/my-job/metadata", json={"team": "alpha"})
+        assert resp.status_code == 403
+
+    def test_delete_metadata_forbidden(self, noauth_client) -> None:
+        resp = noauth_client.delete("/api/jobs/my-job/metadata")
+        assert resp.status_code == 403
+
+    def test_bulk_put_metadata_forbidden(self, noauth_client) -> None:
+        resp = noauth_client.put(
+            "/api/jobs/metadata/bulk",
+            json={"items": [{"job_name": "j", "team": "t"}]},
+        )
+        assert resp.status_code == 403
+
+    def test_get_metadata_allowed(self, noauth_client) -> None:
+        """Read endpoints should work without admin auth."""
+        resp = noauth_client.get("/api/jobs/metadata")
+        assert resp.status_code == 200
 
 
 # --- CLI client tests ---

@@ -51,7 +51,7 @@ export function MetadataFilterBar({
       const allLabels = new Set<string>()
       for (const m of data) {
         if (m.team) teams.add(m.team)
-        if (m.tier) tiers.add(m.tier)
+        if (m.tier != null) tiers.add(String(m.tier))
         if (m.version) versions.add(m.version)
         for (const l of m.labels) allLabels.add(l)
       }
@@ -83,7 +83,13 @@ export function MetadataFilterBar({
   }, [labels, onLabelsChange])
 
   // Don't render if no metadata options exist
-  if (options.teams.length === 0 && options.tiers.length === 0 && options.versions.length === 0 && options.allLabels.length === 0) {
+  const noMetadataOptions =
+    options.teams.length === 0 &&
+    options.tiers.length === 0 &&
+    options.versions.length === 0 &&
+    options.allLabels.length === 0
+
+  if (!hasFilters && noMetadataOptions) {
     return null
   }
 

@@ -10,7 +10,7 @@ import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Coroutine, Literal
+from typing import Annotated, Any, Coroutine, Literal
 from xml.etree.ElementTree import ParseError
 
 import httpx
@@ -4079,18 +4079,18 @@ async def rotate_key_endpoint(request: Request, username: str) -> JSONResponse:
 
 
 async def _metadata_filters(
-    team: str = Query(default=""),
-    tier: str = Query(default=""),
-    version: str = Query(default=""),
-    label: list[str] = Query(default=[]),
+    team: Annotated[str, Query()] = "",
+    tier: Annotated[str, Query()] = "",
+    version: Annotated[str, Query()] = "",
+    label: Annotated[list[str] | None, Query()] = None,
 ) -> dict:
     """Shared dependency for metadata filter query parameters."""
-    return {"team": team, "tier": tier, "version": version, "label": label}
+    return {"team": team, "tier": tier, "version": version, "label": label or []}
 
 
 @app.get("/api/jobs/metadata")
 async def list_jobs_metadata(
-    filters: dict = Depends(_metadata_filters),
+    filters: Annotated[dict, Depends(_metadata_filters)],
 ) -> list[dict]:
     """List all job metadata, optionally filtered by team, tier, version, or labels."""
     team, tier, version, label = (
@@ -4126,12 +4126,17 @@ async def set_job_metadata_endpoint(
     """Set or update metadata for a job."""
     _require_admin(request)
     logger.debug(f"PUT /api/jobs/{job_name}/metadata")
+    current = await storage.get_job_metadata(job_name) or {}
     return await storage.set_job_metadata(
         job_name,
-        team=body.team,
-        tier=body.tier,
-        version=body.version,
-        labels=body.labels,
+        team=body.team if "team" in body.model_fields_set else current.get("team"),
+        tier=body.tier if "tier" in body.model_fields_set else current.get("tier"),
+        version=body.version
+        if "version" in body.model_fields_set
+        else current.get("version"),
+        labels=body.labels
+        if "labels" in body.model_fields_set
+        else current.get("labels", []),
     )
 
 
@@ -4160,7 +4165,7 @@ async def bulk_set_job_metadata(
 
 @app.get("/api/dashboard/filtered")
 async def api_dashboard_filtered(
-    filters: dict = Depends(_metadata_filters),
+    filters: Annotated[dict, Depends(_metadata_filters)],
 ) -> list[dict]:
     """Return dashboard job list filtered by metadata.
 

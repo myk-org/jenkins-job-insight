@@ -1846,6 +1846,12 @@ def admin_users_change_role(
 
 _METADATA_COLUMNS = ["job_name", "team", "tier", "version", "labels"]
 _METADATA_COLUMN_LABELS = {"job_name": "JOB NAME"}
+_METADATA_FILTER_LABEL_OPTION = typer.Option(
+    [], "--label", "-l", help="Filter by label (can repeat)."
+)
+_METADATA_SET_LABEL_OPTION = typer.Option(
+    [], "--label", "-l", help="Label (can repeat)."
+)
 
 
 @metadata_app.command("list")
@@ -1853,9 +1859,7 @@ def metadata_list(
     team: str = typer.Option("", "--team", help="Filter by team."),
     tier: str = typer.Option("", "--tier", help="Filter by tier."),
     version: str = typer.Option("", "--version", help="Filter by version."),
-    label: list[str] = typer.Option(
-        [], "--label", "-l", help="Filter by label (can repeat)."
-    ),
+    label: list[str] = _METADATA_FILTER_LABEL_OPTION,
     json_output: bool = _JSON_OPTION,
 ):
     """List job metadata with optional filters."""
@@ -1888,7 +1892,7 @@ def metadata_set(
     team: str = typer.Option("", "--team", help="Team owning this job."),
     tier: str = typer.Option("", "--tier", help="Service tier."),
     version: str = typer.Option("", "--version", help="Version label."),
-    label: list[str] = typer.Option([], "--label", "-l", help="Label (can repeat)."),
+    label: list[str] = _METADATA_SET_LABEL_OPTION,
     json_output: bool = _JSON_OPTION,
 ):
     """Set or update metadata for a job."""
