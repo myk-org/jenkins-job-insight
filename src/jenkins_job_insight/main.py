@@ -634,6 +634,9 @@ class RequestBodyLoggingMiddleware(BaseHTTPMiddleware):
             "PUT",
             "PATCH",
         ):
+            content_type = request.headers.get("content-type", "")
+            if "application/json" not in content_type.lower():
+                return await call_next(request)
             body_bytes = await request.body()
             if body_bytes:
                 try:
