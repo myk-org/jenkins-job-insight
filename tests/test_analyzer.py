@@ -1207,7 +1207,7 @@ class TestForceAnalysisSuccessfulBuild:
         body = AnalyzeRequest(
             job_name="my-job",
             build_number=123,
-            force=False,  # request-level force is off
+            # force intentionally omitted — settings.force_analysis should drive behavior
         )
         settings = Settings()
         settings_data = settings.model_dump(mode="python")
