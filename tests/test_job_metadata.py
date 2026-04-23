@@ -518,19 +518,18 @@ class TestJobMetadataCLIClient:
 runner = CliRunner()
 
 
-@pytest.fixture(autouse=True)
-def reset_cli_state():
-    _state.clear()
-    _state["server_url"] = CLI_TEST_BASE_URL
-    _state["username"] = "testuser"
-    _state["no_verify_ssl"] = False
-    _state["api_key"] = ""
-    yield
-    _state.clear()
-
-
 class TestMetadataCLICommands:
     """Tests for metadata CLI commands."""
+
+    @pytest.fixture(autouse=True)
+    def reset_cli_state(self):
+        _state.clear()
+        _state["server_url"] = CLI_TEST_BASE_URL
+        _state["username"] = "testuser"
+        _state["no_verify_ssl"] = False
+        _state["api_key"] = ""
+        yield
+        _state.clear()
 
     @patch("jenkins_job_insight.cli.main._get_client")
     def test_metadata_list(self, mock_get_client) -> None:

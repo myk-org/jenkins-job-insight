@@ -4088,11 +4088,10 @@ async def _metadata_filters(
     return {"team": team, "tier": tier, "version": version, "label": label or []}
 
 
-@app.get("/api/jobs/metadata")
-async def list_jobs_metadata(
-    filters: Annotated[dict, Depends(_metadata_filters)],
-) -> list[dict]:
-    """List all job metadata, optionally filtered by team, tier, version, or labels."""
+def _unpack_metadata_filters(
+    filters: dict, endpoint: str
+) -> tuple[str, str, str, list[str]]:
+    """Unpack metadata filter dict and log at DEBUG level."""
     team, tier, version, label = (
         filters["team"],
         filters["tier"],
@@ -4100,7 +4099,23 @@ async def list_jobs_metadata(
         filters["label"],
     )
     logger.debug(
-        f"GET /api/jobs/metadata: team={team!r}, tier={tier!r}, version={version!r}, label={label!r}"
+        "%s: team=%r, tier=%r, version=%r, label=%r",
+        endpoint,
+        team,
+        tier,
+        version,
+        label,
+    )
+    return team, tier, version, label
+
+
+@app.get("/api/jobs/metadata")
+async def list_jobs_metadata(
+    filters: Annotated[dict, Depends(_metadata_filters)],
+) -> list[dict]:
+    """List all job metadata, optionally filtered by team, tier, version, or labels."""
+    team, tier, version, label = _unpack_metadata_filters(
+        filters, "GET /api/jobs/metadata"
     )
     return await storage.list_jobs_with_metadata(
         team=team, tier=tier, version=version, labels=label or None
@@ -4159,8 +4174,11 @@ async def bulk_set_job_metadata(
     """Bulk import job metadata."""
     _require_admin(request)
     logger.debug(f"PUT /api/jobs/metadata/bulk: {len(body.items)} items")
-    items = [item.model_dump() for item in body.items]
-    return await storage.bulk_set_metadata(items)
+    try:
+        items = [item.model_dump() for item in body.items]
+        return await storage.bulk_set_metadata(items)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 @app.get("/api/dashboard/filtered")
@@ -4173,14 +4191,8 @@ async def api_dashboard_filtered(
     provided, returns all jobs (same as /api/dashboard but with
     metadata attached).
     """
-    team, tier, version, label = (
-        filters["team"],
-        filters["tier"],
-        filters["version"],
-        filters["label"],
-    )
-    logger.debug(
-        f"GET /api/dashboard/filtered: team={team!r}, tier={tier!r}, version={version!r}, label={label!r}"
+    team, tier, version, label = _unpack_metadata_filters(
+        filters, "GET /api/dashboard/filtered"
     )
     jobs = await list_results_for_dashboard()
 

@@ -1943,7 +1943,7 @@ def metadata_import(
     content = path.read_text(encoding="utf-8")
     items: list[dict] = []
 
-    if path.suffix in (".yaml", ".yml"):
+    if path.suffix.lower() in (".yaml", ".yml"):
         try:
             import yaml
 
