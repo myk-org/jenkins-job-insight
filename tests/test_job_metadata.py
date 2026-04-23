@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from jenkins_job_insight import storage
-from jenkins_job_insight.cli.main import _state
+from jenkins_job_insight.cli.config import ServerConfig
 from jenkins_job_insight.cli.main import app as cli_app
 from tests.conftest import CLI_TEST_BASE_URL, make_test_client
 
@@ -519,25 +519,30 @@ class TestJobMetadataCLIClient:
 runner = CliRunner()
 
 
-@pytest.fixture(autouse=True)
-def reset_cli_state():
-    """Reset CLI state before each test to prevent cross-test pollution."""
-    _state.clear()
-    _state["server_url"] = CLI_TEST_BASE_URL
-    _state["username"] = "testuser"
-    _state["no_verify_ssl"] = False
-    _state["api_key"] = ""
-    yield
-    _state.clear()
-
-
 class TestMetadataCLICommands:
     """Tests for metadata CLI commands."""
 
-    @patch("jenkins_job_insight.cli.main._get_client")
-    def test_metadata_list(self, mock_get_client) -> None:
-        mock_client = MagicMock()
-        mock_client.list_jobs_metadata.return_value = [
+    @pytest.fixture(autouse=True)
+    def mock_client(self):
+        with (
+            patch.dict(
+                os.environ,
+                {"JJI_SERVER": CLI_TEST_BASE_URL},
+                clear=True,
+            ),
+            patch(
+                "jenkins_job_insight.cli.main.get_server_config",
+                return_value=ServerConfig(url=CLI_TEST_BASE_URL),
+            ),
+            patch("jenkins_job_insight.cli.main._get_client") as mock_get,
+        ):
+            client = MagicMock()
+            mock_get.return_value = client
+            self._mock_client = client
+            yield client
+
+    def test_metadata_list(self) -> None:
+        self._mock_client.list_jobs_metadata.return_value = [
             {
                 "job_name": "job-a",
                 "team": "alpha",
@@ -546,99 +551,44 @@ class TestMetadataCLICommands:
                 "labels": [],
             }
         ]
-        mock_get_client.return_value = mock_client
         result = runner.invoke(cli_app, ["metadata", "list"])
-        if result.exit_code != 0:
-            print(f"CLI output: {result.output}")
-            if result.exception:
-                import traceback
-
-                traceback.print_exception(
-                    type(result.exception),
-                    result.exception,
-                    result.exception.__traceback__,
-                )
         assert result.exit_code == 0
         assert "job-a" in result.output
 
-    @patch("jenkins_job_insight.cli.main._get_client")
-    def test_metadata_get(self, mock_get_client) -> None:
-        mock_client = MagicMock()
-        mock_client.get_job_metadata.return_value = {
+    def test_metadata_get(self) -> None:
+        self._mock_client.get_job_metadata.return_value = {
             "job_name": "my-job",
             "team": "platform",
             "tier": "critical",
             "version": None,
             "labels": [],
         }
-        mock_get_client.return_value = mock_client
         result = runner.invoke(cli_app, ["metadata", "get", "my-job"])
-        if result.exit_code != 0:
-            print(f"CLI output: {result.output}")
-            if result.exception:
-                import traceback
-
-                traceback.print_exception(
-                    type(result.exception),
-                    result.exception,
-                    result.exception.__traceback__,
-                )
         assert result.exit_code == 0
         assert "platform" in result.output
 
-    @patch("jenkins_job_insight.cli.main._get_client")
-    def test_metadata_set(self, mock_get_client) -> None:
-        mock_client = MagicMock()
-        mock_client.set_job_metadata.return_value = {
+    def test_metadata_set(self) -> None:
+        self._mock_client.set_job_metadata.return_value = {
             "job_name": "my-job",
             "team": "alpha",
         }
-        mock_get_client.return_value = mock_client
         result = runner.invoke(
             cli_app, ["metadata", "set", "my-job", "--team", "alpha"]
         )
-        if result.exit_code != 0:
-            print(f"CLI output: {result.output}")
-            if result.exception:
-                import traceback
-
-                traceback.print_exception(
-                    type(result.exception),
-                    result.exception,
-                    result.exception.__traceback__,
-                )
         assert result.exit_code == 0
         assert "Metadata set" in result.output
 
-    @patch("jenkins_job_insight.cli.main._get_client")
-    def test_metadata_delete(self, mock_get_client) -> None:
-        mock_client = MagicMock()
-        mock_client.delete_job_metadata.return_value = {
+    def test_metadata_delete(self) -> None:
+        self._mock_client.delete_job_metadata.return_value = {
             "status": "deleted",
             "job_name": "my-job",
         }
-        mock_get_client.return_value = mock_client
         result = runner.invoke(cli_app, ["metadata", "delete", "my-job"])
-        if result.exit_code != 0:
-            print(f"CLI output: {result.output}")
-            if result.exception:
-                import traceback
-
-                traceback.print_exception(
-                    type(result.exception),
-                    result.exception,
-                    result.exception.__traceback__,
-                )
         assert result.exit_code == 0
         assert "Metadata deleted" in result.output
 
-    @patch("jenkins_job_insight.cli.main._get_client")
-    def test_metadata_import_json(self, mock_get_client, tmp_path) -> None:
-        import json as json_mod
-
-        mock_client = MagicMock()
-        mock_client.bulk_set_metadata.return_value = {"updated": 2}
-        mock_get_client.return_value = mock_client
+    def test_metadata_import_json(self, tmp_path) -> None:
+        self._mock_client.bulk_set_metadata.return_value = {"updated": 2}
 
         f = tmp_path / "metadata.json"
         f.write_text(
@@ -651,59 +601,23 @@ class TestMetadataCLICommands:
         )
 
         result = runner.invoke(cli_app, ["metadata", "import", str(f)])
-        if result.exit_code != 0:
-            print(f"CLI output: {result.output}")
-            if result.exception:
-                import traceback
-
-                traceback.print_exception(
-                    type(result.exception),
-                    result.exception,
-                    result.exception.__traceback__,
-                )
         assert result.exit_code == 0
         assert "Imported 2" in result.output
 
-    @patch("jenkins_job_insight.cli.main._get_client")
-    def test_metadata_list_with_filters(self, mock_get_client) -> None:
-        mock_client = MagicMock()
-        mock_client.list_jobs_metadata.return_value = []
-        mock_get_client.return_value = mock_client
+    def test_metadata_list_with_filters(self) -> None:
+        self._mock_client.list_jobs_metadata.return_value = []
         result = runner.invoke(
             cli_app,
             ["metadata", "list", "--team", "alpha", "--tier", "critical"],
         )
-        if result.exit_code != 0:
-            print(f"CLI output: {result.output}")
-            if result.exception:
-                import traceback
-
-                traceback.print_exception(
-                    type(result.exception),
-                    result.exception,
-                    result.exception.__traceback__,
-                )
         assert result.exit_code == 0
-        mock_client.list_jobs_metadata.assert_called_once_with(
+        self._mock_client.list_jobs_metadata.assert_called_once_with(
             team="alpha", tier="critical", version="", labels=None
         )
 
-    @patch("jenkins_job_insight.cli.main._get_client")
-    def test_metadata_list_json(self, mock_get_client) -> None:
-        mock_client = MagicMock()
-        mock_client.list_jobs_metadata.return_value = [{"job_name": "j"}]
-        mock_get_client.return_value = mock_client
+    def test_metadata_list_json(self) -> None:
+        self._mock_client.list_jobs_metadata.return_value = [{"job_name": "j"}]
         result = runner.invoke(cli_app, ["metadata", "list", "--json"])
-        if result.exit_code != 0:
-            print(f"CLI output: {result.output}")
-            if result.exception:
-                import traceback
-
-                traceback.print_exception(
-                    type(result.exception),
-                    result.exception,
-                    result.exception.__traceback__,
-                )
         assert result.exit_code == 0
         # JSON output should be parseable
         parsed = json_mod.loads(result.output)
