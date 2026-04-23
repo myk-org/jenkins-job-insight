@@ -114,14 +114,14 @@ def _build_wait_settings(**overrides) -> Settings:
 
 
 @pytest.fixture
-def mock_settings():
+def mock_settings(temp_db_path: Path):
     """Mock settings for tests."""
     env = {
         "JENKINS_URL": "https://jenkins.example.com",
         "JENKINS_USER": "testuser",
         "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
         "GEMINI_API_KEY": "test-key",  # pragma: allowlist secret
-        "DB_PATH": "/tmp/test_jji.db",
+        "DB_PATH": str(temp_db_path),
     }
     with patch.dict(os.environ, env, clear=True):
         # Clear the lru_cache to use fresh settings

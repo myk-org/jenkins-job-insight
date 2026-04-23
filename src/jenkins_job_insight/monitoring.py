@@ -67,8 +67,8 @@ class _RollingCounter:
             self._timestamps.popleft()
 
 
-class ErrorRateTracker:
-    """In-memory rolling-window request / error counters.
+class _SingleWindowTracker:
+    """In-memory rolling-window request / error counters for a single window.
 
     All public methods are thread-safe.
     """
@@ -81,8 +81,8 @@ class ErrorRateTracker:
         ] = {}  # keyed by status class "4xx"/"5xx"
         self._lock = threading.Lock()
 
-    def record_request(self, status_code: int) -> None:
-        now = time.monotonic()
+    def record_request(self, status_code: int, now: float | None = None) -> None:
+        now = now if now is not None else time.monotonic()
         with self._lock:
             self._total.record(now)
             if status_code >= 400:
@@ -106,6 +106,44 @@ class ErrorRateTracker:
             "error_counts": error_counts,
             "total_errors": total_errors,
             "error_rate": round(error_rate, 4),
+        }
+
+
+class ErrorRateTracker:
+    """Dual rolling-window error rate tracker (5-minute and 1-hour).
+
+    Records each request into both windows simultaneously.
+    ``snapshot()`` returns the short (5m) window for backward compatibility.
+    ``snapshot_all()`` returns both windows keyed as ``last_5m`` / ``last_1h``.
+    """
+
+    def __init__(
+        self,
+        window_seconds: float = 300.0,
+        long_window_seconds: float = 3600.0,
+    ) -> None:
+        self._short = _SingleWindowTracker(window_seconds)
+        self._long = _SingleWindowTracker(long_window_seconds)
+
+    # Expose for backward compat (used by middleware alert logic)
+    @property
+    def window_seconds(self) -> float:
+        return self._short.window_seconds
+
+    def record_request(self, status_code: int) -> None:
+        now = time.monotonic()
+        self._short.record_request(status_code, now)
+        self._long.record_request(status_code, now)
+
+    def snapshot(self) -> dict[str, Any]:
+        """Return the short-window snapshot (backward compatible)."""
+        return self._short.snapshot()
+
+    def snapshot_all(self) -> dict[str, dict[str, Any]]:
+        """Return both rolling-window snapshots."""
+        return {
+            "last_5m": self._short.snapshot(),
+            "last_1h": self._long.snapshot(),
         }
 
 
@@ -147,7 +185,35 @@ async def check_db(db_path: str) -> dict[str, str]:
             await db.execute("BEGIN IMMEDIATE")
             await db.execute("ROLLBACK")
         return {"status": "ok"}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — health check must return status, not raise
+        return {"status": "error", "detail": str(exc)}
+
+
+async def _check_http_service(
+    url: str,
+    *,
+    verify_ssl: bool = True,
+    headers: dict[str, str] | None = None,
+    ok_below: int = 500,
+) -> dict[str, str]:
+    """Probe an HTTP service and return a health status dict.
+
+    Args:
+        url: URL to GET.
+        verify_ssl: Whether to verify TLS certificates.
+        headers: Optional request headers (e.g. auth).
+        ok_below: Status codes below this value are considered healthy.
+
+    Returns ``{"status": "ok"}``, ``{"status": "degraded", ...}``, or
+    ``{"status": "error", ...}``.  Never raises.
+    """
+    try:
+        async with httpx.AsyncClient(verify=verify_ssl, timeout=5.0) as client:
+            resp = await client.get(url, headers=headers or {})
+            if resp.status_code < ok_below:
+                return {"status": "ok"}
+            return {"status": "degraded", "detail": f"HTTP {resp.status_code}"}
+    except Exception as exc:  # noqa: BLE001 — health check must return status, not raise
         return {"status": "error", "detail": str(exc)}
 
 
@@ -155,16 +221,9 @@ async def check_jenkins(settings: Any) -> dict[str, str]:
     """Check Jenkins reachability (lightweight HEAD/GET to base URL)."""
     if not settings.jenkins_url:
         return {"status": "not_configured"}
-    try:
-        async with httpx.AsyncClient(
-            verify=settings.jenkins_ssl_verify, timeout=5.0
-        ) as client:
-            resp = await client.get(settings.jenkins_url)
-            if resp.status_code < 500:
-                return {"status": "ok"}
-            return {"status": "degraded", "detail": f"HTTP {resp.status_code}"}
-    except Exception as exc:
-        return {"status": "error", "detail": str(exc)}
+    return await _check_http_service(
+        settings.jenkins_url, verify_ssl=settings.jenkins_ssl_verify
+    )
 
 
 async def check_ai_provider() -> dict[str, str]:
@@ -185,24 +244,17 @@ async def check_reportportal(settings: Any) -> dict[str, str]:
     """Check Report Portal configuration."""
     if not settings.reportportal_enabled:
         return {"status": "not_configured"}
-    try:
-        token = (
-            settings.reportportal_api_token.get_secret_value()
-            if settings.reportportal_api_token
-            else ""
-        )
-        async with httpx.AsyncClient(
-            verify=settings.reportportal_verify_ssl, timeout=5.0
-        ) as client:
-            resp = await client.get(
-                f"{settings.reportportal_url.rstrip('/')}/api/v1/user",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if resp.status_code < 400:
-                return {"status": "ok"}
-            return {"status": "degraded", "detail": f"HTTP {resp.status_code}"}
-    except Exception as exc:
-        return {"status": "error", "detail": str(exc)}
+    token = (
+        settings.reportportal_api_token.get_secret_value()
+        if settings.reportportal_api_token
+        else ""
+    )
+    return await _check_http_service(
+        f"{settings.reportportal_url.rstrip('/')}/api/v1/user",
+        verify_ssl=settings.reportportal_verify_ssl,
+        headers={"Authorization": f"Bearer {token}"},
+        ok_below=400,
+    )
 
 
 async def build_health_response(settings: Any, db_path: str) -> dict[str, Any]:
@@ -258,7 +310,7 @@ async def build_health_response(settings: Any, db_path: str) -> dict[str, Any]:
         "uptime_seconds": round(time.monotonic() - _APP_STARTED_AT, 3),
         "version": _get_app_version(),
         "checks": checks,
-        "error_rates": error_tracker.snapshot(),
+        "error_rates": error_tracker.snapshot_all(),
     }
 
 
@@ -478,7 +530,7 @@ async def send_slack_alert(message: str, webhook_url: str | None = None) -> bool
                 return True
             logger.warning("Slack webhook returned HTTP %d", resp.status_code)
             return False
-    except Exception:
+    except Exception:  # noqa: BLE001 — alerting failures must never propagate
         logger.debug("Failed to send Slack alert", exc_info=True)
         return False
 
@@ -531,7 +583,7 @@ def send_email_alert(
             smtp.send_message(msg)
         logger.debug("Email alert sent successfully")
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 — alerting failures must never propagate
         logger.debug("Failed to send email alert", exc_info=True)
         return False
 
@@ -547,7 +599,7 @@ async def send_email_alert_async(
         return await loop.run_in_executor(
             None, lambda: send_email_alert(subject, body, **kwargs)
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — alerting failures must never propagate
         logger.debug("Failed to send async email alert", exc_info=True)
         return False
 
@@ -582,7 +634,7 @@ async def dispatch_alert(
             send_email_alert_async(email_subject, message),
             return_exceptions=True,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — alerting failures must never propagate
         logger.debug("Failed to dispatch alert", exc_info=True)
 
 

@@ -567,7 +567,7 @@ class ErrorTrackingMiddleware(BaseHTTPMiddleware):
                 )
                 _background_tasks.add(task)
                 task.add_done_callback(_background_tasks.discard)
-        except Exception:
+        except Exception:  # noqa: BLE001 — alert scheduling must never break request handling
             logger.debug("Failed to schedule high-error-rate alert", exc_info=True)
 
     async def dispatch(self, request: Request, call_next):
