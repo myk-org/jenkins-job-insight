@@ -548,6 +548,16 @@ class TestMetadataCLICommands:
         ]
         mock_get_client.return_value = mock_client
         result = runner.invoke(cli_app, ["metadata", "list"])
+        if result.exit_code != 0:
+            print(f"CLI output: {result.output}")
+            if result.exception:
+                import traceback
+
+                traceback.print_exception(
+                    type(result.exception),
+                    result.exception,
+                    result.exception.__traceback__,
+                )
         assert result.exit_code == 0
         assert "job-a" in result.output
 
@@ -563,6 +573,16 @@ class TestMetadataCLICommands:
         }
         mock_get_client.return_value = mock_client
         result = runner.invoke(cli_app, ["metadata", "get", "my-job"])
+        if result.exit_code != 0:
+            print(f"CLI output: {result.output}")
+            if result.exception:
+                import traceback
+
+                traceback.print_exception(
+                    type(result.exception),
+                    result.exception,
+                    result.exception.__traceback__,
+                )
         assert result.exit_code == 0
         assert "platform" in result.output
 
@@ -577,6 +597,16 @@ class TestMetadataCLICommands:
         result = runner.invoke(
             cli_app, ["metadata", "set", "my-job", "--team", "alpha"]
         )
+        if result.exit_code != 0:
+            print(f"CLI output: {result.output}")
+            if result.exception:
+                import traceback
+
+                traceback.print_exception(
+                    type(result.exception),
+                    result.exception,
+                    result.exception.__traceback__,
+                )
         assert result.exit_code == 0
         assert "Metadata set" in result.output
 
@@ -589,6 +619,16 @@ class TestMetadataCLICommands:
         }
         mock_get_client.return_value = mock_client
         result = runner.invoke(cli_app, ["metadata", "delete", "my-job"])
+        if result.exit_code != 0:
+            print(f"CLI output: {result.output}")
+            if result.exception:
+                import traceback
+
+                traceback.print_exception(
+                    type(result.exception),
+                    result.exception,
+                    result.exception.__traceback__,
+                )
         assert result.exit_code == 0
         assert "Metadata deleted" in result.output
 
@@ -611,6 +651,16 @@ class TestMetadataCLICommands:
         )
 
         result = runner.invoke(cli_app, ["metadata", "import", str(f)])
+        if result.exit_code != 0:
+            print(f"CLI output: {result.output}")
+            if result.exception:
+                import traceback
+
+                traceback.print_exception(
+                    type(result.exception),
+                    result.exception,
+                    result.exception.__traceback__,
+                )
         assert result.exit_code == 0
         assert "Imported 2" in result.output
 
@@ -623,6 +673,16 @@ class TestMetadataCLICommands:
             cli_app,
             ["metadata", "list", "--team", "alpha", "--tier", "critical"],
         )
+        if result.exit_code != 0:
+            print(f"CLI output: {result.output}")
+            if result.exception:
+                import traceback
+
+                traceback.print_exception(
+                    type(result.exception),
+                    result.exception,
+                    result.exception.__traceback__,
+                )
         assert result.exit_code == 0
         mock_client.list_jobs_metadata.assert_called_once_with(
             team="alpha", tier="critical", version="", labels=None
@@ -634,6 +694,16 @@ class TestMetadataCLICommands:
         mock_client.list_jobs_metadata.return_value = [{"job_name": "j"}]
         mock_get_client.return_value = mock_client
         result = runner.invoke(cli_app, ["metadata", "list", "--json"])
+        if result.exit_code != 0:
+            print(f"CLI output: {result.output}")
+            if result.exception:
+                import traceback
+
+                traceback.print_exception(
+                    type(result.exception),
+                    result.exception,
+                    result.exception.__traceback__,
+                )
         assert result.exit_code == 0
         # JSON output should be parseable
         parsed = json_mod.loads(result.output)
