@@ -4171,7 +4171,12 @@ async def bulk_set_job_metadata(
     request: Request,
     body: BulkJobMetadataRequest,
 ) -> dict:
-    """Bulk import job metadata."""
+    """Bulk import job metadata.
+
+    Unlike PUT /api/jobs/{job_name}/metadata which preserves omitted fields,
+    bulk import performs a full replace — omitted optional fields are set to
+    their defaults (None/empty list).
+    """
     _require_admin(request)
     logger.debug(f"PUT /api/jobs/metadata/bulk: {len(body.items)} items")
     try:
