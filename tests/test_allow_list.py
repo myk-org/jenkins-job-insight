@@ -47,6 +47,7 @@ def _make_client(temp_db_path, allowed_users: str = "", admin_key: str = ""):
         if k not in {"ALLOWED_USERS", "ADMIN_KEY", "JJI_ENCRYPTION_KEY"}
     }
     env["SECURE_COOKIES"] = "false"
+    env["DB_PATH"] = str(temp_db_path)
     if allowed_users:
         env["ALLOWED_USERS"] = allowed_users
     if admin_key:

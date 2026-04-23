@@ -170,7 +170,7 @@ class TestMaskSensitiveFields:
 
 
 @pytest.fixture
-def _mock_settings():
+def _mock_settings(temp_db_path):
     """Provide minimal env for Settings, matching test_main.py pattern."""
     env = {
         "JENKINS_URL": "https://jenkins.example.com",
@@ -178,6 +178,7 @@ def _mock_settings():
         "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
         "AI_PROVIDER": "claude",
         "AI_MODEL": "test-model",
+        "DB_PATH": str(temp_db_path),
     }
     with patch.dict(os.environ, env, clear=True):
         from jenkins_job_insight.config import get_settings
