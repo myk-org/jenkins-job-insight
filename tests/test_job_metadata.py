@@ -190,13 +190,14 @@ _ADMIN_KEY = "test-admin-key-16chars"  # pragma: allowlist secret
 
 
 @pytest.fixture
-def mock_settings():
+def mock_settings(temp_db_path):
     env = {
         "JENKINS_URL": "https://jenkins.example.com",
         "JENKINS_USER": "testuser",
         "JENKINS_PASSWORD": "testpassword",  # pragma: allowlist secret
         "GEMINI_API_KEY": "test-key",  # pragma: allowlist secret
         "ADMIN_KEY": _ADMIN_KEY,
+        "DB_PATH": str(temp_db_path),
     }
     with patch.dict(os.environ, env, clear=True):
         from jenkins_job_insight.config import get_settings
