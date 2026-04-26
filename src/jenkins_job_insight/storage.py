@@ -3012,6 +3012,8 @@ async def auto_assign_job_metadata(
     if not rules or not job_name:
         return None
 
+    # Note: small TOCTOU window between check and set. Duplicate
+    # auto-assignment is idempotent (same values), so this is acceptable.
     existing = await get_job_metadata(job_name)
     if existing is not None:
         logger.debug(

@@ -91,6 +91,28 @@ class TestLoadMetadataRules:
         with pytest.raises(ValueError, match="metadata_rules"):
             load_metadata_rules(str(rules_file))
 
+    def test_load_invalid_regex_pattern_raises(self, tmp_path: Path) -> None:
+        rules_file = tmp_path / "rules.json"
+        rules_file.write_text(
+            json_mod.dumps([{"pattern": "(?P<version>(\\d+)", "team": "qa"}])
+        )
+        with pytest.raises(ValueError, match="Invalid regex pattern"):
+            load_metadata_rules(str(rules_file))
+
+    def test_load_labels_invalid_type_raises(self, tmp_path: Path) -> None:
+        rules_file = tmp_path / "rules.json"
+        rules_file.write_text(json_mod.dumps([{"pattern": "test-*", "labels": 123}]))
+        with pytest.raises(ValueError, match="labels.*must be a list or string"):
+            load_metadata_rules(str(rules_file))
+
+    def test_load_labels_string_coerced_to_list(self, tmp_path: Path) -> None:
+        rules_file = tmp_path / "rules.json"
+        rules_file.write_text(
+            json_mod.dumps([{"pattern": "test-*", "labels": "single"}])
+        )
+        rules = load_metadata_rules(str(rules_file))
+        assert rules[0]["labels"] == ["single"]
+
 
 # --- Unit tests for match_job_metadata ---
 
@@ -98,7 +120,7 @@ class TestLoadMetadataRules:
 class TestMatchJobMetadata:
     """Tests for pattern matching logic."""
 
-    SAMPLE_RULES = [
+    SAMPLE_RULES = (
         {
             "pattern": "test-kubevirt-console-t1-*",
             "team": "console",
@@ -120,7 +142,7 @@ class TestMatchJobMetadata:
         {"pattern": "dev-*-rnetser", "labels": ["dev", "personal"]},
         {"pattern": "*-gating", "labels": ["gating"]},
         {"pattern": "verify-*-wrapper", "team": "ci", "labels": ["wrapper", "verify"]},
-    ]
+    )
 
     def test_glob_exact_match(self) -> None:
         result = match_job_metadata("test-kubevirt-console-t1-smoke", self.SAMPLE_RULES)
@@ -229,7 +251,7 @@ async def setup_test_db(temp_db_path: Path):
 class TestAutoAssignJobMetadata:
     """Tests for auto_assign_job_metadata in storage."""
 
-    RULES = [
+    RULES = (
         {
             "pattern": "test-*-storage-*",
             "team": "storage",
@@ -237,7 +259,7 @@ class TestAutoAssignJobMetadata:
             "labels": ["pytest"],
         },
         {"pattern": "dev-*", "labels": ["dev"]},
-    ]
+    )
 
     async def test_auto_assign_when_no_metadata(self, setup_test_db: Path) -> None:
         with patch.object(storage, "DB_PATH", setup_test_db):
@@ -370,6 +392,38 @@ class TestMetadataRulesAPI:
                 resp = await client.post(
                     "/api/jobs/metadata/rules/preview",
                     json={},
+                )
+                assert resp.status_code == 422
+
+    async def test_preview_non_string_job_name(self) -> None:
+        mock_settings = _make_mock_settings()
+
+        with patch("jenkins_job_insight.main.get_settings", return_value=mock_settings):
+            from jenkins_job_insight.main import app as fastapi_app
+
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=fastapi_app),
+                base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/jobs/metadata/rules/preview",
+                    json={"job_name": 12345},
+                )
+                assert resp.status_code == 422
+
+    async def test_preview_whitespace_only_job_name(self) -> None:
+        mock_settings = _make_mock_settings()
+
+        with patch("jenkins_job_insight.main.get_settings", return_value=mock_settings):
+            from jenkins_job_insight.main import app as fastapi_app
+
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=fastapi_app),
+                base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/jobs/metadata/rules/preview",
+                    json={"job_name": "   "},
                 )
                 assert resp.status_code == 422
 

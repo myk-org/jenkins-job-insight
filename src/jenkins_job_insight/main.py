@@ -1358,7 +1358,7 @@ async def process_analysis_with_id(
             await storage.auto_assign_job_metadata(
                 body.job_name, settings.metadata_rules
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 — metadata auto-assignment is best-effort
             logger.warning(
                 "Failed to auto-assign metadata for job '%s'",
                 body.job_name,
@@ -4397,8 +4397,9 @@ async def preview_metadata_rules(body: dict) -> dict:
     """
     logger.debug("POST /api/jobs/metadata/rules/preview")
     job_name = body.get("job_name", "")
-    if not job_name:
+    if not isinstance(job_name, str) or not job_name.strip():
         raise HTTPException(status_code=422, detail="job_name is required")
+    job_name = job_name.strip()
 
     from jenkins_job_insight.metadata_rules import match_job_metadata
 

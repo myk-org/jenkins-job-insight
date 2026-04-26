@@ -388,6 +388,9 @@ class Settings(BaseSettings):
     def metadata_rules(self) -> list[dict]:
         """Load and cache metadata rules from the configured file.
 
+        Rules are cached for the process lifetime.  Changes to the rules
+        file require a server restart to take effect.
+
         Returns an empty list when no file is configured or on load errors.
         """
         if hasattr(self, "_metadata_rules_cache"):
@@ -402,7 +405,7 @@ class Settings(BaseSettings):
             from jenkins_job_insight.metadata_rules import load_metadata_rules
 
             rules = load_metadata_rules(path)
-        except Exception:
+        except Exception:  # noqa: BLE001 — never crash the app on bad rule config
             logger.warning("Failed to load metadata rules from %s", path, exc_info=True)
             rules = []
 

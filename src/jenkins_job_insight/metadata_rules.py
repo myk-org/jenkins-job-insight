@@ -84,19 +84,40 @@ def load_metadata_rules(path: str) -> list[dict]:
 def _normalize_rule(rule: dict) -> dict:
     """Normalize a single rule dict to consistent types."""
     normalized: dict = {"pattern": str(rule["pattern"])}
+    # Pre-compile regex patterns so malformed rules are caught at load time.
+    if _is_regex_pattern(normalized["pattern"]):
+        try:
+            re.compile(normalized["pattern"])
+        except re.error as exc:
+            raise ValueError(
+                f"Invalid regex pattern {normalized['pattern']!r}: {exc}"
+            ) from exc
     for key in ("team", "tier", "version"):
         if key in rule and rule[key] is not None:
             normalized[key] = str(rule[key])
     if "labels" in rule and rule["labels"] is not None:
         labels = rule["labels"]
-        normalized["labels"] = (
-            [str(lbl) for lbl in labels] if isinstance(labels, list) else [str(labels)]
-        )
+        if isinstance(labels, str):
+            normalized["labels"] = [labels]
+        elif isinstance(labels, list):
+            normalized["labels"] = [str(lbl) for lbl in labels]
+        else:
+            raise ValueError(
+                f"Rule '{normalized['pattern']}': 'labels' must be a list or string, "
+                f"got {type(labels).__name__}"
+            )
     return normalized
 
 
 def _is_regex_pattern(pattern: str) -> bool:
-    """Detect whether a pattern uses regex features (named groups)."""
+    """Detect whether a pattern uses regex features (named groups).
+
+    Heuristic: a pattern is treated as regex if and only if it contains
+    a named capture group ``(?P<...>)``.  Patterns without named groups
+    — even ones that look like regex (e.g. ``^job-.*$``) — are routed
+    through ``fnmatch`` and matched as globs.  To use full regex
+    matching, include at least one named capture group in the pattern.
+    """
     return "(?P<" in pattern
 
 
@@ -121,7 +142,10 @@ def _match_single_rule(job_name: str, rule: dict) -> dict | None:
         if not fnmatch.fnmatch(job_name, pattern):
             return None
 
-    # Copy explicit fields from rule
+    # Copy explicit fields from rule.
+    # Precedence: explicit rule values override regex-captured values.
+    # E.g. a rule with both pattern "(?P<version>\d+)" and version: "fixed"
+    # will always set version="fixed", regardless of the capture.
     for key in ("team", "tier", "version"):
         if key in rule:
             matched_fields[key] = rule[key]
