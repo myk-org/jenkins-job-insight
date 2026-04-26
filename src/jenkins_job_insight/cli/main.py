@@ -2251,16 +2251,10 @@ def metadata_import(
     items: list[dict] = []
 
     if path.suffix.lower() in (".yaml", ".yml"):
-        try:
-            import yaml
+        import yaml
 
+        try:
             items = yaml.safe_load(content)
-        except ImportError:
-            typer.echo(
-                "Error: PyYAML is required for YAML files. Install with: pip install pyyaml",
-                err=True,
-            )
-            raise typer.Exit(code=1) from None
         except yaml.YAMLError as exc:
             typer.echo(f"Error: invalid YAML: {exc}", err=True)
             raise typer.Exit(code=1) from None
