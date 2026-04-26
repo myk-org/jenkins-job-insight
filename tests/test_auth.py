@@ -971,6 +971,17 @@ class TestProxyHeaders:
         assert resp.headers["location"] == "/"
         assert resp.cookies.get("jji_username") == "sso-user"
 
+    def test_register_admin_no_redirect(self, proxy_client):
+        """SSO user 'admin' hitting /register must NOT redirect (prevents loop)."""
+        for name in ("admin", "Admin", "ADMIN"):
+            resp = proxy_client.get(
+                "/register",
+                headers={"X-Forwarded-User": name},
+                follow_redirects=False,
+            )
+            assert resp.status_code != 303, f"admin variant '{name}' caused redirect"
+            assert resp.cookies.get("jji_username") is None
+
     def test_register_no_redirect_without_header(self, proxy_client):
         """Non-SSO user can access /register normally (no SSO redirect)."""
         resp = proxy_client.get(

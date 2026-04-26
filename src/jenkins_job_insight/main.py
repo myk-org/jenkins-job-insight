@@ -655,11 +655,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request.state.role = "user"
 
         # Public paths and static assets — pass through
-        # (but /register may need SSO redirect, handled below)
-        if (
-            path.startswith("/assets/")
-            or path in self._PUBLIC_PATHS
-            and not path.startswith("/register")
+        # (but /register may need SSO redirect, handled below;
+        #  it stays in _PUBLIC_PATHS for non-SSO users who need the page)
+        if path.startswith("/assets/") or (
+            path in self._PUBLIC_PATHS and path != "/register"
         ):
             return await call_next(request)
 
@@ -680,7 +679,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if session:
                     has_session = True
 
-            if proxy_username and not has_session:
+            if proxy_username and proxy_username.lower() != "admin" and not has_session:
                 # SSO user hitting /register — redirect to dashboard
                 response = RedirectResponse(url="/", status_code=303)
                 response.set_cookie(
