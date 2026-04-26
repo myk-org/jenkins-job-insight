@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { getUsername, setUsername, isLoggedIn, getGithubToken, setGithubToken, getJiraToken, setJiraToken, getJiraEmail, setJiraEmail, clearTokens } from '../cookies'
+import { getUsername, setUsername, isLoggedIn, getGithubToken, setGithubToken, getJiraToken, setJiraToken, getJiraEmail, setJiraEmail, clearTokens, looksUrlEncoded } from '../cookies'
 
 describe('cookies', () => {
   beforeEach(() => {
@@ -24,6 +24,36 @@ describe('cookies', () => {
   it('setUsername trims whitespace', () => {
     setUsername('  padded  ')
     expect(getUsername()).toBe('padded')
+  })
+
+  it('handles usernames with special characters without double-encoding', () => {
+    setUsername('user@example.com')
+    expect(getUsername()).toBe('user@example.com')
+    // Writing the same value again should not mutate it
+    const readBack = getUsername()
+    setUsername(readBack)
+    expect(getUsername()).toBe('user@example.com')
+  })
+
+  it('rejects already-encoded usernames', () => {
+    expect(() => setUsername('user%40example.com')).toThrow(/looks URL-encoded/)
+    expect(() => setUsername('user%2540example.com')).toThrow(/looks URL-encoded/)
+    expect(() => setUsername('hello%25world')).toThrow(/looks URL-encoded/)
+  })
+
+  describe('looksUrlEncoded', () => {
+    it('returns true for percent-encoded strings', () => {
+      expect(looksUrlEncoded('%40')).toBe(true)
+      expect(looksUrlEncoded('user%40domain')).toBe(true)
+      expect(looksUrlEncoded('%25')).toBe(true)
+      expect(looksUrlEncoded('%2540')).toBe(true)
+    })
+
+    it('returns false for normal strings', () => {
+      expect(looksUrlEncoded('hello')).toBe(false)
+      expect(looksUrlEncoded('user@domain.com')).toBe(false)
+      expect(looksUrlEncoded('')).toBe(false)
+    })
   })
 
   it('isLoggedIn returns false when no cookie', () => {

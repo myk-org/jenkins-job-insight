@@ -7,16 +7,26 @@ const JIRA_EMAIL_KEY = 'jji_jira_email'
 const ADMIN_KEY = 'jji_is_admin'
 const ROLE_KEY = 'jji_role'
 
+/** Detects values that look like they've been URL-encoded (e.g. %40, %25). */
+const ENCODED_PATTERN = /%[0-9A-Fa-f]{2}/
+
+export function looksUrlEncoded(value: string): boolean {
+  return ENCODED_PATTERN.test(value)
+}
+
 export function getUsername(): string {
   const match = document.cookie.match(
     new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]*)`)
   )
-  return match ? decodeURIComponent(match[1]) : ''
+  return match ? match[1] : ''
 }
 
 export function setUsername(username: string): void {
-  const encoded = encodeURIComponent(username.trim())
-  document.cookie = `${COOKIE_NAME}=${encoded}; path=/; max-age=${365 * 24 * 60 * 60}; SameSite=Lax`
+  const trimmed = username.trim()
+  if (looksUrlEncoded(trimmed)) {
+    throw new Error(`Username "${trimmed}" looks URL-encoded. Use the raw value.`)
+  }
+  document.cookie = `${COOKIE_NAME}=${trimmed}; path=/; max-age=${365 * 24 * 60 * 60}; SameSite=Lax`
 }
 
 export function clearUsername(): void {
