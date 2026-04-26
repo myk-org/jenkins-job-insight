@@ -993,6 +993,20 @@ class TestProxyHeaders:
         assert data["username"] == "admin"
         assert data["is_admin"] is True
 
+    def test_register_session_takes_precedence_over_header(self, proxy_client):
+        """Session auth takes precedence over X-Forwarded-User on /register."""
+        cookies = _admin_login(proxy_client)
+        resp = proxy_client.get(
+            "/register",
+            headers={"X-Forwarded-User": "header_user"},
+            cookies=cookies,
+            follow_redirects=False,
+        )
+        # Should NOT redirect (session user is already authenticated)
+        assert resp.status_code != 303
+        # The jji_username cookie should NOT be overwritten with header_user
+        assert resp.cookies.get("jji_username") != "header_user"
+
     def test_empty_header_ignored(self, proxy_client):
         """Empty X-Forwarded-User header is treated as absent."""
         resp = proxy_client.get(

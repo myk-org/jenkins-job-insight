@@ -672,7 +672,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
             proxy_username = request.headers.get("x-forwarded-user", "").strip()
 
         if path.startswith("/register"):
-            if proxy_username:
+            # Session auth takes precedence over X-Forwarded-User
+            session_token = request.cookies.get("jji_session")
+            has_session = False
+            if session_token:
+                session = await storage.get_session(session_token)
+                if session:
+                    has_session = True
+
+            if proxy_username and not has_session:
                 # SSO user hitting /register — redirect to dashboard
                 response = RedirectResponse(url="/", status_code=303)
                 response.set_cookie(

@@ -97,7 +97,7 @@ When the header is absent, the standard cookie-based registration flow is used (
 ### Example: OpenShift OAuth Proxy
 
 ```yaml
-# In your Deployment, add the oauth-proxy sidecar:
+# In your Deployment, add to the JJI app container (not the oauth-proxy sidecar):
 env:
   - name: TRUST_PROXY_HEADERS
     value: "true"
