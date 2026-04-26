@@ -140,6 +140,16 @@ export function DashboardPage() {
       return next
     }, { replace: true })
   }, [setSearchParams])
+  const clearMetadataFilters = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('team')
+      next.delete('tier')
+      next.delete('version')
+      next.delete('label')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
   const hasMetadataFilters = !!(metaTeam || metaTier || metaVersion || metaLabels.length > 0)
   const setDateFrom = useCallback((value: string) => {
     setSearchParams((prev) => {
@@ -438,6 +448,7 @@ export function DashboardPage() {
           onTierChange={(v) => setMetaParam('tier', v)}
           onVersionChange={(v) => setMetaParam('version', v)}
           onLabelsChange={setMetaLabels}
+          onClearAll={clearMetadataFilters}
         />
 
         {/* Bulk result message */}

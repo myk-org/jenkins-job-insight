@@ -22,6 +22,7 @@ interface MetadataFilterBarProps {
   onTierChange: (value: string) => void
   onVersionChange: (value: string) => void
   onLabelsChange: (value: string[]) => void
+  onClearAll?: () => void
 }
 
 export function MetadataFilterBar({
@@ -33,6 +34,7 @@ export function MetadataFilterBar({
   onTierChange,
   onVersionChange,
   onLabelsChange,
+  onClearAll,
 }: MetadataFilterBarProps) {
   const [options, setOptions] = useState<{
     teams: string[]
@@ -68,11 +70,15 @@ export function MetadataFilterBar({
   const hasFilters = team || tier || version || labels.length > 0
 
   const clearAll = useCallback(() => {
-    onTeamChange('')
-    onTierChange('')
-    onVersionChange('')
-    onLabelsChange([])
-  }, [onTeamChange, onTierChange, onVersionChange, onLabelsChange])
+    if (onClearAll) {
+      onClearAll()
+    } else {
+      onTeamChange('')
+      onTierChange('')
+      onVersionChange('')
+      onLabelsChange([])
+    }
+  }, [onClearAll, onTeamChange, onTierChange, onVersionChange, onLabelsChange])
 
   const toggleLabel = useCallback((label: string) => {
     if (labels.includes(label)) {
