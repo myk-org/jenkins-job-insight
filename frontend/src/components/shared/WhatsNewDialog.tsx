@@ -13,8 +13,11 @@ import changelog from '@/changelog.json'
 
 const LS_KEY = 'jji_last_seen_changelog_version'
 
+/** Changelog sorted by date descending — robust to ordering in changelog.json */
+const sortedChangelog = [...changelog].sort((a, b) => b.date.localeCompare(a.date))
+
 function getLatestVersion(): string | null {
-  return changelog.length > 0 ? changelog[0].version : null
+  return sortedChangelog.length > 0 ? sortedChangelog[0].version : null
 }
 
 function shouldShow(): boolean {
@@ -52,9 +55,9 @@ export function WhatsNewDialog() {
     setOpen(false)
   }
 
-  if (changelog.length === 0) return null
+  if (sortedChangelog.length === 0) return null
 
-  const latest = changelog[0]
+  const latest = sortedChangelog[0]
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleDismiss() }}>
