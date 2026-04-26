@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Sparkles } from 'lucide-react'
 import changelog from '@/changelog.json'
 
-const LS_KEY = 'last_seen_changelog_version'
+const LS_KEY = 'jji_last_seen_changelog_version'
 
 function getLatestVersion(): string | null {
   return changelog.length > 0 ? changelog[0].version : null
@@ -20,8 +20,12 @@ function getLatestVersion(): string | null {
 function shouldShow(): boolean {
   const latest = getLatestVersion()
   if (!latest) return false
-  const seen = localStorage.getItem(LS_KEY)
-  return seen !== latest
+  try {
+    const seen = localStorage.getItem(LS_KEY)
+    return seen !== latest
+  } catch {
+    return false
+  }
 }
 
 export function WhatsNewDialog() {
@@ -38,7 +42,11 @@ export function WhatsNewDialog() {
     if (dontShowAgain) {
       const latest = getLatestVersion()
       if (latest) {
-        localStorage.setItem(LS_KEY, latest)
+        try {
+          localStorage.setItem(LS_KEY, latest)
+        } catch {
+          // localStorage may be unavailable in private browsing
+        }
       }
     }
     setOpen(false)
@@ -62,8 +70,8 @@ export function WhatsNewDialog() {
         </DialogHeader>
 
         <ul className="space-y-3 py-2" role="list">
-          {latest.entries.map((entry) => (
-            <li key={entry.title} className="flex gap-3">
+          {latest.entries.map((entry, idx) => (
+            <li key={`${latest.version}-${idx}`} className="flex gap-3">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-signal-blue" />
               <div>
                 <p className="text-sm font-medium text-text-primary">{entry.title}</p>
