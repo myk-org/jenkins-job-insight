@@ -260,6 +260,12 @@ class Settings(BaseSettings):
     vapid_private_key: str = Field(default="", repr=False)
     vapid_claim_email: str = ""
 
+    # Metadata rules file path (optional, server-only)
+    metadata_rules_file: str = Field(
+        default="",
+        description="Path to a YAML/JSON file defining name-based metadata rules for auto-assignment",
+    )
+
     @model_validator(mode="after")
     def _normalize_optional_strings(self) -> "Settings":
         """Strip whitespace from optional string fields; blank becomes None."""
@@ -377,6 +383,31 @@ class Settings(BaseSettings):
         result = bool(get_vapid_config())
         object.__setattr__(self, "_vapid_config_cache", result)
         return result
+
+    @property
+    def metadata_rules(self) -> list[dict]:
+        """Load and cache metadata rules from the configured file.
+
+        Returns an empty list when no file is configured or on load errors.
+        """
+        if hasattr(self, "_metadata_rules_cache"):
+            return self._metadata_rules_cache
+
+        path = self.metadata_rules_file.strip()
+        if not path:
+            object.__setattr__(self, "_metadata_rules_cache", [])
+            return []
+
+        try:
+            from jenkins_job_insight.metadata_rules import load_metadata_rules
+
+            rules = load_metadata_rules(path)
+        except Exception:
+            logger.warning("Failed to load metadata rules from %s", path, exc_info=True)
+            rules = []
+
+        object.__setattr__(self, "_metadata_rules_cache", rules)
+        return rules
 
     @property
     def reportportal_enabled(self) -> bool:

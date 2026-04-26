@@ -805,3 +805,13 @@ class JJIClient:
     def bulk_set_metadata(self, items: list[dict]) -> dict:
         """Bulk import job metadata. PUT /api/jobs/metadata/bulk"""
         return self._request("PUT", "/api/jobs/metadata/bulk", json={"items": items})
+
+    def list_metadata_rules(self) -> dict:
+        """List configured metadata rules. GET /api/jobs/metadata/rules"""
+        return self._request("GET", "/api/jobs/metadata/rules")
+
+    def preview_metadata_rules(self, job_name: str) -> dict:
+        """Preview metadata rule match for a job name. POST /api/jobs/metadata/rules/preview"""
+        return self._request(
+            "POST", "/api/jobs/metadata/rules/preview", json={"job_name": job_name}
+        )

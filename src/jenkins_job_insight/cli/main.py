@@ -2287,6 +2287,59 @@ def metadata_import(
         typer.echo(f"Imported {data.get('updated', 0)} metadata entries.")
 
 
+@metadata_app.command("rules")
+def metadata_rules(
+    json_output: bool = _JSON_OPTION,
+):
+    """List configured metadata rules for auto-assignment."""
+    data = _run_client_command(
+        json_output,
+        lambda c: c.list_metadata_rules(),
+        emit_output=False,
+    )
+    if not _state.get("json", False):
+        rules = data.get("rules", [])
+        rules_file = data.get("rules_file")
+        if rules_file:
+            typer.echo(f"Rules file: {rules_file}")
+        if not rules:
+            typer.echo("No metadata rules configured.")
+        else:
+            typer.echo(f"{len(rules)} rule(s):")
+            for i, rule in enumerate(rules, 1):
+                parts = [f"  {i}. pattern={rule['pattern']!r}"]
+                for key in ("team", "tier", "version"):
+                    if key in rule:
+                        parts.append(f"{key}={rule[key]!r}")
+                if "labels" in rule:
+                    parts.append(f"labels={rule['labels']}")
+                typer.echo(", ".join(parts))
+
+
+@metadata_app.command("preview")
+def metadata_preview(
+    job_name: str = typer.Argument(help="Job name to preview rules against."),
+    json_output: bool = _JSON_OPTION,
+):
+    """Preview what metadata rules would assign to a job name."""
+    data = _run_client_command(
+        json_output,
+        lambda c: c.preview_metadata_rules(job_name),
+        emit_output=False,
+    )
+    if not _state.get("json", False):
+        if data.get("matched"):
+            meta = data.get("metadata", {})
+            typer.echo(f"Match for '{job_name}':")
+            for key in ("team", "tier", "version"):
+                if meta.get(key):
+                    typer.echo(f"  {key}: {meta[key]}")
+            if meta.get("labels"):
+                typer.echo(f"  labels: {meta['labels']}")
+        else:
+            typer.echo(f"No rules matched '{job_name}'.")
+
+
 # -- Config -------------------------------------------------------------------
 
 

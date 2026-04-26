@@ -19,6 +19,7 @@ dependencies = [
   "reportportal-client>=5.7.4",
   "typer>=0.9.0",
   "uvicorn",
+  "pyyaml>=6.0.3",
 ]
 
 [project.scripts]

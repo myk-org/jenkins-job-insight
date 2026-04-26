@@ -2993,6 +2993,53 @@ async def bulk_set_metadata(items: list[dict]) -> dict:
     return {"updated": len(items)}
 
 
+async def auto_assign_job_metadata(
+    job_name: str,
+    rules: list[dict],
+) -> dict | None:
+    """Auto-assign metadata to a job from name pattern rules if it has no existing metadata.
+
+    This is called when a new analysis result is stored. If the job already has
+    metadata, this is a no-op (manual metadata always takes precedence).
+
+    Args:
+        job_name: The Jenkins job name.
+        rules: Ordered list of metadata rule dicts.
+
+    Returns:
+        The assigned metadata dict, or None if no match or metadata already exists.
+    """
+    if not rules or not job_name:
+        return None
+
+    existing = await get_job_metadata(job_name)
+    if existing is not None:
+        logger.debug(
+            f"auto_assign_job_metadata: job '{job_name}' already has metadata, skipping"
+        )
+        return None
+
+    from jenkins_job_insight.metadata_rules import match_job_metadata
+
+    matched = match_job_metadata(job_name, rules)
+    if matched is None:
+        logger.debug(f"auto_assign_job_metadata: no rule matched job '{job_name}'")
+        return None
+
+    result = await set_job_metadata(
+        job_name,
+        team=matched.get("team"),
+        tier=matched.get("tier"),
+        version=matched.get("version"),
+        labels=matched.get("labels", []),
+    )
+    logger.info(
+        f"Auto-assigned metadata to job '{job_name}': "
+        f"team={matched.get('team')}, tier={matched.get('tier')}"
+    )
+    return result
+
+
 async def record_token_usage(
     job_id: str,
     ai_provider: str,

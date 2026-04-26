@@ -1353,6 +1353,18 @@ async def process_analysis_with_id(
                     exc_info=True,
                 )
 
+        # Auto-assign job metadata from name pattern rules
+        try:
+            await storage.auto_assign_job_metadata(
+                body.job_name, settings.metadata_rules
+            )
+        except Exception:
+            logger.warning(
+                "Failed to auto-assign metadata for job '%s'",
+                body.job_name,
+                exc_info=True,
+            )
+
         # Reveal classifications created during analysis
         await storage.make_classifications_visible(job_id)
 
@@ -4363,6 +4375,41 @@ async def bulk_set_job_metadata(
         return await storage.bulk_set_metadata(items)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+@app.get("/api/jobs/metadata/rules")
+async def list_metadata_rules() -> dict:
+    """List configured metadata rules for auto-assignment."""
+    logger.debug("GET /api/jobs/metadata/rules")
+    settings = get_settings()
+    rules = settings.metadata_rules
+    return {
+        "rules_file": settings.metadata_rules_file or None,
+        "rules": rules,
+    }
+
+
+@app.post("/api/jobs/metadata/rules/preview")
+async def preview_metadata_rules(body: dict) -> dict:
+    """Preview what metadata would be assigned to a job name by rules.
+
+    Request body: {"job_name": "..."}
+    """
+    logger.debug("POST /api/jobs/metadata/rules/preview")
+    job_name = body.get("job_name", "")
+    if not job_name:
+        raise HTTPException(status_code=422, detail="job_name is required")
+
+    from jenkins_job_insight.metadata_rules import match_job_metadata
+
+    settings = get_settings()
+    rules = settings.metadata_rules
+    matched = match_job_metadata(job_name, rules)
+    return {
+        "job_name": job_name,
+        "matched": matched is not None,
+        "metadata": matched,
+    }
 
 
 @app.get("/api/dashboard/filtered")
