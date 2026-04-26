@@ -878,3 +878,128 @@ class TestSessionRenewalMiddleware:
                 assert row[0] == "2000-01-01 00:00:00"
 
         asyncio.run(check_still_expired())
+
+
+class TestProxyHeaders:
+    """Tests for X-Forwarded-User header handling via TRUST_PROXY_HEADERS."""
+
+    @pytest.fixture
+    def proxy_client(self, _init_db, temp_db_path):
+        """Create a test client with TRUST_PROXY_HEADERS enabled."""
+        with patch.dict(
+            os.environ,
+            {
+                "ADMIN_KEY": "test-admin-key-16chars",  # pragma: allowlist secret
+                "JJI_ENCRYPTION_KEY": "test-encryption-key-for-hmac",  # pragma: allowlist secret
+                "SECURE_COOKIES": "false",
+                "DB_PATH": str(temp_db_path),
+                "TRUST_PROXY_HEADERS": "true",
+            },
+        ):
+            get_settings.cache_clear()
+            with patch.object(storage, "DB_PATH", temp_db_path):
+                from jenkins_job_insight.main import app
+
+                with TestClient(app) as c:
+                    yield c
+            get_settings.cache_clear()
+
+    def test_header_ignored_when_disabled(self, client):
+        """X-Forwarded-User is ignored when TRUST_PROXY_HEADERS is false (default)."""
+        resp = client.get(
+            "/api/auth/me",
+            headers={"X-Forwarded-User": "sso-user"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # Without cookie or session, username should be empty
+        assert data["username"] == ""
+        assert data["is_admin"] is False
+
+    def test_header_sets_username_when_enabled(self, proxy_client):
+        """X-Forwarded-User sets username when TRUST_PROXY_HEADERS is true."""
+        resp = proxy_client.get(
+            "/api/auth/me",
+            headers={"X-Forwarded-User": "sso-user"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["username"] == "sso-user"
+        assert data["is_admin"] is False
+        assert data["role"] == "user"
+
+    def test_header_sets_cookie(self, proxy_client):
+        """X-Forwarded-User sets jji_username cookie on the response."""
+        resp = proxy_client.get(
+            "/api/auth/me",
+            headers={"X-Forwarded-User": "sso-user"},
+        )
+        assert resp.status_code == 200
+        assert resp.cookies.get("jji_username") == "sso-user"
+
+    def test_cookie_flow_works_without_header(self, proxy_client):
+        """Existing cookie-based flow still works when header is absent."""
+        resp = proxy_client.get(
+            "/api/auth/me",
+            cookies={"jji_username": "cookie-user"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["username"] == "cookie-user"
+        # No proxy cookie should be set when using regular cookie flow
+        assert "jji_username" not in resp.cookies
+
+    def test_header_admin_reserved(self, proxy_client):
+        """X-Forwarded-User with 'admin' is rejected (reserved username)."""
+        resp = proxy_client.get(
+            "/api/auth/me",
+            headers={"X-Forwarded-User": "admin"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["username"] == ""
+        assert data["is_admin"] is False
+
+    def test_register_redirects_for_sso_user(self, proxy_client):
+        """SSO user hitting /register is redirected to dashboard."""
+        resp = proxy_client.get(
+            "/register",
+            headers={"X-Forwarded-User": "sso-user"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/"
+        assert resp.cookies.get("jji_username") == "sso-user"
+
+    def test_register_no_redirect_without_header(self, proxy_client):
+        """Non-SSO user can access /register normally (no SSO redirect)."""
+        resp = proxy_client.get(
+            "/register",
+            follow_redirects=False,
+        )
+        # Should NOT redirect — either 200 (SPA served) or 404 (no frontend build)
+        assert resp.status_code != 303
+
+    def test_session_auth_takes_precedence_over_header(self, proxy_client):
+        """Admin session takes precedence over X-Forwarded-User."""
+        cookies = _admin_login(proxy_client)
+        resp = proxy_client.get(
+            "/api/auth/me",
+            headers={"X-Forwarded-User": "sso-user"},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["username"] == "admin"
+        assert data["is_admin"] is True
+
+    def test_empty_header_ignored(self, proxy_client):
+        """Empty X-Forwarded-User header is treated as absent."""
+        resp = proxy_client.get(
+            "/api/auth/me",
+            headers={"X-Forwarded-User": "  "},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["username"] == ""
+        assert "jji_username" not in resp.cookies

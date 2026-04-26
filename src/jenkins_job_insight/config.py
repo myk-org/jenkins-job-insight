@@ -233,6 +233,11 @@ class Settings(BaseSettings):
     )  # JJI_ADMIN_KEY — bootstraps admin superuser
     secure_cookies: bool = True  # Set to False for local HTTP dev
 
+    # Trust reverse-proxy headers (e.g., X-Forwarded-User from OAuth proxy).
+    # When enabled, auto-identifies users from the X-Forwarded-User header.
+    # Only enable behind a trusted reverse proxy (e.g., OpenShift oauth-proxy).
+    trust_proxy_headers: bool = False
+
     # Trusted public base URL — used for result_url and tracker links.
     # When set, _extract_base_url() returns this value verbatim.
     # When unset, _extract_base_url() returns an empty string (relative

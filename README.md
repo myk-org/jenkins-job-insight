@@ -69,6 +69,40 @@ Subscribe/unsubscribe is browser-only (managed via the web UI). To list users av
 jji mentionable-users
 ```
 
+## OAuth Proxy / SSO Integration
+
+When deployed behind an OAuth proxy (e.g., OpenShift `oauth-proxy`), JJI can automatically identify users from the `X-Forwarded-User` header set by the proxy, eliminating the need for manual registration.
+
+### Configuration
+
+Set the following environment variable on the JJI server:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRUST_PROXY_HEADERS` | `false` | Trust `X-Forwarded-User` header for user identification |
+
+> **Security:** Only enable `TRUST_PROXY_HEADERS` when JJI is behind a trusted reverse proxy that sets the `X-Forwarded-User` header. If enabled without a proxy, any client can spoof the header.
+
+### Behavior
+
+When `TRUST_PROXY_HEADERS=true` and `X-Forwarded-User` is present:
+
+1. The header value is used as the JJI username
+2. A `jji_username` cookie is automatically set so all downstream code works unchanged
+3. The `/register` page redirects to the dashboard (no manual registration needed)
+4. Admin sessions and Bearer tokens still take precedence over the header
+
+When the header is absent, the standard cookie-based registration flow is used (backward compatible).
+
+### Example: OpenShift OAuth Proxy
+
+```yaml
+# In your Deployment, add the oauth-proxy sidecar:
+env:
+  - name: TRUST_PROXY_HEADERS
+    value: "true"
+```
+
 ## Development
 
 ```bash

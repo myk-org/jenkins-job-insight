@@ -1,10 +1,19 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ProfileForm } from '@/components/shared/ProfileForm'
 import { useAuth } from '@/lib/auth'
+import { getUsername } from '@/lib/cookies'
 
 export function RegisterPage() {
   const navigate = useNavigate()
   const { login, refreshAuth } = useAuth()
+
+  // Auto-redirect if user is already identified (e.g., via SSO proxy cookie)
+  useEffect(() => {
+    if (getUsername()) {
+      navigate('/', { replace: true })
+    }
+  }, [navigate])
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-surface-page overflow-hidden">
