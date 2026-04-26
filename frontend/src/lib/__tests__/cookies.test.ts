@@ -35,6 +35,21 @@ describe('cookies', () => {
     expect(getUsername()).toBe('user@example.com')
   })
 
+  it('handles usernames with + character', () => {
+    setUsername('user+tag@example.com')
+    expect(getUsername()).toBe('user+tag@example.com')
+    // No double-encoding on re-read/re-write
+    setUsername(getUsername())
+    expect(getUsername()).toBe('user+tag@example.com')
+  })
+
+  it('handles usernames with spaces', () => {
+    setUsername('John Doe')
+    expect(getUsername()).toBe('John Doe')
+    setUsername(getUsername())
+    expect(getUsername()).toBe('John Doe')
+  })
+
   it('rejects already-encoded usernames', () => {
     expect(() => setUsername('user%40example.com')).toThrow(/looks URL-encoded/)
     expect(() => setUsername('user%2540example.com')).toThrow(/looks URL-encoded/)
