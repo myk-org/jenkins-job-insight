@@ -3,7 +3,19 @@ envlist = ["backend", "frontend"]
 
 [env.backend]
 description = "Run Python tests"
-commands = [["uv", "run", "--extra", "tests", "pytest", "tests/", "-q"]]
+commands = [
+  [
+    "uv",
+    "run",
+    "--extra",
+    "tests",
+    "pytest",
+    "-n",
+    "auto",
+    "tests/",
+    "-q",
+  ],
+]
 allowlist_externals = ["uv"]
 
 [env.frontend]
