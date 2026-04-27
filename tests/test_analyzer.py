@@ -573,6 +573,49 @@ class TestAnalyzeFailureGroupPeerDelegation:
         )
         assert mock_peer.call_args.kwargs["group_label"] == ""
 
+    @pytest.mark.asyncio
+    async def test_max_concurrent_ai_calls_forwarded_to_peer_analysis(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """max_concurrent_ai_calls is forwarded from analyze_failure_group to analyze_failure_group_with_peers."""
+        from jenkins_job_insight.analyzer import TestFailure, analyze_failure_group
+        from jenkins_job_insight.models import (
+            AiConfigEntry,
+            AnalysisDetail,
+            FailureAnalysis,
+        )
+
+        mock_peer = AsyncMock(
+            return_value=[
+                FailureAnalysis(
+                    test_name="t",
+                    error="e",
+                    analysis=AnalysisDetail(details="d"),
+                    error_signature="s",
+                )
+            ]
+        )
+        monkeypatch.setattr(
+            "jenkins_job_insight.peer_analysis.analyze_failure_group_with_peers",
+            mock_peer,
+        )
+
+        failure = TestFailure(
+            test_name="test_foo", error_message="err", stack_trace="st"
+        )
+        peers = [AiConfigEntry(ai_provider="gemini", ai_model="pro")]
+
+        await analyze_failure_group(
+            [failure],
+            "",
+            None,
+            ai_provider="claude",
+            ai_model="opus",
+            peer_ai_configs=peers,
+            max_concurrent_ai_calls=7,
+        )
+        assert mock_peer.call_args.kwargs["max_concurrent_ai_calls"] == 7
+
 
 class TestConsoleOnlyPeerWarning:
     """Tests that console-only fallback branches warn when peer analysis is configured."""

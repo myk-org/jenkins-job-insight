@@ -1143,8 +1143,9 @@ async def analyze_failure_group(
 ) -> list[FailureAnalysis]:
     """Analyze a group of failures with the same error signature.
 
-    Only calls Claude CLI once for the group, then applies the analysis
-    to all failures in the group.
+    Uses a single AI call for the group (or multi-AI peer consensus
+    when peers are configured), then applies the analysis to all
+    failures in the group.
 
     Args:
         failures: List of test failures with the same error signature.
@@ -1836,6 +1837,7 @@ async def analyze_job(
                             if total_groups > 1
                             else "",
                             additional_repos=cloned_repos or None,
+                            max_concurrent_ai_calls=settings.max_concurrent_ai_calls,
                         )
                     )
                 group_results = await run_parallel_with_limit(
