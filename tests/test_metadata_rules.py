@@ -102,7 +102,7 @@ class TestLoadMetadataRules:
     def test_load_labels_invalid_type_raises(self, tmp_path: Path) -> None:
         rules_file = tmp_path / "rules.json"
         rules_file.write_text(json_mod.dumps([{"pattern": "test-*", "labels": 123}]))
-        with pytest.raises(ValueError, match="labels.*must be a list or string"):
+        with pytest.raises(ValueError, match=r"labels.*must be a list or string"):
             load_metadata_rules(str(rules_file))
 
     def test_load_labels_string_coerced_to_list(self, tmp_path: Path) -> None:
