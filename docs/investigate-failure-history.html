@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>jenkins-job-insight</title>
+    <title>Investigate Failure History - jenkins-job-insight</title>
     <meta name="description" content="Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.">
     <link rel="stylesheet" href="assets/style.css">
     <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
@@ -65,7 +65,7 @@
                     
                     <li>
                         <a href="investigate-failure-history.html"
-                           class="nav-link">
+                           class="nav-link active" aria-current="page">
                             Investigate Failure History
                         </a>
                     </li>
@@ -197,187 +197,160 @@
 
         <main class="content">
             
-            <section class="index-header">
-                <h1 class="index-title">jenkins-job-insight</h1>
-                <p class="index-tagline">Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.</p>
-                
-                
-                  
-                    
-                  
-                
-                  
-                
-                  
-                
-                  
-                
-                
-                <a href="analyze-your-first-jenkins-job.html" class="index-cta">Get Started →</a>
-                
-            </section>
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="investigate-failure-history">Investigate Failure History</h1>
+<p>Use failure history when you want to answer "have we seen this before?" before you reclassify a failure or file a bug. Looking across earlier runs helps you separate recurring noise from a real new breakage.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>At least one completed analysis in JJI. See <a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a> for details.</li>
+<li>Access to the web app or a configured <code>jji</code> CLI. See <a href="cli-command-reference.html">CLI Command Reference</a> for details.</li>
+<li>A browser username if you want to use the web UI. See <a href="configure-your-profile-and-notifications.html">Configure Your Profile and Notifications</a> for details.</li>
+</ul>
+<h2 id="quick-example">Quick Example</h2>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span>failures
+</code></pre></div>
 
-            <section class="card-grid">
-                
-                <div class="card">
-                    <h3 class="card-title">Getting Started</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="analyze-your-first-jenkins-job.html">Analyze Your First Jenkins Job</a>
-                            
-                            <p class="card-page-desc">Start JJI with Docker or a local install, connect Jenkins and an AI provider, and open your first failure report in about a minute.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="analyze-your-first-jenkins-job.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">User Guides</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="configure-your-profile-and-notifications.html">Configure Your Profile and Notifications</a>
-                            
-                            <p class="card-page-desc">Choose your display name, save personal GitHub or Jira tokens for cross-browser use, and enable browser notifications for @mentions.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a>
-                            
-                            <p class="card-page-desc">Submit analyses from the dashboard, REST API, or `jji`, track queued jobs through the status view, and rerun builds when you need fresh results.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="review-and-classify-failures.html">Review and Classify Failures</a>
-                            
-                            <p class="card-page-desc">Work through grouped failures, nested child jobs, comments, mentions, reviewed states, and manual classification overrides in the report view.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="investigate-failure-history.html">Investigate Failure History</a>
-                            
-                            <p class="card-page-desc">Search past failures by test, signature, job, or classification so you can spot recurring breakage and separate noise from real regressions.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="customize-ai-analysis.html">Customize AI Analysis</a>
-                            
-                            <p class="card-page-desc">Choose providers and models, add peer reviewers, pass extra repositories, tune prompts, and control artifact and timeout behavior for better explanations.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a>
-                            
-                            <p class="card-page-desc">Preview issue text, check likely duplicates, select the right repo or Jira project, and create tickets directly from a failure.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="push-classifications-to-report-portal.html">Push Classifications to Report Portal</a>
-                            
-                            <p class="card-page-desc">Match analyzed failures to a Report Portal launch and publish classifications, including how to understand unmatched or partial results.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="organize-jobs-with-metadata.html">Organize Jobs with Metadata</a>
-                            
-                            <p class="card-page-desc">Assign team, tier, version, and labels to jobs, preview automatic matches, and use metadata filters to focus dashboards and triage queues.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="manage-users-access-and-token-usage.html">Manage Users, Access, and Token Usage</a>
-                            
-                            <p class="card-page-desc">Bootstrap admins, rotate API keys, enforce allow lists, change roles, and monitor AI token usage on a shared instance.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="configure-your-profile-and-notifications.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">Recipes</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="copy-common-analysis-recipes.html">Copy Common Analysis Recipes</a>
-                            
-                            <p class="card-page-desc">Use ready-made CLI and API snippets for background analysis, waiting for Jenkins, peer review, extra repo context, self-signed Jenkins, and forced analysis.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="copy-common-deployment-recipes.html">Copy Common Deployment Recipes</a>
-                            
-                            <p class="card-page-desc">Use working container and platform patterns for Docker Compose, dev mode, reverse-proxy deployments, health checks, metrics, and OpenShift alerts.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="copy-common-analysis-recipes.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">Reference</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="cli-command-reference.html">CLI Command Reference</a>
-                            
-                            <p class="card-page-desc">Look up `jji` commands, options, output modes, and profile-driven usage.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="rest-api-reference.html">REST API Reference</a>
-                            
-                            <p class="card-page-desc">Look up endpoints, request fields, status codes, and response shapes across analysis, history, comments, auth, notifications, metadata, and admin APIs.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a>
-                            
-                            <p class="card-page-desc">Look up server env vars, `config.toml` profile fields, request overrides, metadata rules, and integration settings.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="cli-command-reference.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-            </section>
+<p>Start here when you want the newest recorded failures across all analyzed jobs, then narrow the list by test, classification, job, or signature.</p>
+<h2 id="step-by-step">Step-by-step</h2>
+<blockquote>
+<p><strong>Tip:</strong> Use the browser to browse and open results quickly. Switch to <code>jji</code> when you need an exact job filter, signature search, or JSON output.</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>You want to know...</th>
+<th>Fastest path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>What has been failing lately?</td>
+<td><code>History</code> in the web app or <code>jji history failures</code></td>
+</tr>
+<tr>
+<td>How often does one test fail in one job?</td>
+<td><code>jji history test TEST_NAME --job-name JOB_NAME</code></td>
+</tr>
+<tr>
+<td>Do several tests share one failure pattern?</td>
+<td><code>jji history search --signature SIGNATURE</code></td>
+</tr>
+<tr>
+<td>Is one Jenkins job getting noisier overall?</td>
+<td><code>jji history stats JOB_NAME</code></td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>Start with the broad list.</li>
+</ol>
+<p><code>bash
+   jji history failures --limit 50</code></p>
+<p>In the browser, open <code>History</code> to scan the latest failures. Use the search box to narrow the list, use the classification picker to focus on one category, click a row to open the full result, or click the test name to open that test's history page.</p>
+<ol>
+<li>Drill into one test.</li>
+</ol>
+<p><code>bash
+   jji history test tests.network.TestDNS.test_lookup --job-name ocp-4.16-e2e</code></p>
+<p>Use this when one failure keeps reappearing and you want to know whether it is specific to one job. The test view shows recent runs, the latest classification, related comments, and timestamps such as first seen and last seen.</p>
+<blockquote>
+<p><strong>Note:</strong> If you want pass counts or a failure rate, include <code>--job-name</code>. Without a job filter, the single-test view can still show failure history, but it may not have enough context to calculate a full pass/fail rate.</p>
+</blockquote>
+<ol>
+<li>Check whether the same root cause hits multiple tests.</li>
+</ol>
+<p><code>bash
+   jji history search --signature sig-abc</code></p>
+<p>Run this when several failures look related and you already have a signature value. The default output shows how many times that signature appeared and which tests share it, so you can tell whether you are looking at one repeated failure mode or several unrelated problems.</p>
+<ol>
+<li>Measure job-wide noise before you decide it is a regression.</li>
+</ol>
+<p><code>bash
+   jji history stats ocp-e2e</code></p>
+<p>This gives you the number of analyzed builds, how many of them had failures, and the most common failing tests for that job. Use it when the question is "is this job unhealthy lately?" rather than "what happened to this one test?"</p>
+<ol>
+<li>Narrow the list to what you actually need to triage.</li>
+</ol>
+<p><code>bash
+   jji history failures --job-name ocp-e2e --classification "REGRESSION"</code></p>
+<p>This is a good last step before taking action. If the pattern looks stable and already explained, continue with <a href="review-and-classify-failures.html">Review and Classify Failures</a>; if it points to a new defect, continue with <a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a>.</p>
+<h2 id="advanced-usage">Advanced Usage</h2>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span>failures<span class="w"> </span>--search<span class="w"> </span><span class="s2">&quot;DNS resolution failed&quot;</span>
+</code></pre></div>
 
-            <div class="llm-docs-banner">
-                <div class="llm-docs-icon">🤖</div>
-                <div class="llm-docs-content">
-                    <strong>AI-friendly documentation</strong>
-                    <p>This documentation is optimized for AI consumption.</p>
-                    <div class="llm-docs-links">
-                        <a href="llms.txt">llms.txt</a> — structured index
-                        <span class="llm-docs-sep">·</span>
-                        <a href="llms-full.txt">llms-full.txt</a> — complete docs in one file
-                    </div>
+<p>Use <code>--search</code> when you only have a fragment of the failure in front of you. It is the quickest way to get back to the right test or result before you decide whether you need a deeper job or signature lookup.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span>failures<span class="w"> </span>--job-name<span class="w"> </span>ocp-e2e<span class="w"> </span>--classification<span class="w"> </span><span class="s2">&quot;FLAKY&quot;</span><span class="w"> </span>--limit<span class="w"> </span><span class="m">50</span><span class="w"> </span>--offset<span class="w"> </span><span class="m">50</span>
+</code></pre></div>
+
+<p>Combine exact job filtering, classification filtering, and pagination when the browser list is too broad. The classification filter accepts <code>CODE ISSUE</code>, <code>PRODUCT BUG</code>, <code>FLAKY</code>, <code>REGRESSION</code>, <code>INFRASTRUCTURE</code>, <code>KNOWN_BUG</code>, and <code>INTERMITTENT</code>.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span><span class="nb">test</span><span class="w"> </span>tests.TestA.test_one<span class="w"> </span>--job-name<span class="w"> </span>ocp-e2e<span class="w"> </span>--exclude-job-id<span class="w"> </span>job-99
+jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span>search<span class="w"> </span>--signature<span class="w"> </span>sig-abc<span class="w"> </span>--exclude-job-id<span class="w"> </span>job-99
+jji<span class="w"> </span><span class="nb">history</span><span class="w"> </span>stats<span class="w"> </span>ocp-e2e<span class="w"> </span>--exclude-job-id<span class="w"> </span>job-99
+</code></pre></div>
+
+<p>Use <code>--exclude-job-id</code> when you are triaging one active result and want to compare it against older history without counting the current run. This makes it easier to decide whether the current failure is genuinely new.</p>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>--json<span class="w"> </span><span class="nb">history</span><span class="w"> </span>stats<span class="w"> </span>ocp-e2e
+jji<span class="w"> </span>--json<span class="w"> </span><span class="nb">history</span><span class="w"> </span>search<span class="w"> </span>--signature<span class="w"> </span>sig-abc
+</code></pre></div>
+
+<p>Use JSON output for scripting, dashboards, or when you want fields that are not shown in the default table view. For example, <code>jji --json history stats</code> includes the recent trend value for the job. See <a href="rest-api-reference.html">REST API Reference</a> if you want to automate the same workflows over HTTP.</p>
+<blockquote>
+<p><strong>Tip:</strong> In the browser, you can sort the current page by test, job, classification, or date. Use pagination to move through older results.</p>
+</blockquote>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li><strong><code>Failure rate</code> shows <code>N/A</code>, or the per-test totals do not look useful.</strong> Run <code>jji history test TEST_NAME --job-name JOB_NAME</code> so JJI can estimate pass/fail math for one job.</li>
+<li><strong>Signature search returns nothing.</strong> Make sure you are using the signature value, not the human-readable error message. If all you have is the error text, start with <code>jji history failures --search "..."</code>.</li>
+<li><strong>The CLI says no server was specified.</strong> Add <code>--server</code>, set <code>JJI_SERVER</code>, or configure a default CLI profile. See <a href="cli-command-reference.html">CLI Command Reference</a> for details.</li>
+<li><strong>History looks empty right after you start a new analysis.</strong> Wait for the analysis to complete, then try again. If you do not have any completed analyses yet, start with <a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a>.</li>
+</ul>
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="review-and-classify-failures.html">Review and Classify Failures</a></li>
+<li><a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a></li>
+<li><a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a></li>
+<li><a href="cli-command-reference.html">CLI Command Reference</a></li>
+<li><a href="rest-api-reference.html">REST API Reference</a></li>
+</ul>
                 </div>
-            </div>
+            </article>
+            <nav class="page-nav">
+                
+                <a href="review-and-classify-failures.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Review and Classify Failures</span>
+                </a>
+                
+                
+                <a href="customize-ai-analysis.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Customize AI Analysis</span>
+                </a>
+                
+            </nav>
+            
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#prerequisites">Prerequisites</a></li>
+<li><a href="#quick-example">Quick Example</a></li>
+<li><a href="#step-by-step">Step-by-step</a></li>
+<li><a href="#advanced-usage">Advanced Usage</a></li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+<li><a href="#related-pages">Related Pages</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+            
 
         </main>
 

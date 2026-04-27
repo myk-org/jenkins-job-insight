@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>jenkins-job-insight</title>
+    <title>Review and Classify Failures - jenkins-job-insight</title>
     <meta name="description" content="Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.">
     <link rel="stylesheet" href="assets/style.css">
     <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
@@ -58,7 +58,7 @@
                     
                     <li>
                         <a href="review-and-classify-failures.html"
-                           class="nav-link">
+                           class="nav-link active" aria-current="page">
                             Review and Classify Failures
                         </a>
                     </li>
@@ -197,187 +197,158 @@
 
         <main class="content">
             
-            <section class="index-header">
-                <h1 class="index-title">jenkins-job-insight</h1>
-                <p class="index-tagline">Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.</p>
-                
-                
-                  
-                    
-                  
-                
-                  
-                
-                  
-                
-                  
-                
-                
-                <a href="analyze-your-first-jenkins-job.html" class="index-cta">Get Started →</a>
-                
-            </section>
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="review-and-classify-failures">Review and Classify Failures</h1>
+<p>Use the report page to turn an analysis into an actionable team record: confirm what is understood, call in the right person, and correct the AI when needed. The goal is to leave each failure card with a clear review state, useful comments, and the right manual classification.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>A completed analysis report. If you need one first, see <a href="analyze-your-first-jenkins-job.html">Analyze Your First Jenkins Job</a>.</li>
+<li>A saved username in the web UI so comments, reviews, and mentions are attributed correctly.</li>
+</ul>
+<h2 id="quick-example">Quick Example</h2>
+<div class="highlight"><pre><span></span><code>Hey @alice, can you check this?
+</code></pre></div>
 
-            <section class="card-grid">
-                
-                <div class="card">
-                    <h3 class="card-title">Getting Started</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="analyze-your-first-jenkins-job.html">Analyze Your First Jenkins Job</a>
-                            
-                            <p class="card-page-desc">Start JJI with Docker or a local install, connect Jenkins and an AI provider, and open your first failure report in about a minute.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="analyze-your-first-jenkins-job.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">User Guides</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="configure-your-profile-and-notifications.html">Configure Your Profile and Notifications</a>
-                            
-                            <p class="card-page-desc">Choose your display name, save personal GitHub or Jira tokens for cross-browser use, and enable browser notifications for @mentions.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a>
-                            
-                            <p class="card-page-desc">Submit analyses from the dashboard, REST API, or `jji`, track queued jobs through the status view, and rerun builds when you need fresh results.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="review-and-classify-failures.html">Review and Classify Failures</a>
-                            
-                            <p class="card-page-desc">Work through grouped failures, nested child jobs, comments, mentions, reviewed states, and manual classification overrides in the report view.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="investigate-failure-history.html">Investigate Failure History</a>
-                            
-                            <p class="card-page-desc">Search past failures by test, signature, job, or classification so you can spot recurring breakage and separate noise from real regressions.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="customize-ai-analysis.html">Customize AI Analysis</a>
-                            
-                            <p class="card-page-desc">Choose providers and models, add peer reviewers, pass extra repositories, tune prompts, and control artifact and timeout behavior for better explanations.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a>
-                            
-                            <p class="card-page-desc">Preview issue text, check likely duplicates, select the right repo or Jira project, and create tickets directly from a failure.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="push-classifications-to-report-portal.html">Push Classifications to Report Portal</a>
-                            
-                            <p class="card-page-desc">Match analyzed failures to a Report Portal launch and publish classifications, including how to understand unmatched or partial results.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="organize-jobs-with-metadata.html">Organize Jobs with Metadata</a>
-                            
-                            <p class="card-page-desc">Assign team, tier, version, and labels to jobs, preview automatic matches, and use metadata filters to focus dashboards and triage queues.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="manage-users-access-and-token-usage.html">Manage Users, Access, and Token Usage</a>
-                            
-                            <p class="card-page-desc">Bootstrap admins, rotate API keys, enforce allow lists, change roles, and monitor AI token usage on a shared instance.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="configure-your-profile-and-notifications.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">Recipes</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="copy-common-analysis-recipes.html">Copy Common Analysis Recipes</a>
-                            
-                            <p class="card-page-desc">Use ready-made CLI and API snippets for background analysis, waiting for Jenkins, peer review, extra repo context, self-signed Jenkins, and forced analysis.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="copy-common-deployment-recipes.html">Copy Common Deployment Recipes</a>
-                            
-                            <p class="card-page-desc">Use working container and platform patterns for Docker Compose, dev mode, reverse-proxy deployments, health checks, metrics, and OpenShift alerts.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="copy-common-analysis-recipes.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">Reference</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="cli-command-reference.html">CLI Command Reference</a>
-                            
-                            <p class="card-page-desc">Look up `jji` commands, options, output modes, and profile-driven usage.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="rest-api-reference.html">REST API Reference</a>
-                            
-                            <p class="card-page-desc">Look up endpoints, request fields, status codes, and response shapes across analysis, history, comments, auth, notifications, metadata, and admin APIs.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a>
-                            
-                            <p class="card-page-desc">Look up server env vars, `config.toml` profile fields, request overrides, metadata rules, and integration settings.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="cli-command-reference.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-            </section>
+<ol>
+<li>Open a completed report and expand a card that shows <code>+N more with same error</code>.</li>
+<li>Read the <code>Error</code> and <code>Analysis</code> sections.</li>
+<li>Paste the comment above into <code>Add a comment...</code>, then click <code>Post</code>.</li>
+<li>Click <code>Review All</code> for the whole group, or <code>Review</code> if the card contains only one test.</li>
+<li>If the failure belongs to the environment rather than the code or product, choose <code>INFRASTRUCTURE</code> from the classification dropdown.</li>
+</ol>
+<blockquote>
+<p><strong>Tip:</strong> <code>Shift+Enter</code> adds a new line. If the mention picker is open, <code>Enter</code> or <code>Tab</code> inserts the highlighted username instead of posting.</p>
+</blockquote>
+<h2 id="step-by-step">Step-by-Step</h2>
+<ol>
+<li>
+<p>Start with grouped failures. In the <code>Failures</code> section, a card with <code>+N more with same error</code> means multiple tests are being worked as one review unit. Expand the card to see the affected tests, the raw <code>Error</code>, the AI <code>Analysis</code>, and any evidence or fix details.</p>
+</li>
+<li>
+<p>Mark items as reviewed as you finish them. Single-test cards use <code>Review</code>. Grouped cards add <code>Review All</code>, and you can still mark individual tests inside <code>Affected Tests</code> if only part of the group is ready. When a card is marked, the button shows who reviewed it.</p>
+</li>
+<li>
+<p>Leave comments in the card where the decision belongs. Use <code>Add a comment...</code> and <code>Post</code> at the bottom of the expanded card. Comments save immediately, show the author and timestamp, and stay attached to that failure card scope. The trash icon only appears for comments posted under your current username.</p>
+</li>
+<li>
+<p>Use <code>@mentions</code> when you need a handoff or second opinion. Type <code>@</code> and start a username to open the suggestion list. <code>Enter</code> or <code>Tab</code> inserts the selected name, and <code>Escape</code> closes the picker. Mentions are only recognized as standalone names, so <code>user@domain.com</code> does not count as a mention.</p>
+</li>
+</ol>
+<div class="highlight"><pre><span></span><code>@alice
+@my-user
+@another_user
+@user123
+</code></pre></div>
 
-            <div class="llm-docs-banner">
-                <div class="llm-docs-icon">🤖</div>
-                <div class="llm-docs-content">
-                    <strong>AI-friendly documentation</strong>
-                    <p>This documentation is optimized for AI consumption.</p>
-                    <div class="llm-docs-links">
-                        <a href="llms.txt">llms.txt</a> — structured index
-                        <span class="llm-docs-sep">·</span>
-                        <a href="llms-full.txt">llms-full.txt</a> — complete docs in one file
-                    </div>
+<ol>
+<li>Override the AI classification when human judgment should win. The classification dropdown is intentionally limited to <code>CODE ISSUE</code>, <code>PRODUCT BUG</code>, and <code>INFRASTRUCTURE</code>. On a grouped card, the change applies to every test shown in that group within the current scope.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Override</th>
+<th>Use it when</th>
+<th>What changes in the card</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CODE ISSUE</code></td>
+<td>The failure should be fixed in the product code or the tests</td>
+<td><code>Bug Report</code> is removed, and any <code>Suggested Fix</code> stays visible</td>
+</tr>
+<tr>
+<td><code>PRODUCT BUG</code></td>
+<td>The product behavior is the real defect</td>
+<td><code>Suggested Fix</code> is removed, and any <code>Bug Report</code> stays visible</td>
+</tr>
+<tr>
+<td><code>INFRASTRUCTURE</code></td>
+<td>Jenkins, the lab, credentials, or another external dependency caused the failure</td>
+<td>Both <code>Suggested Fix</code> and <code>Bug Report</code> are removed</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>
+<p>Review nested child jobs in place. If the report has a <code>Child Jobs</code> section, expand the failing child build and keep drilling down until you reach the exact branch of the pipeline you need. Reviews, comments, and overrides are scoped to that child build, so the same test name in another child build is handled separately.</p>
+</li>
+<li>
+<p>Check progress in the sticky header and move on. The header shows whether nothing, some, or all failures are reviewed. Comment and review changes appear automatically while the report is open. Manual classification overrides save immediately, but other people with the same report already open need to reload to see them.</p>
+</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> There is no final save step. Review toggles, comments, and classification overrides are stored as soon as you make the change.</p>
+</blockquote>
+<h2 id="advanced-usage">Advanced Usage</h2>
+<p>Use <code>Expand all</code> and <code>Collapse all</code> in both <code>Failures</code> and <code>Child Jobs</code> when you are working through a long report. This is the fastest way to compare repeated failures or walk a multi-level pipeline without reopening cards one by one.</p>
+<p>If a grouped card shows more than one classification badge, the tests inside that group already have mixed saved overrides. Picking one value in the classification dropdown normalizes the entire group again in that scope.</p>
+<p>Paste tracker references directly into comments when you want the card to carry follow-up status. JJI recognizes full GitHub issue URLs, full GitHub pull request URLs, and Jira keys.</p>
+<div class="highlight"><pre><span></span><code>Fix merged: https://github.com/org/repo/pull/123
+See https://github.com/RedHatQE/mtv-api-tests/issues/359
+Opened bug: OCPBUGS-12345
+</code></pre></div>
+
+<p>When JJI can resolve those references, it adds live status badges such as <code>merged</code>, <code>open</code>, or <code>closed</code> next to the link or ticket key. While you are typing a draft comment, automatic comment and review refresh pauses so your text is not interrupted.</p>
+<p>Use the copy buttons beside the test name, error, analysis, and other card sections when you need to paste evidence into chat, tickets, or commit messages. For scripted review workflows instead of the browser, see <a href="cli-command-reference.html">CLI Command Reference</a> or <a href="rest-api-reference.html">REST API Reference</a>.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li>I can open the report, but posting comments, marking review, or changing the classification fails: your server may be using a write allow list, or your username is missing. Ask an administrator to add your username if needed.</li>
+<li>I do not see the trash icon for a comment I wrote earlier: switch back to the same username that was active when you posted it.</li>
+<li>A teammate's new comment or review is not showing up yet: wait until you are not typing in a comment box, or reload the report.</li>
+<li>A teammate's manual override is not showing up yet: reload the report. Manual override changes are not live-polled into other open tabs.</li>
+<li>My <code>@mention</code> did not trigger: use a standalone token such as <code>@alice</code>, not an email address like <code>user@domain.com</code>.</li>
+<li>Reclassifying one child build did not change another one with the same test name: repeat the change inside each child build you want to update.</li>
+<li>A grouped <code>Review All</code> or classification change only partly succeeded: retry from the same card. JJI keeps the successful updates and names the tests that still failed.</li>
+<li>A tracker link has no status badge: use a full GitHub issue or pull-request URL, or a Jira key such as <code>OCPBUGS-12345</code>, and make sure the server can reach that tracker.</li>
+</ul>
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a></li>
+<li><a href="investigate-failure-history.html">Investigate Failure History</a></li>
+<li><a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a></li>
+<li><a href="push-classifications-to-report-portal.html">Push Classifications to Report Portal</a></li>
+<li><a href="configure-your-profile-and-notifications.html">Configure Your Profile and Notifications</a></li>
+</ul>
                 </div>
-            </div>
+            </article>
+            <nav class="page-nav">
+                
+                <a href="analyze-a-jenkins-job.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Analyze a Jenkins Job</span>
+                </a>
+                
+                
+                <a href="investigate-failure-history.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Investigate Failure History</span>
+                </a>
+                
+            </nav>
+            
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#prerequisites">Prerequisites</a></li>
+<li><a href="#quick-example">Quick Example</a></li>
+<li><a href="#step-by-step">Step-by-Step</a></li>
+<li><a href="#advanced-usage">Advanced Usage</a></li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+<li><a href="#related-pages">Related Pages</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+            
 
         </main>
 

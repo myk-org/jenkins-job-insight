@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>jenkins-job-insight</title>
+    <title>Configure Your Profile and Notifications - jenkins-job-insight</title>
     <meta name="description" content="Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.">
     <link rel="stylesheet" href="assets/style.css">
     <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
@@ -44,7 +44,7 @@
                     
                     <li>
                         <a href="configure-your-profile-and-notifications.html"
-                           class="nav-link">
+                           class="nav-link active" aria-current="page">
                             Configure Your Profile and Notifications
                         </a>
                     </li>
@@ -197,187 +197,173 @@
 
         <main class="content">
             
-            <section class="index-header">
-                <h1 class="index-title">jenkins-job-insight</h1>
-                <p class="index-tagline">Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.</p>
-                
-                
-                  
-                    
-                  
-                
-                  
-                
-                  
-                
-                  
-                
-                
-                <a href="analyze-your-first-jenkins-job.html" class="index-cta">Get Started →</a>
-                
-            </section>
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="configure-your-profile-and-notifications">Configure Your Profile and Notifications</h1>
+<p>Set the <code>Username</code> JJI should use for you, save your own GitHub or Jira credentials, and turn on browser alerts for <code>@mentions</code>. This keeps follow-up work tied to your account and helps you catch comment pings without watching the page.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>Access to the JJI web UI.</li>
+<li>A GitHub personal access token with <code>repo</code> scope if you want GitHub issue creation from the web UI.</li>
+<li>For Jira Cloud, your Atlassian email plus an API token. For Jira Server/Data Center, a personal access token.</li>
+<li>A browser that supports notifications if you want <code>@mention</code> alerts.</li>
+</ul>
+<h2 id="quick-example">Quick Example</h2>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>validate-token<span class="w"> </span>github<span class="w"> </span>--token<span class="w"> </span><span class="s2">&quot;&lt;your-github-token&gt;&quot;</span>
+</code></pre></div>
 
-            <section class="card-grid">
-                
-                <div class="card">
-                    <h3 class="card-title">Getting Started</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="analyze-your-first-jenkins-job.html">Analyze Your First Jenkins Job</a>
-                            
-                            <p class="card-page-desc">Start JJI with Docker or a local install, connect Jenkins and an AI provider, and open your first failure report in about a minute.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="analyze-your-first-jenkins-job.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">User Guides</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="configure-your-profile-and-notifications.html">Configure Your Profile and Notifications</a>
-                            
-                            <p class="card-page-desc">Choose your display name, save personal GitHub or Jira tokens for cross-browser use, and enable browser notifications for @mentions.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a>
-                            
-                            <p class="card-page-desc">Submit analyses from the dashboard, REST API, or `jji`, track queued jobs through the status view, and rerun builds when you need fresh results.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="review-and-classify-failures.html">Review and Classify Failures</a>
-                            
-                            <p class="card-page-desc">Work through grouped failures, nested child jobs, comments, mentions, reviewed states, and manual classification overrides in the report view.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="investigate-failure-history.html">Investigate Failure History</a>
-                            
-                            <p class="card-page-desc">Search past failures by test, signature, job, or classification so you can spot recurring breakage and separate noise from real regressions.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="customize-ai-analysis.html">Customize AI Analysis</a>
-                            
-                            <p class="card-page-desc">Choose providers and models, add peer reviewers, pass extra repositories, tune prompts, and control artifact and timeout behavior for better explanations.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a>
-                            
-                            <p class="card-page-desc">Preview issue text, check likely duplicates, select the right repo or Jira project, and create tickets directly from a failure.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="push-classifications-to-report-portal.html">Push Classifications to Report Portal</a>
-                            
-                            <p class="card-page-desc">Match analyzed failures to a Report Portal launch and publish classifications, including how to understand unmatched or partial results.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="organize-jobs-with-metadata.html">Organize Jobs with Metadata</a>
-                            
-                            <p class="card-page-desc">Assign team, tier, version, and labels to jobs, preview automatic matches, and use metadata filters to focus dashboards and triage queues.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="manage-users-access-and-token-usage.html">Manage Users, Access, and Token Usage</a>
-                            
-                            <p class="card-page-desc">Bootstrap admins, rotate API keys, enforce allow lists, change roles, and monitor AI token usage on a shared instance.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="configure-your-profile-and-notifications.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">Recipes</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="copy-common-analysis-recipes.html">Copy Common Analysis Recipes</a>
-                            
-                            <p class="card-page-desc">Use ready-made CLI and API snippets for background analysis, waiting for Jenkins, peer review, extra repo context, self-signed Jenkins, and forced analysis.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="copy-common-deployment-recipes.html">Copy Common Deployment Recipes</a>
-                            
-                            <p class="card-page-desc">Use working container and platform patterns for Docker Compose, dev mode, reverse-proxy deployments, health checks, metrics, and OpenShift alerts.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="copy-common-analysis-recipes.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">Reference</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="cli-command-reference.html">CLI Command Reference</a>
-                            
-                            <p class="card-page-desc">Look up `jji` commands, options, output modes, and profile-driven usage.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="rest-api-reference.html">REST API Reference</a>
-                            
-                            <p class="card-page-desc">Look up endpoints, request fields, status codes, and response shapes across analysis, history, comments, auth, notifications, metadata, and admin APIs.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a>
-                            
-                            <p class="card-page-desc">Look up server env vars, `config.toml` profile fields, request overrides, metadata rules, and integration settings.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="cli-command-reference.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-            </section>
+<p>If the command prints <code>Valid</code>, open <code>/register</code>, enter a <code>Username</code>, paste the token into <code>GitHub Token</code>, and click <strong>Save</strong>. After you land on the dashboard, accept the notification prompt, or open <code>/settings</code> later and enable notifications there.</p>
+<blockquote>
+<p><strong>Tip:</strong> Choose a simple username like <code>jdoe</code>, <code>jdoe-dev</code>, or <code>jdoe_1</code> if you want reliable <code>@mentions</code>. Email-style names do not work well with mentions.</p>
+</blockquote>
+<h2 id="step-by-step">Step-by-Step</h2>
+<ol>
+<li>Open your profile page.</li>
+</ol>
+<p>Use <code>/register</code> the first time. After that, click the settings icon in the user badge and open <code>/settings</code>.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>API Key</code> is separate from your GitHub and Jira tokens. Leave it empty unless your administrator gave you an admin key.</p>
+</blockquote>
+<ol>
+<li>Enter your <code>Username</code>.</li>
+</ol>
+<p>JJI uses this name for comments, the <code>Mentions</code> list, and the attribution it adds when it creates a GitHub issue or Jira bug for you.</p>
+<ol>
+<li>Fill in only the tracker fields you need.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>You want to do</th>
+<th>Fill in</th>
+<th>What to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Create GitHub issues from the web UI</td>
+<td><code>GitHub Token</code></td>
+<td>GitHub personal access token with <code>repo</code> scope</td>
+</tr>
+<tr>
+<td>Create Jira bugs on Jira Cloud</td>
+<td><code>Jira Email</code> and <code>Jira Token</code></td>
+<td>Your Atlassian account email and API token</td>
+</tr>
+<tr>
+<td>Create Jira bugs on Jira Server/Data Center</td>
+<td><code>Jira Token</code></td>
+<td>A personal access token, with <code>Jira Email</code> left blank</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>Click <strong>Save</strong>.</li>
+</ol>
+<p>JJI validates new or changed tracker tokens when you save. When a token checks out, the form shows <code>Authenticated as ...</code>.</p>
+<blockquote>
+<p><strong>Note:</strong> JJI saves tracker tokens in the current browser and also syncs them to the server, encrypted at rest, so they can be restored when you use the same username in another browser.</p>
+</blockquote>
+<ol>
+<li>Enable browser notifications.</li>
+</ol>
+<p>After you already have a username, JJI can show an <code>Enable Notifications?</code> prompt on the dashboard. If you skip it, open <code>/settings</code> and use the <code>Push Notifications</code> section to enable or disable notifications manually.</p>
+<ol>
+<li>Check your mentions.</li>
+</ol>
+<p>When someone mentions your username in a comment, JJI can show a browser notification and increments the unread badge on <code>Mentions</code>. Open <code>Mentions</code> to review the list and mark items as read.</p>
+<h2 id="advanced-usage">Advanced Usage</h2>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>validate-token<span class="w"> </span>jira<span class="w"> </span>--token<span class="w"> </span><span class="s2">&quot;&lt;your-jira-token&gt;&quot;</span><span class="w"> </span>--email<span class="w"> </span><span class="s2">&quot;you@example.com&quot;</span>
+jji<span class="w"> </span>validate-token<span class="w"> </span>jira<span class="w"> </span>--token<span class="w"> </span><span class="s2">&quot;&lt;your-server-or-dc-token&gt;&quot;</span>
+jji<span class="w"> </span>--json<span class="w"> </span>validate-token<span class="w"> </span>github<span class="w"> </span>--token<span class="w"> </span><span class="s2">&quot;&lt;your-github-token&gt;&quot;</span>
+</code></pre></div>
 
-            <div class="llm-docs-banner">
-                <div class="llm-docs-icon">🤖</div>
-                <div class="llm-docs-content">
-                    <strong>AI-friendly documentation</strong>
-                    <p>This documentation is optimized for AI consumption.</p>
-                    <div class="llm-docs-links">
-                        <a href="llms.txt">llms.txt</a> — structured index
-                        <span class="llm-docs-sep">·</span>
-                        <a href="llms-full.txt">llms-full.txt</a> — complete docs in one file
-                    </div>
+<p>Use <code>--email</code> for Jira Cloud and leave it out for Jira Server/Data Center. Add <code>--json</code> when you want machine-readable output. See <a href="cli-command-reference.html">CLI Command Reference</a> for more command examples.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Shared across browsers?</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Saved GitHub or Jira tokens</td>
+<td>Yes, when you use the same username</td>
+<td>JJI can restore the saved server copy for that username into another browser.</td>
+</tr>
+<tr>
+<td>Notification permission and push subscription</td>
+<td>No</td>
+<td>Enable notifications separately in each browser or device.</td>
+</tr>
+<tr>
+<td>Automatic dashboard prompt</td>
+<td>No</td>
+<td>Clicking <code>Not now</code> is remembered only in the current browser.</td>
+</tr>
+</tbody>
+</table>
+<p>Saving only one tracker field later does not erase the other saved tracker fields. Self-mentions still appear in <code>Mentions</code>, but they do not trigger a push notification.</p>
+<p>For automation outside the web UI, see <a href="rest-api-reference.html">REST API Reference</a>.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li><strong><code>The username 'admin' is reserved</code>:</strong> use a different username unless you have an admin API key.</li>
+<li><strong>GitHub or Jira validation says the token is invalid:</strong> generate a fresh token and try again. For Jira Cloud, make sure <code>Jira Email</code> matches the same Atlassian account as the token.</li>
+<li><strong>You never see a notification prompt:</strong> open <code>/settings</code> and check <code>Push Notifications</code> directly. The automatic prompt only appears once per browser, and only when browser notifications are available.</li>
+<li><strong>Enabling notifications says they are not configured on the server:</strong> browser notifications are not enabled on this JJI server yet. Ask your administrator to check the notification setup; see <a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a>.</li>
+<li><strong>Notifications are blocked:</strong> re-enable this site's notification permission in your browser settings, then try again from <code>/settings</code>.</li>
+<li><strong>Notifications fail in Brave with a push service error:</strong> turn on <code>Use Google services for push messaging</code> in Brave, then retry.</li>
+<li><strong>Saved tokens do not show up in another browser:</strong> make sure you used the same username there. Saved tracker credentials are tied to the username you chose.</li>
+<li><strong>People cannot <code>@mention</code> you reliably:</strong> switch to a simple username such as <code>jdoe</code>, <code>jdoe-dev</code>, or <code>jdoe_1</code> instead of an email-style name.</li>
+</ul>
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="review-and-classify-failures.html">Review and Classify Failures</a></li>
+<li><a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a></li>
+<li><a href="cli-command-reference.html">CLI Command Reference</a></li>
+<li><a href="rest-api-reference.html">REST API Reference</a></li>
+<li><a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a></li>
+</ul>
                 </div>
-            </div>
+            </article>
+            <nav class="page-nav">
+                
+                <a href="analyze-your-first-jenkins-job.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Analyze Your First Jenkins Job</span>
+                </a>
+                
+                
+                <a href="analyze-a-jenkins-job.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Analyze a Jenkins Job</span>
+                </a>
+                
+            </nav>
+            
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#prerequisites">Prerequisites</a></li>
+<li><a href="#quick-example">Quick Example</a></li>
+<li><a href="#step-by-step">Step-by-Step</a></li>
+<li><a href="#advanced-usage">Advanced Usage</a></li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+<li><a href="#related-pages">Related Pages</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+            
 
         </main>
 

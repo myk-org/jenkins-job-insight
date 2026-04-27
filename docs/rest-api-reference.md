@@ -1,1589 +1,1373 @@
 # REST API Reference
 
-> **Note:** `server default` in request tables means the field inherits the running server configuration when omitted. See [Configuration and Environment Reference](configuration-and-environment-reference.html) for the exact defaults and feature flags.
+> **Note:** When a request field says `server default`, omitting it uses the server's configured value. See [Configuration and Environment Reference](configuration-and-environment-reference.html) for the server-side defaults and environment variables.
+>
 
 
-> **Tip:** CLI wrappers for these endpoints are documented in [CLI Command Reference](cli-command-reference.html).
+> **Note:** This page covers the live analysis, history, comments, auth-state, notifications, metadata, and admin APIs. For issue preview/create endpoints, see [Create GitHub Issues and Jira Bugs](create-github-issues-and-jira-bugs.html). For Report Portal endpoints, see [Push Classifications to Report Portal](push-classifications-to-report-portal.html). For deployment health and metrics, see [Copy Common Deployment Recipes](copy-common-deployment-recipes.html).
 
-## Conventions
-
-### Authentication Inputs
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `Authorization` | `Bearer <token>` header | none | Admin bootstrap key or admin user API key. |
-| `jji_session` | cookie | none | Admin session cookie set by `POST /api/auth/login`. |
-| `jji_username` | cookie | none | Username context used for token storage, comments, reviews, and issue attribution. |
-
-Most read and analysis endpoints are accessible without authentication. Admin-only endpoints are under `/api/admin/*` and `DELETE /results/{job_id}`.
-
-### Common Status Codes
-
-| Code | Meaning | Notes |
-| --- | --- | --- |
-| `200` | Success | Some integration endpoints also use `200` for partial/soft failures and put details in the JSON body. |
-| `201` | Created | Used for comments, classifications, and issue creation. |
-| `202` | Accepted / in progress | Returned when a job is queued or when a referenced analysis is still pending, waiting, or running. |
-| `400` | Invalid request | Used for invalid JSON, missing required fields in object-parsed endpoints, or invalid integration/config state. |
-| `401` | Authentication failed | Used for invalid tracker credentials or missing username on user-token endpoints. |
-| `403` | Forbidden | Used for admin-only or disabled feature endpoints. |
-| `404` | Not found | Missing job, comment, user, or admin account. |
-| `409` | Conflict | Used when an endpoint targets a stored analysis that finished with `status="failed"`. |
-| `422` | Validation failed | FastAPI/Pydantic body or query validation error. |
-| `502` | Upstream tracker failure | GitHub or Jira API error/unreachable response during issue creation. |
-
-### Child Failure Targeting
-
-Many failure-targeting request bodies accept `child_job_name` and `child_build_number`.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `child_job_name` | `string` | `""` | Child pipeline job name. Empty string targets top-level failures. |
-| `child_build_number` | `integer >= 0` | `0` | Child build number. `0` means “no specific build” and works as a wildcard for lookup-oriented endpoints. |
-
-> **Note:** `PUT /results/{job_id}/override-classification` is stricter than the shared validator: when `child_job_name` is set, it requires a non-zero `child_build_number`.
-
-### Progress Phases
-
-`GET /results/{job_id}` may expose `result.progress_phase` and `result.progress_log`.
-
-| Phase | Description |
-| --- | --- |
-| `waiting_for_jenkins` | Waiting for the Jenkins build to finish before analysis starts. |
-| `analyzing` | AI analysis is running. |
-| `enriching_jira` | Jira post-processing is running for `PRODUCT BUG` results. |
-| `saving` | Final result persistence is running. |
-
-### Sensitive Stored Request Fields
-
-Public result responses strip secret values from `result.request_params`.
-
-| Stripped key |
-| --- |
-| `jenkins_password` |
-| `jenkins_user` |
-| `jira_api_token` |
-| `jira_pat` |
-| `jira_email` |
-| `jira_token` |
-| `github_token` |
-| `reportportal_api_token` |
-
-## Shared Schemas
-
-### `AiConfigEntry`
-
-One peer-review AI configuration.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `ai_provider` | `claude \| gemini \| cursor` | required | Peer AI provider. |
-| `ai_model` | `string` | required | Peer AI model identifier. Blank values are rejected. |
-
-Effect: one entry in `peer_ai_configs`.
+## Common conventions
+- Examples use `http://localhost:8000`.
+- Admin-only endpoints return `403 Forbidden` without admin access.
+- Current-user endpoints return `401 Unauthorized` when no current username is available.
+- Non-admin write endpoints can also return `403 Forbidden` when the server allow list rejects the caller.
+- Validation errors return `422 Unprocessable Entity` with a FastAPI-style error array.
+- For `GET /results/{job_id}`, send `Accept: application/json` when you want API JSON instead of the browser UI route behavior.
 
 ```json
 {
-  "ai_provider": "gemini",
-  "ai_model": "gemini-2.5-pro"
+  "detail": [
+    {
+      "type": "int_parsing",
+      "loc": ["body", "build_number"],
+      "msg": "Input should be a valid integer",
+      "input": "not-a-number"
+    }
+  ]
 }
 ```
 
-### `AdditionalRepo`
-
-Additional repository cloned into the analysis workspace.
+### Queued job response
+Returned by `POST /analyze` and `POST /re-analyze/{job_id}`.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `name` | `string` | required | Directory name used for the clone. Must be non-blank, must not contain `/`, `\`, `..`, or start with `.`, and must not use reserved names. |
-| `url` | `string (URL)` | required | Repository URL. |
-| `ref` | `string` | `""` | Branch or tag to check out. Empty string uses the remote default branch. |
-
-Effect: adds extra repository context for AI analysis.
+| `status` | string | n/a | Always `queued`. |
+| `job_id` | string | n/a | Server-generated job UUID. |
+| `message` | string | n/a | Polling hint that includes the result path. |
+| `base_url` | string | `""` | Trusted public base URL when configured; otherwise empty. |
+| `result_url` | string | n/a | Relative or absolute URL for the stored result. |
 
 ```json
 {
-  "name": "product-repo",
-  "url": "https://github.com/acme/product.git",
-  "ref": "main"
+  "status": "queued",
+  "job_id": "8d0f0a65-6b52-4eb9-8dc5-9e3c38f6f6a6",
+  "message": "Analysis job queued. Poll /results/8d0f0a65-6b52-4eb9-8dc5-9e3c38f6f6a6 for status.",
+  "base_url": "",
+  "result_url": "/results/8d0f0a65-6b52-4eb9-8dc5-9e3c38f6f6a6"
 }
 ```
 
-### `TestFailure`
-
-Raw failure input for direct analysis.
+### Stored result envelope
+Returned by `GET /results/{job_id}`.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `test_name` | `string` | required | Fully qualified test name. |
-| `error_message` | `string` | `""` | Failure message. |
-| `stack_trace` | `string` | `""` | Full stack trace. |
-| `duration` | `number` | `0.0` | Test duration in seconds. |
-| `status` | `string` | `"FAILED"` | Original test status label. |
-
-Effect: one input failure for `POST /analyze-failures`.
+| `job_id` | string | n/a | Analysis job ID. |
+| `jenkins_url` | string | `""` | Jenkins build URL for Jenkins-backed analyses. |
+| `status` | string | n/a | Top-level job state: `pending`, `waiting`, `running`, `completed`, or `failed`. |
+| `result` | object \| null | n/a | Stored result payload. Secrets are stripped from `request_params` before response. |
+| `created_at` | string | n/a | Job creation timestamp. |
+| `completed_at` | string \| null | `null` | Completion timestamp when available. |
+| `analysis_started_at` | string \| null | `null` | Analysis-start timestamp when available. |
+| `base_url` | string | `""` | Trusted public base URL when configured; otherwise empty. |
+| `result_url` | string | n/a | Relative or absolute result URL. |
+| `capabilities` | object | n/a | Same capability flags returned by `GET /api/capabilities`. |
 
 ```json
 {
-  "test_name": "tests.api.test_login.test_admin_login",
-  "error_message": "AssertionError: expected 200 got 500",
-  "stack_trace": "Traceback...",
-  "duration": 1.24,
-  "status": "FAILED"
+  "job_id": "8d0f0a65-6b52-4eb9-8dc5-9e3c38f6f6a6",
+  "jenkins_url": "https://jenkins.example.com/job/my-pipeline/42/",
+  "status": "completed",
+  "result": {
+    "job_name": "my-pipeline",
+    "build_number": 42,
+    "summary": "1 failure analyzed",
+    "ai_provider": "claude",
+    "ai_model": "opus-4",
+    "failures": [],
+    "request_params": {
+      "ai_provider": "claude",
+      "ai_model": "opus-4",
+      "tests_repo_url": "https://github.com/acme/tests",
+      "tests_repo_ref": ""
+    }
+  },
+  "created_at": "2026-04-27 09:20:00",
+  "completed_at": "2026-04-27 09:21:10",
+  "analysis_started_at": "2026-04-27 09:20:05",
+  "base_url": "",
+  "result_url": "/results/8d0f0a65-6b52-4eb9-8dc5-9e3c38f6f6a6",
+  "capabilities": {
+    "github_issues_enabled": true,
+    "jira_issues_enabled": true,
+    "server_github_token": true,
+    "server_jira_token": true,
+    "server_jira_email": true,
+    "server_jira_project_key": "ACME",
+    "reportportal": false,
+    "reportportal_project": ""
+  }
 }
 ```
 
-### `BaseAnalysisRequest`
+## Analysis
+> **Note:** For task-oriented usage and option combinations, see [Analyze a Jenkins Job](analyze-a-jenkins-job.html), [Customize AI Analysis](customize-ai-analysis.html), and [Copy Common Analysis Recipes](copy-common-analysis-recipes.html).
 
-Fields shared by Jenkins-backed and direct-failure analysis.
+### Shared analysis override fields
+Used by `POST /analyze`, `POST /analyze-failures`, and `POST /re-analyze/{job_id}`.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `tests_repo_url` | `string \| null` | `null` | Tests repository URL override. A `:ref` suffix is parsed and later exposed as `tests_repo_ref` in stored `request_params`. |
-| `ai_provider` | `claude \| gemini \| cursor \| null` | `null` | Main AI provider override. |
-| `ai_model` | `string \| null` | `null` | Main AI model override. |
-| `enable_jira` | `boolean \| null` | `null` | Enable Jira bug search during analysis. |
-| `ai_cli_timeout` | `integer > 0 \| null` | `null` | AI CLI timeout in minutes. |
-| `jira_url` | `string \| null` | `null` | Jira base URL override. |
-| `jira_email` | `string \| null` | `null` | Jira Cloud email override. |
-| `jira_api_token` | `string \| null` | `null` | Jira Cloud API token override. |
-| `jira_pat` | `string \| null` | `null` | Jira Server/Data Center PAT override. |
-| `jira_project_key` | `string \| null` | `null` | Jira project key override. |
-| `jira_ssl_verify` | `boolean \| null` | `null` | Jira SSL verification override. |
-| `jira_max_results` | `integer > 0 \| null` | `null` | Maximum Jira search matches per failure. |
-| `raw_prompt` | `string \| null` | `null` | Extra prompt text appended to the analysis prompt. |
-| `github_token` | `string \| null` | `null` | GitHub token override for private-repo enrichment. |
-| `peer_ai_configs` | `array<AiConfigEntry> \| null` | `null` | Peer-review configs. Omit to inherit the server setting; send `[]` to disable peer review for this request. |
-| `peer_analysis_max_rounds` | `integer 1-10` | `server default (schema default: 3)` | Maximum peer debate rounds. |
-| `additional_repos` | `array<AdditionalRepo> \| null` | `null` | Additional repositories for analysis context. Omit to inherit the server setting; send `[]` to disable. |
+| `tests_repo_url` | string \| null | server default | Repository URL cloned for analysis context. A `:ref` suffix is accepted. |
+| `ai_provider` | string | server default | AI provider: `claude`, `gemini`, or `cursor`. |
+| `ai_model` | string \| null | server default | AI model identifier. |
+| `enable_jira` | boolean \| null | auto | Enables or disables Jira match enrichment for this request. |
+| `ai_cli_timeout` | integer \| null | server default | AI CLI timeout in minutes. |
+| `jira_url` | string \| null | server default | Jira base URL override. |
+| `jira_email` | string \| null | server default | Jira Cloud email override. |
+| `jira_api_token` | string \| null | server default | Jira Cloud API token override. |
+| `jira_pat` | string \| null | server default | Jira Server/DC PAT override. |
+| `jira_project_key` | string \| null | server default | Jira project key override. |
+| `jira_ssl_verify` | boolean \| null | server default | Jira SSL verification override. |
+| `jira_max_results` | integer \| null | server default | Max Jira matches to fetch. |
+| `raw_prompt` | string \| null | none | Extra prompt text appended for this request. |
+| `github_token` | string \| null | server default | GitHub token used for private-repo comment enrichment. |
+| `peer_ai_configs` | array<object> \| null | server default | Peer review AI configs. Use `[]` to disable peer analysis for this request. |
+| `peer_analysis_max_rounds` | integer | server default | Max peer-debate rounds. Only applied when the field is present. |
+| `additional_repos` | array<object> \| null | server default | Additional repositories cloned for AI context. Use `[]` to disable server defaults for this request. |
 
-Effect: baseline analysis configuration persisted into `result.request_params`.
+#### `peer_ai_configs[]`
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ai_provider` | string | required | `claude`, `gemini`, or `cursor`. |
+| `ai_model` | string | required | Non-blank model identifier. |
+
+#### `additional_repos[]`
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | string | required | Unique directory name used inside the analysis workspace. |
+| `url` | string | required | Repository URL to clone. |
+| `ref` | string | `""` | Branch or tag to check out. Empty string means the remote default branch. |
+| `token` | string \| null | `null` | Clone token for private repositories. |
+
+> **Tip:** `additional_repos[].name` must be unique, must not contain path separators, must not contain `..`, and must not start with `.`.
 
 ```json
 {
+  "tests_repo_url": "https://github.com/acme/tests:main",
   "ai_provider": "claude",
-  "ai_model": "sonnet",
-  "tests_repo_url": "https://github.com/acme/tests.git:main",
+  "ai_model": "opus-4",
   "peer_ai_configs": [
     {
       "ai_provider": "gemini",
-      "ai_model": "gemini-2.5-pro"
+      "ai_model": "2.5-pro"
     }
   ],
+  "peer_analysis_max_rounds": 2,
   "additional_repos": [
     {
-      "name": "product-repo",
-      "url": "https://github.com/acme/product.git",
+      "name": "service",
+      "url": "https://github.com/acme/service",
       "ref": "main"
     }
   ]
 }
 ```
 
-### `AnalyzeRequest`
-
-Jenkins-backed analysis request. Includes all `BaseAnalysisRequest` fields plus the fields below.
+### `/analyze` body fields
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `job_name` | `string` | required | Jenkins job name. Folder paths are allowed. |
-| `build_number` | `integer` | required | Jenkins build number. |
-| `wait_for_completion` | `boolean` | `server default (schema default: true)` | Wait for Jenkins completion before analysis. |
-| `poll_interval_minutes` | `integer > 0` | `server default (schema default: 2)` | Jenkins polling interval while waiting. |
-| `max_wait_minutes` | `integer >= 0` | `server default (schema default: 0)` | Maximum wait time. `0` means no limit. |
-| `jenkins_url` | `string \| null` | `null` | Jenkins base URL override. |
-| `jenkins_user` | `string \| null` | `null` | Jenkins username override. |
-| `jenkins_password` | `string \| null` | `null` | Jenkins password or API token override. |
-| `jenkins_ssl_verify` | `boolean \| null` | `null` | Jenkins SSL verification override. |
-| `jenkins_artifacts_max_size_mb` | `integer > 0 \| null` | `null` | Artifact download size cap in MB. |
-| `get_job_artifacts` | `boolean \| null` | `null` | Download build artifacts for AI context. |
-
-Effect: request body for `POST /analyze`.
-
-```json
-{
-  "job_name": "folder/job-name",
-  "build_number": 123,
-  "wait_for_completion": true,
-  "poll_interval_minutes": 2,
-  "tests_repo_url": "https://github.com/acme/tests.git:main",
-  "ai_provider": "claude",
-  "ai_model": "sonnet"
-}
-```
-
-### `AnalyzeFailuresRequest`
-
-Direct failure-analysis request. Includes all `BaseAnalysisRequest` fields plus the fields below.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `failures` | `array<TestFailure> \| null` | `null` | Raw failures to analyze. |
-| `raw_xml` | `string \| null` | `null` | Raw JUnit XML. Maximum length: `50000000` characters. |
-
-Effect: exactly one of `failures` or `raw_xml` must be provided.
+| `job_name` | string | required | Jenkins job name. Folder-style names such as `folder/subfolder/job` are supported. |
+| `build_number` | integer | required | Jenkins build number. |
+| `force` | boolean | server default | Forces analysis even when the Jenkins build succeeded. |
+| `wait_for_completion` | boolean | server default | Waits for the Jenkins build to finish before analysis. |
+| `poll_interval_minutes` | integer | server default | Poll interval, in minutes, when waiting for build completion. |
+| `max_wait_minutes` | integer | server default | Max wait time in minutes. `0` means no limit. |
+| `jenkins_url` | string \| null | server default | Jenkins base URL override. |
+| `jenkins_user` | string \| null | server default | Jenkins username override. |
+| `jenkins_password` | string \| null | server default | Jenkins password or API token override. |
+| `jenkins_ssl_verify` | boolean \| null | server default | Jenkins SSL verification override. |
+| `jenkins_timeout` | integer \| null | server default | Jenkins API timeout in seconds. |
+| `jenkins_artifacts_max_size_mb` | integer \| null | server default | Max artifact payload size downloaded for AI context. |
+| `get_job_artifacts` | boolean \| null | server default | Enables or disables artifact download for this request. |
 
 ```json
 {
-  "failures": [
-    {
-      "test_name": "tests.api.test_login.test_admin_login",
-      "error_message": "AssertionError: expected 200 got 500",
-      "stack_trace": "Traceback..."
-    }
-  ],
-  "ai_provider": "claude",
-  "ai_model": "sonnet"
-}
-```
-
-### `PreviewIssueRequest`
-
-Preview body for GitHub or Jira issue content.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `test_name` | `string` | required | Failure test name to preview. |
-| `child_job_name` | `string` | `""` | Child pipeline job name. |
-| `child_build_number` | `integer >= 0` | `0` | Child build number. |
-| `include_links` | `boolean` | `false` | Include report and Jenkins links when `PUBLIC_BASE_URL` is configured. |
-| `ai_provider` | `string` | `""` | Issue-content generation provider override. Empty string uses the current server default. |
-| `ai_model` | `string` | `""` | Issue-content generation model override. Empty string uses the current server default. |
-| `github_token` | `string` | `""` | GitHub token used for duplicate search. |
-| `jira_token` | `string` | `""` | Jira token used for duplicate search. |
-| `jira_email` | `string` | `""` | Jira Cloud email paired with `jira_token`. |
-| `jira_project_key` | `string` | `""` | Jira project override for duplicate search. |
-| `jira_security_level` | `string` | `""` | Jira security level name. Not used by preview generation. |
-| `github_repo_url` | `string` | `""` | GitHub repository override for duplicate search. |
-
-Effect: selects the target failure and optional tracker credentials used during preview.
-
-```json
-{
-  "test_name": "tests.api.test_login.test_admin_login",
-  "include_links": true,
-  "github_repo_url": "https://github.com/acme/tests",
-  "github_token": "ghp_example"
-}
-```
-
-### `CreateIssueRequest`
-
-Create body for GitHub or Jira issue creation.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `test_name` | `string` | required | Failure test name to file. |
-| `title` | `string` | required | Final issue title. Blank values are rejected. |
-| `body` | `string` | required | Final issue body text. |
-| `child_job_name` | `string` | `""` | Child pipeline job name. |
-| `child_build_number` | `integer >= 0` | `0` | Child build number. |
-| `github_token` | `string` | `""` | GitHub token used for issue creation. |
-| `jira_token` | `string` | `""` | Jira token used for bug creation. |
-| `jira_email` | `string` | `""` | Jira Cloud email paired with `jira_token`. |
-| `jira_project_key` | `string` | `""` | Jira project override. |
-| `jira_security_level` | `string` | `""` | Jira security level name. |
-| `github_repo_url` | `string` | `""` | GitHub repository override. |
-
-Effect: final payload for `POST /results/{job_id}/create-github-issue` and `POST /results/{job_id}/create-jira-bug`.
-
-```json
-{
-  "test_name": "tests.api.test_login.test_admin_login",
-  "title": "Admin login fails with HTTP 500",
-  "body": "## Failure\n`tests.api.test_login.test_admin_login`\n\n## Observed error\nAssertionError: expected 200 got 500",
-  "github_repo_url": "https://github.com/acme/tests",
-  "github_token": "ghp_example"
-}
-```
-
-### `AnalysisDetail`
-
-Structured AI output inside each failure result.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `classification` | `string` | `""` | `CODE ISSUE`, `PRODUCT BUG`, or `INFRASTRUCTURE`. |
-| `affected_tests` | `array<string>` | `[]` | Related test names. |
-| `details` | `string` | `""` | Main analysis text. |
-| `artifacts_evidence` | `string` | `""` | Verbatim artifact evidence. |
-| `code_fix` | `object \| false \| null` | `false` | Present for `CODE ISSUE`. Shape: `{file, line, change}`. |
-| `product_bug_report` | `object \| false \| null` | `false` | Present for `PRODUCT BUG`. Shape: `{title, severity, component, description, evidence, jira_search_keywords, jira_matches}`. |
-
-Nested object shapes:
-
-| Object | Fields |
-| --- | --- |
-| `code_fix` | `file`, `line`, `change` |
-| `product_bug_report` | `title`, `severity`, `component`, `description`, `evidence`, `jira_search_keywords[]`, `jira_matches[]` |
-| `jira_matches[]` item | `key`, `summary`, `status`, `priority`, `url`, `score` |
-
-Effect: the core classification and evidence payload returned by analysis endpoints.
-
-```json
-{
-  "classification": "CODE ISSUE",
-  "affected_tests": [
-    "tests.api.test_login.test_admin_login"
-  ],
-  "details": "The failure is caused by a missing null-check in the auth handler.",
-  "artifacts_evidence": "ERROR auth/login.py:42 NoneType has no attribute 'id'",
-  "code_fix": {
-    "file": "auth/login.py",
-    "line": "42",
-    "change": "Guard the user lookup before reading user.id."
-  }
-}
-```
-
-### `PeerDebate`
-
-Optional peer-review trail attached to a failure result.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `consensus_reached` | `boolean` | required | Whether the debate converged. |
-| `rounds_used` | `integer` | required | Number of rounds actually used. |
-| `max_rounds` | `integer` | required | Maximum rounds allowed for the debate. |
-| `ai_configs` | `array<AiConfigEntry>` | required | Peer configs that participated. |
-| `rounds` | `array<object>` | required | Debate contributions. Each item has `round`, `ai_provider`, `ai_model`, `role`, `classification`, `details`, and `agrees_with_orchestrator`. |
-
-Effect: present in `FailureAnalysis.peer_debate` only when peer analysis was used.
-
-```json
-{
-  "consensus_reached": true,
-  "rounds_used": 1,
-  "max_rounds": 3,
-  "ai_configs": [
-    {
-      "ai_provider": "gemini",
-      "ai_model": "gemini-2.5-pro"
-    }
-  ],
-  "rounds": [
-    {
-      "round": 1,
-      "ai_provider": "claude",
-      "ai_model": "sonnet",
-      "role": "orchestrator",
-      "classification": "CODE ISSUE",
-      "details": "Primary analysis.",
-      "agrees_with_orchestrator": null
-    },
-    {
-      "round": 1,
-      "ai_provider": "gemini",
-      "ai_model": "gemini-2.5-pro",
-      "role": "peer",
-      "classification": "CODE ISSUE",
-      "details": "Agrees with the null-check diagnosis.",
-      "agrees_with_orchestrator": true
-    }
-  ]
-}
-```
-
-### `FailureAnalysis`
-
-One analyzed failure.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `test_name` | `string` | required | Failed test name. |
-| `error` | `string` | required | Failure message or exception text. |
-| `analysis` | `AnalysisDetail` | required | Structured AI output. |
-| `error_signature` | `string` | `""` | SHA-256 deduplication signature. |
-| `peer_debate` | `PeerDebate \| null` | `null` | Peer-review trail when enabled. |
-
-Effect: repeated in `AnalysisResult.failures`, `ChildJobAnalysis.failures`, and `FailureAnalysisResult.failures`.
-
-```json
-{
-  "test_name": "tests.api.test_login.test_admin_login",
-  "error": "AssertionError: expected 200 got 500",
-  "analysis": {
-    "classification": "CODE ISSUE",
-    "details": "The auth handler dereferences a null user."
-  },
-  "error_signature": "4f9f8a0f..."
-}
-```
-
-### `ChildJobAnalysis`
-
-Recursive pipeline child-job result.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `job_name` | `string` | required | Child job name. |
-| `build_number` | `integer` | required | Child build number. |
-| `jenkins_url` | `string \| null` | `null` | Child build URL. |
-| `summary` | `string \| null` | `null` | Child summary text. |
-| `failures` | `array<FailureAnalysis>` | `[]` | Failures for this child. |
-| `failed_children` | `array<ChildJobAnalysis>` | `[]` | Nested failed child jobs. |
-| `note` | `string \| null` | `null` | Extra note such as recursion depth limits. |
-
-Effect: appears inside `AnalysisResult.child_job_analyses`.
-
-```json
-{
-  "job_name": "pipeline/component-tests",
+  "job_name": "folder/my-pipeline",
   "build_number": 42,
-  "jenkins_url": "https://jenkins.example.com/job/pipeline/job/component-tests/42/",
-  "summary": "1 PRODUCT BUG in child job",
-  "failures": [
-    {
-      "test_name": "tests.component.test_ui.test_checkout",
-      "error": "TimeoutError",
-      "analysis": {
-        "classification": "PRODUCT BUG",
-        "details": "Checkout API never responds."
-      },
-      "error_signature": "a1b2c3..."
-    }
-  ],
-  "failed_children": []
-}
-```
-
-### `AnalysisResult`
-
-Completed Jenkins-backed analysis result.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `job_id` | `string` | required | Analysis job identifier. |
-| `job_name` | `string` | `""` | Jenkins job name. |
-| `build_number` | `integer` | `0` | Jenkins build number. |
-| `jenkins_url` | `string \| null` | `null` | Jenkins build URL. |
-| `status` | `pending \| waiting \| running \| completed \| failed` | required | Analysis state stored in the result body. |
-| `summary` | `string` | required | Result summary. |
-| `ai_provider` | `string` | `""` | AI provider used. |
-| `ai_model` | `string` | `""` | AI model used. |
-| `failures` | `array<FailureAnalysis>` | `[]` | Top-level analyzed failures. |
-| `child_job_analyses` | `array<ChildJobAnalysis>` | `[]` | Recursive child-job analyses. |
-
-Effect: returned in `ResultEnvelope.result` for completed Jenkins-backed analyses.
-
-```json
-{
-  "job_id": "9f5d0a0c-32c0-4f3f-b5c4-3a5c3d35d4d0",
-  "job_name": "folder/job-name",
-  "build_number": 123,
-  "jenkins_url": "https://jenkins.example.com/job/folder/job-name/123/",
-  "status": "completed",
-  "summary": "1 CODE ISSUE",
   "ai_provider": "claude",
-  "ai_model": "sonnet",
-  "failures": [
-    {
-      "test_name": "tests.api.test_login.test_admin_login",
-      "error": "AssertionError: expected 200 got 500",
-      "analysis": {
-        "classification": "CODE ISSUE",
-        "details": "Null-check missing in auth handler."
-      },
-      "error_signature": "4f9f8a0f..."
-    }
-  ],
-  "child_job_analyses": []
+  "ai_model": "opus-4",
+  "wait_for_completion": true,
+  "poll_interval_minutes": 2
 }
 ```
 
-### `FailureAnalysisResult`
+### `/analyze-failures` input objects
 
-Completed direct-failure analysis result.
+#### `failures[]`
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `job_id` | `string` | required | Analysis job identifier. |
-| `status` | `completed \| failed` | required | Direct-analysis status. |
-| `summary` | `string` | required | Result summary. |
-| `ai_provider` | `string` | `""` | AI provider used. |
-| `ai_model` | `string` | `""` | AI model used. |
-| `failures` | `array<FailureAnalysis>` | `[]` | Analyzed failures. |
-| `enriched_xml` | `string \| null` | `null` | Enriched JUnit XML when `raw_xml` input was used. |
+| `test_name` | string | required | Fully qualified test name. |
+| `error_message` | string | `""` | Failure message. |
+| `stack_trace` | string | `""` | Full stack trace. |
+| `duration` | number | `0.0` | Test duration in seconds. |
+| `status` | string | `FAILED` | Failure status label. |
 
-Effect: returned directly by `POST /analyze-failures` and via `GET /results/{job_id}` for completed direct analyses.
+#### Request fields
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `failures` | array<object> \| null | none | Raw failures to analyze. Required unless `raw_xml` is provided. |
+| `raw_xml` | string \| null | none | Raw JUnit XML. Required unless `failures` is provided. |
 
 ```json
 {
-  "job_id": "14a2b5d1-3d67-4d4d-92f8-8b2bc0d1a8a0",
-  "status": "completed",
-  "summary": "1 CODE ISSUE",
+  "failures": [
+    {
+      "test_name": "tests.test_auth.test_login",
+      "error_message": "assert False",
+      "stack_trace": "File tests/test_auth.py, line 42"
+    }
+  ],
   "ai_provider": "claude",
-  "ai_model": "sonnet",
-  "failures": [
-    {
-      "test_name": "tests.api.test_login.test_admin_login",
-      "error": "AssertionError: expected 200 got 500",
-      "analysis": {
-        "classification": "CODE ISSUE",
-        "details": "Null-check missing in auth handler."
-      },
-      "error_signature": "4f9f8a0f..."
-    }
-  ],
-  "enriched_xml": "<testsuite>...</testsuite>"
+  "ai_model": "opus-4"
 }
 ```
-
-### `ResultEnvelope`
-
-Stored result wrapper returned by `GET /results/{job_id}`.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `job_id` | `string` | required | Analysis job identifier. |
-| `jenkins_url` | `string` | required | Stored Jenkins URL or empty string for direct-failure analyses. |
-| `status` | `string` | required | Top-level persisted job status. |
-| `result` | `object` | required | Result payload. Completed Jenkins analyses use `AnalysisResult`; completed direct analyses use `FailureAnalysisResult`; in-progress and failed rows return partial objects. |
-| `created_at` | `string` | required | Row creation timestamp. |
-| `completed_at` | `string \| null` | `null` | Completion timestamp when available. |
-| `analysis_started_at` | `string \| null` | `null` | Analysis start timestamp when available. |
-| `capabilities` | `object` | required | Same shape as `GET /api/capabilities`. |
-| `base_url` | `string` | required | `PUBLIC_BASE_URL` when configured, otherwise `""`. |
-| `result_url` | `string` | required | Absolute URL when `base_url` is set, otherwise a relative `/results/{job_id}` path. |
-
-Additional `result` fields seen in stored rows:
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `request_params` | `object` | Effective request settings used for the analysis. Mirrors the applicable request schema plus derived `tests_repo_ref`; public responses redact secret keys. |
-| `progress_phase` | `string` | Current progress phase for in-flight work. |
-| `progress_log` | `array<object>` | Phase history entries shaped like `{phase, timestamp}`. |
-| `error` | `string` | Failure message for `status="failed"` rows. |
-
-Effect: canonical polling and retrieval response for stored jobs.
-
-```json
-{
-  "job_id": "9f5d0a0c-32c0-4f3f-b5c4-3a5c3d35d4d0",
-  "jenkins_url": "https://jenkins.example.com/job/folder/job-name/123/",
-  "status": "completed",
-  "result": {
-    "job_id": "9f5d0a0c-32c0-4f3f-b5c4-3a5c3d35d4d0",
-    "job_name": "folder/job-name",
-    "build_number": 123,
-    "status": "completed",
-    "summary": "1 CODE ISSUE",
-    "ai_provider": "claude",
-    "ai_model": "sonnet",
-    "failures": [],
-    "child_job_analyses": [],
-    "request_params": {
-      "ai_provider": "claude",
-      "ai_model": "sonnet",
-      "tests_repo_url": "https://github.com/acme/tests.git",
-      "tests_repo_ref": "main",
-      "peer_ai_configs": [],
-      "additional_repos": []
-    },
-    "progress_phase": "saving",
-    "progress_log": [
-      {
-        "phase": "analyzing",
-        "timestamp": 1711111111.0
-      }
-    ]
-  },
-  "created_at": "2026-04-18 10:20:30",
-  "completed_at": "2026-04-18 10:22:01",
-  "analysis_started_at": "2026-04-18 10:20:31",
-  "capabilities": {
-    "github_issues_enabled": true,
-    "jira_issues_enabled": true,
-    "server_github_token": false,
-    "server_jira_token": true,
-    "server_jira_email": true,
-    "server_jira_project_key": "PROJ",
-    "reportportal": false,
-    "reportportal_project": ""
-  },
-  "base_url": "https://jji.example.com",
-  "result_url": "https://jji.example.com/results/9f5d0a0c-32c0-4f3f-b5c4-3a5c3d35d4d0"
-}
-```
-
-### `PreviewIssueResponse`
-
-Preview response for GitHub and Jira issue content.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `title` | `string` | required | Generated title. |
-| `body` | `string` | required | Generated markdown/body text. |
-| `similar_issues` | `array<object>` | `[]` | Best-effort duplicate matches. Each item may include `number`, `key`, `title`, `url`, and `status`. |
-
-Effect: returned by the preview endpoints.
-
-```json
-{
-  "title": "Admin login fails with HTTP 500",
-  "body": "## Summary\nThe auth handler dereferences a null user.\n",
-  "similar_issues": [
-    {
-      "number": 42,
-      "key": "",
-      "title": "Login API returns 500 on missing user",
-      "url": "https://github.com/acme/tests/issues/42",
-      "status": "open"
-    }
-  ]
-}
-```
-
-### `CreateIssueResponse`
-
-Issue creation response for GitHub and Jira.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `url` | `string` | required | Created issue URL. |
-| `key` | `string` | `""` | Jira issue key. Empty for GitHub. |
-| `number` | `integer` | `0` | GitHub issue number. `0` for Jira. |
-| `title` | `string` | required | Created issue title. |
-| `comment_id` | `integer` | `0` | Auto-created comment linking the issue back to the analysis. |
-
-Effect: returned by both creation endpoints.
-
-```json
-{
-  "url": "https://github.com/acme/tests/issues/57",
-  "key": "",
-  "number": 57,
-  "title": "Admin login fails with HTTP 500",
-  "comment_id": 12
-}
-```
-
-### `ReportPortalPushResult`
-
-Report Portal push result.
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `pushed` | `integer` | required | Number of Report Portal items updated. |
-| `unmatched` | `array<string>` | `[]` | Report Portal item names that were not matched or could not be mapped. |
-| `errors` | `array<string>` | `[]` | User-facing integration errors. |
-| `launch_id` | `integer \| null` | `null` | Matched Report Portal launch ID when found. |
-
-Effect: returned by `POST /results/{job_id}/push-reportportal`.
-
-```json
-{
-  "pushed": 3,
-  "unmatched": [
-    "tests.api.test_misc.test_unmapped"
-  ],
-  "errors": [],
-  "launch_id": 1042
-}
-```
-
-## Analysis Endpoints
 
 ### `POST /analyze`
+Submit a Jenkins build for asynchronous analysis.
 
-Queue a Jenkins build for analysis.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| Body | object | required | Shared analysis override fields plus `/analyze` body fields. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `body` | body | `AnalyzeRequest` | required | Jenkins-backed analysis request. |
-
-Return value/effect: queues a background analysis job and returns `{status, job_id, message, base_url, result_url}`.
-
-Status codes: `202` queued; `400` invalid AI or peer configuration; `422` request validation failed.
+Return value/effect:
+- `202 Accepted` returns the queued job response.
+- `400 Bad Request` when AI provider/model configuration is missing or invalid.
+- `403 Forbidden` when the allow list rejects the caller.
+- `422 Unprocessable Entity` for validation errors.
 
 ```bash
-curl -sS -X POST "$BASE_URL/analyze" \
-  -H "Content-Type: application/json" \
+curl -X POST http://localhost:8000/analyze \
+  -H 'Content-Type: application/json' \
   -d '{
-    "job_name": "folder/job-name",
-    "build_number": 123,
-    "wait_for_completion": true,
+    "job_name": "folder/my-pipeline",
+    "build_number": 42,
     "ai_provider": "claude",
-    "ai_model": "sonnet"
+    "ai_model": "opus-4"
   }'
 ```
 
 ### `POST /analyze-failures`
+Analyze raw failures or raw JUnit XML without Jenkins polling.
 
-Analyze raw failures or raw JUnit XML without Jenkins.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| Body | object | required | Shared analysis override fields plus `/analyze-failures` input fields. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `body` | body | `AnalyzeFailuresRequest` | required | Direct-failure analysis request. |
-
-Return value/effect: returns a stored `FailureAnalysisResult`. When `raw_xml` is supplied, `enriched_xml` is included in the response.
-
-Status codes: `200` result returned; `400` invalid XML or invalid analysis configuration; `422` request validation failed.
+Return value/effect:
+- `200 OK` returns a direct-analysis result object with `job_id`, `status`, `summary`, `ai_provider`, `ai_model`, `failures`, optional `enriched_xml`, optional `token_usage`, plus `base_url` and `result_url`.
+- `status` inside the response body is `completed` or `failed`.
+- `400 Bad Request` for invalid XML or invalid/missing AI configuration.
+- `422 Unprocessable Entity` when both `failures` and `raw_xml` are supplied, when neither is supplied, or when nested validation fails.
+- If `raw_xml` contains no failures, the endpoint still returns `200` with `status: "completed"` and the original XML in `enriched_xml`.
 
 ```bash
-curl -sS -X POST "$BASE_URL/analyze-failures" \
-  -H "Content-Type: application/json" \
+curl -X POST http://localhost:8000/analyze-failures \
+  -H 'Content-Type: application/json' \
   -d '{
     "failures": [
       {
-        "test_name": "tests.api.test_login.test_admin_login",
-        "error_message": "AssertionError: expected 200 got 500",
-        "stack_trace": "Traceback..."
+        "test_name": "tests.test_auth.test_login",
+        "error_message": "assert False",
+        "stack_trace": "File tests/test_auth.py, line 42"
       }
     ],
     "ai_provider": "claude",
-    "ai_model": "sonnet"
+    "ai_model": "opus-4"
   }'
 ```
 
 ### `POST /re-analyze/{job_id}`
+Queue a fresh analysis for an existing result, reusing the original stored request parameters and applying any override fields supplied in the body.
 
-Queue a new Jenkins-backed analysis using a previous job’s stored request parameters, optionally overriding selected analysis fields.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Existing analysis job ID to reuse as the source request. |
+| Body | object | `{}` | Shared analysis override fields only. Omitted fields reuse the stored request parameters. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Existing stored result to reconstruct from. |
-| `body` | body | `BaseAnalysisRequest` | required | Override fields to apply on top of the stored request parameters. |
-
-Return value/effect: reconstructs the original Jenkins request, applies only the fields explicitly present in the body, and queues a new job with a fresh `job_id`.
-
-Status codes: `202` queued; `400` stored request parameters cannot be reconstructed or original job has no `request_params`; `404` source result not found; `422` validation failed.
+Return value/effect:
+- `202 Accepted` returns the queued job response for the new job ID.
+- `400 Bad Request` when the stored result has no reusable `request_params` or cannot be reconstructed.
+- `404 Not Found` when the source `job_id` does not exist.
+- `403 Forbidden` when the allow list rejects the caller.
+- `422 Unprocessable Entity` for override-field validation errors.
 
 ```bash
-curl -sS -X POST "$BASE_URL/re-analyze/$JOB_ID" \
-  -H "Content-Type: application/json" \
+curl -X POST http://localhost:8000/re-analyze/8d0f0a65-6b52-4eb9-8dc5-9e3c38f6f6a6 \
+  -H 'Content-Type: application/json' \
   -d '{
     "ai_provider": "gemini",
-    "ai_model": "gemini-2.5-pro",
-    "peer_ai_configs": []
+    "ai_model": "2.5-pro"
   }'
 ```
 
-## Result Endpoints
-
 ### `GET /results/{job_id}`
+Fetch the stored result envelope for a queued, running, completed, or failed job.
 
-Get the stored result for an analysis job.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Analysis job ID. |
+| `Accept` header | string | `application/json` | Use `application/json` for API JSON responses. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
+Return value/effect:
+- `200 OK` returns the stored result envelope when the job is completed or failed.
+- `202 Accepted` returns the same envelope shape while the job is still `pending`, `waiting`, or `running`.
+- `404 Not Found` when the job does not exist.
+- `result.request_params` is included when available, but secret fields and `additional_repos[].token` are removed from the response.
 
-Return value/effect: returns a `ResultEnvelope`.
-
-Status codes: `200` completed or failed result; `202` job is still pending, waiting, or running; `404` job not found.
-
-> **Note:** Use `Accept: application/json` for API reads. Browser-style HTML requests are handled by the frontend and can redirect in-progress jobs to `/status/{job_id}`.
+> **Note:** Browser-style HTML requests can redirect to UI routes instead of returning JSON.
 
 ```bash
-curl -sS "$BASE_URL/results/$JOB_ID" \
-  -H "Accept: application/json"
+curl http://localhost:8000/results/8d0f0a65-6b52-4eb9-8dc5-9e3c38f6f6a6 \
+  -H 'Accept: application/json'
 ```
 
 ### `GET /results`
-
 List recent analysis jobs.
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `limit` | query | `integer <= 100` | `50` | Maximum number of rows to return. |
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | `50` | Max number of rows to return. Maximum `100`. |
 
-Return value/effect: returns an array of summary objects shaped like `{job_id, jenkins_url, status, created_at}`, ordered newest first.
-
-Status codes: `200` success; `422` invalid query value.
+Return value/effect:
+- `200 OK` returns an array of recent result summaries.
+- Each item includes `job_id`, `jenkins_url`, `status`, and `created_at`.
+- `422 Unprocessable Entity` when `limit` exceeds `100` or fails validation.
 
 ```bash
-curl -sS "$BASE_URL/results?limit=25"
+curl 'http://localhost:8000/results?limit=10'
 ```
 
 ### `GET /api/dashboard`
+List dashboard entries with summary fields extracted from stored results.
 
-Get dashboard-ready result summaries.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
 
-Parameters: none.
-
-Return value/effect: returns up to 500 newest rows. Each row always includes `job_id`, `jenkins_url`, `status`, `created_at`, `completed_at`, `analysis_started_at`, `reviewed_count`, and `comment_count`. When parsed result data exists, rows also include `job_name`, `build_number`, `failure_count`, optional `child_job_count`, optional `summary`, and optional `error`.
-
-Status codes: `200` success.
-
-```bash
-curl -sS "$BASE_URL/api/dashboard"
-```
-
-### `DELETE /results/{job_id}`
-
-Delete an analysis job and all related stored data.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-
-Return value/effect: admin-only delete. Removes the result row plus comments, failure reviews, failure history, and test classifications for the job.
-
-Status codes: `200` deleted; `403` admin access required; `404` job not found.
+Return value/effect:
+- `200 OK` returns an array of dashboard entries.
+- Every item includes `job_id`, `jenkins_url`, `status`, `created_at`, `completed_at`, `analysis_started_at`, `reviewed_count`, and `comment_count`.
+- Items can also include `job_name`, `build_number`, `failure_count`, `child_job_count`, `summary`, and `error` when those values exist in `result_json`.
 
 ```bash
-curl -sS -X DELETE "$BASE_URL/results/$JOB_ID" \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl http://localhost:8000/api/dashboard
 ```
+
+### `GET /api/capabilities`
+Return server-level feature and credential flags used by the UI.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
+
+Return value/effect:
+- `200 OK` returns:
+  - `github_issues_enabled`
+  - `jira_issues_enabled`
+  - `server_github_token`
+  - `server_jira_token`
+  - `server_jira_email`
+  - `server_jira_project_key`
+  - `reportportal`
+  - `reportportal_project`
+
+```bash
+curl http://localhost:8000/api/capabilities
+```
+
+## Comments and review
+> **Note:** For UI workflow details, see [Review and Classify Failures](review-and-classify-failures.html).
 
 ### `GET /results/{job_id}/comments`
-
-Get all comments and review states for a stored job.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-
-Return value/effect: returns `{"comments": [...], "reviews": {...}}`.
-
-Comment item shape:
+Return all stored comments and review states for a job.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `id` | `integer` | required | Comment ID. |
-| `job_id` | `string` | required | Analysis job identifier. |
-| `test_name` | `string` | required | Failure test name. |
-| `child_job_name` | `string` | `""` | Child job scope. |
-| `child_build_number` | `integer` | `0` | Child build scope. |
-| `comment` | `string` | required | Comment text. |
-| `error_signature` | `string` | `""` | Deduplication signature copied from the stored failure when available. |
-| `username` | `string` | `""` | Username context stored with the comment. |
-| `created_at` | `string` | required | Comment timestamp. |
+| `job_id` | string | required | Analysis job ID. |
 
-Review map value shape:
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `reviewed` | `boolean` | required | Current reviewed state. |
-| `username` | `string` | `""` | Username that last updated the review state. |
-| `updated_at` | `string` | required | Last update timestamp. |
-
-Review map keys use `test_name` for top-level failures and `child_job_name#child_build_number::test_name` for child failures.
-
-Status codes: `200` success.
+Return value/effect:
+- `200 OK` returns:
+  - `comments`: array of comment objects with `id`, `job_id`, `test_name`, `child_job_name`, `child_build_number`, `comment`, `error_signature`, `username`, and `created_at`
+  - `reviews`: object keyed by `test_name` for top-level failures, or `child_job_name#child_build_number::test_name` for child-job failures
+- Review values include `reviewed`, `username`, and `updated_at`.
 
 ```bash
-curl -sS "$BASE_URL/results/$JOB_ID/comments"
+curl http://localhost:8000/results/job-123/comments
 ```
 
 ### `POST /results/{job_id}/comments`
+Add a comment to one stored failure.
 
-Add a comment to a failure in a stored result.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Analysis job ID. |
+| `test_name` | string | required | Failure test name. |
+| `comment` | string | required | Comment body. |
+| `child_job_name` | string | `""` | Child job name for nested failures. |
+| `child_build_number` | integer | `0` | Child build scope. `0` acts as a wildcard when `child_job_name` is supplied. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-| `test_name` | body | `string` | required | Failure test name. |
-| `comment` | body | `string` | required | Comment text. |
-| `child_job_name` | body | `string` | `""` | Child job scope. |
-| `child_build_number` | body | `integer >= 0` | `0` | Child build scope. |
-
-Return value/effect: creates a comment row and returns `{"id": <comment_id>}`. The server looks up `error_signature` from the stored result and stores the current username when available.
-
-Status codes: `201` created; `202` target job still pending/waiting/running; `400` invalid child scope; `404` job or failure not found; `409` target job failed; `422` validation failed.
+Return value/effect:
+- `201 Created` returns `{ "id": <comment_id> }`.
+- `400 Bad Request` when the test name is not present in the stored result or comment creation fails validation.
+- `404 Not Found` when the job does not exist.
+- `403 Forbidden` when the allow list rejects the caller.
+- When push notifications are configured, `@mentions` in the comment trigger best-effort notification fan-out.
 
 ```bash
-curl -sS -X POST "$BASE_URL/results/$JOB_ID/comments" \
-  -H "Content-Type: application/json" \
-  -H "Cookie: jji_username=alice" \
+curl -X POST http://localhost:8000/results/job-123/comments \
+  -H 'Content-Type: application/json' \
   -d '{
-    "test_name": "tests.api.test_login.test_admin_login",
-    "comment": "Fails only when the auth fixture runs after cache warm-up."
+    "test_name": "tests.test_auth.test_login",
+    "comment": "Opened ACME-123 for this failure."
   }'
 ```
 
 ### `DELETE /results/{job_id}/comments/{comment_id}`
+Delete one comment.
 
-Delete a comment.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Analysis job ID. |
+| `comment_id` | integer | required | Comment ID. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-| `comment_id` | path | `integer` | required | Comment identifier. |
-
-Return value/effect: returns `{"status": "deleted"}`. Admins can delete any comment; non-admin users can delete only their own comments.
-
-Status codes: `200` deleted; `401` username required; `404` comment not found or not owned by the caller.
+Return value/effect:
+- `200 OK` returns `{ "status": "deleted" }`.
+- `401 Unauthorized` when no current username is available.
+- `404 Not Found` when the comment is missing, or when a non-admin caller tries to delete a comment they do not own.
+- `403 Forbidden` when the allow list rejects the caller.
+- Admin callers can delete any comment for the job.
 
 ```bash
-curl -sS -X DELETE "$BASE_URL/results/$JOB_ID/comments/12" \
-  -H "Cookie: jji_username=alice"
+curl -X DELETE http://localhost:8000/results/job-123/comments/17
 ```
 
 ### `PUT /results/{job_id}/reviewed`
+Set or clear the reviewed state for one failure.
 
-Set the reviewed state for a failure.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Analysis job ID. |
+| `test_name` | string | required | Failure test name. |
+| `reviewed` | boolean | required | `true` marks the failure reviewed; `false` clears it. |
+| `child_job_name` | string | `""` | Child job name for nested failures. |
+| `child_build_number` | integer | `0` | Child build scope. `0` acts as a wildcard when `child_job_name` is supplied. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-| `test_name` | body | `string` | required | Failure test name. |
-| `reviewed` | body | `boolean` | required | New reviewed state. |
-| `child_job_name` | body | `string` | `""` | Child job scope. |
-| `child_build_number` | body | `integer >= 0` | `0` | Child build scope. |
-
-Return value/effect: returns `{"status": "ok", "reviewed_by": "<username-or-empty>"}`.
-
-Status codes: `200` updated; `202` target job still pending/waiting/running; `400` invalid child scope; `404` job or failure not found; `409` target job failed; `422` validation failed.
+Return value/effect:
+- `200 OK` returns `{ "status": "ok", "reviewed_by": "<username-or-empty>" }`.
+- `400 Bad Request` when the test is not present in the stored result.
+- `404 Not Found` when the job does not exist.
+- `403 Forbidden` when the allow list rejects the caller.
 
 ```bash
-curl -sS -X PUT "$BASE_URL/results/$JOB_ID/reviewed" \
-  -H "Content-Type: application/json" \
-  -H "Cookie: jji_username=alice" \
+curl -X PUT http://localhost:8000/results/job-123/reviewed \
+  -H 'Content-Type: application/json' \
   -d '{
-    "test_name": "tests.api.test_login.test_admin_login",
+    "test_name": "tests.test_auth.test_login",
     "reviewed": true
   }'
 ```
 
 ### `GET /results/{job_id}/review-status`
+Return dashboard-style review counts for one job.
 
-Get review counters for a job.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Analysis job ID. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-
-Return value/effect: returns `{total_failures, reviewed_count, comment_count}`.
-
-Status codes: `200` success.
+Return value/effect:
+- `200 OK` returns:
+  - `total_failures`
+  - `reviewed_count`
+  - `comment_count`
+- If the job has no stored result, the counts are `0`.
 
 ```bash
-curl -sS "$BASE_URL/results/$JOB_ID/review-status"
+curl http://localhost:8000/results/job-123/review-status
 ```
 
 ### `POST /results/{job_id}/enrich-comments`
+Resolve live status information for GitHub pull requests, GitHub issues, and Jira keys found inside stored comments.
 
-Resolve live GitHub and Jira statuses mentioned in stored comments.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Analysis job ID. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-
-Return value/effect: returns `{"enrichments": {...}}`, where each key is a comment ID string and each value is an array of objects shaped like `{type, key, status}`. `type` is `github_pr`, `github_issue`, or `jira`.
-
-Status codes: `200` success.
+Return value/effect:
+- `200 OK` returns `{ "enrichments": { ... } }`.
+- `enrichments` is keyed by comment ID string.
+- Each value is an array of objects with:
+  - `type`: `github_pr`, `github_issue`, or `jira`
+  - `key`: tracker-specific identifier such as `owner/repo#123` or `ACME-123`
+  - `status`: tracker status string
+- `403 Forbidden` when the allow list rejects the caller.
 
 ```bash
-curl -sS -X POST "$BASE_URL/results/$JOB_ID/enrich-comments"
+curl -X POST http://localhost:8000/results/job-123/enrich-comments
 ```
 
 ### `PUT /results/{job_id}/override-classification`
+Override the primary classification for one failure group inside a stored result.
 
-Override a stored failure classification.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Analysis job ID. |
+| `test_name` | string | required | Failure test name used to identify the group. |
+| `classification` | string | required | One of `CODE ISSUE`, `PRODUCT BUG`, or `INFRASTRUCTURE`. |
+| `child_job_name` | string | `""` | Child job name for nested failures. |
+| `child_build_number` | integer | `0` | Child build number. When `child_job_name` is set for this endpoint, a non-zero build number is required. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-| `test_name` | body | `string` | required | Representative test in the signature group to override. |
-| `classification` | body | `CODE ISSUE \| PRODUCT BUG \| INFRASTRUCTURE` | required | New classification. |
-| `child_job_name` | body | `string` | `""` | Child job scope. |
-| `child_build_number` | body | `integer >= 0` | `0` | Child build scope. Must be non-zero when `child_job_name` is set. |
-
-Return value/effect: returns `{"status": "ok", "classification": "<new value>"}`. The override is mirrored into stored history, applied to the matching failure group within the same job, and patched into stored `result_json` for future reads.
-
-Status codes: `200` updated; `202` target job still pending/waiting/running; `400` invalid child scope; `404` job or failure not found; `409` target job failed; `422` validation failed.
+Return value/effect:
+- `200 OK` returns `{ "status": "ok", "classification": "<value>" }`.
+- The override is applied to all failures in the same error-signature group within the job.
+- `400 Bad Request` when the job exists but the target failure cannot be resolved, or when child-job scoping is invalid.
+- `404 Not Found` when the job does not exist.
+- `403 Forbidden` when the allow list rejects the caller.
+- `422 Unprocessable Entity` when `classification` is not one of the allowed values.
 
 ```bash
-curl -sS -X PUT "$BASE_URL/results/$JOB_ID/override-classification" \
-  -H "Content-Type: application/json" \
-  -H "Cookie: jji_username=alice" \
+curl -X PUT http://localhost:8000/results/job-123/override-classification \
+  -H 'Content-Type: application/json' \
   -d '{
-    "test_name": "tests.api.test_login.test_admin_login",
-    "classification": "CODE ISSUE"
+    "test_name": "tests.test_auth.test_login",
+    "classification": "PRODUCT BUG"
   }'
 ```
 
-## History Endpoints
+## History
+> **Note:** For investigative workflows and interpretation guidance, see [Investigate Failure History](investigate-failure-history.html).
 
 ### `GET /history/failures`
+List failure-history rows with pagination and optional filters.
 
-Get paginated failure history.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `search` | string | `""` | Free-text search across `test_name`, `error_message`, and `job_name`. |
+| `job_name` | string | `""` | Exact `job_name` filter. |
+| `classification` | string | `""` | Exact classification filter. |
+| `limit` | integer | `50` | Max rows to return. Maximum `200`. |
+| `offset` | integer | `0` | Number of rows to skip. Minimum `0`. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `search` | query | `string` | `""` | Free-text search across `test_name`, `error_message`, and `job_name`. |
-| `job_name` | query | `string` | `""` | Exact top-level job-name filter. |
-| `classification` | query | `string` | `""` | Exact classification filter. |
-| `limit` | query | `integer <= 200` | `50` | Maximum rows to return. |
-| `offset` | query | `integer >= 0` | `0` | Pagination offset. |
-
-Return value/effect: returns `{"failures": [...], "total": <int>}`. Each row includes `id`, `job_id`, `job_name`, `build_number`, `test_name`, `error_message`, `error_signature`, `classification`, `child_job_name`, `child_build_number`, and `analyzed_at`.
-
-Status codes: `200` success; `422` invalid query value.
+Return value/effect:
+- `200 OK` returns:
+  - `failures`: array of rows with `id`, `job_id`, `job_name`, `build_number`, `test_name`, `error_message`, `error_signature`, `classification`, `child_job_name`, `child_build_number`, and `analyzed_at`
+  - `total`: total row count before pagination
+- `422 Unprocessable Entity` for query validation errors.
 
 ```bash
-curl -sS "$BASE_URL/history/failures?job_name=folder/job-name&classification=CODE%20ISSUE&limit=20"
+curl 'http://localhost:8000/history/failures?job_name=my-pipeline&classification=FLAKY&limit=25&offset=0'
 ```
 
-### `GET /history/test/{test_name:path}`
+### `GET /history/test/{test_name}`
+Return historical statistics and recent failure rows for one test.
 
-Get recent history for one test.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `test_name` | string | required | Test name path parameter. |
+| `limit` | integer | `20` | Max recent runs to return. Maximum `100`. |
+| `job_name` | string | `""` | Exact job-name filter. |
+| `exclude_job_id` | string | `""` | Excludes rows from one analysis job. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `test_name` | path | `string` | required | Full test name. Path form allows embedded slashes. |
-| `limit` | query | `integer <= 100` | `20` | Maximum `recent_runs` rows to return. |
-| `job_name` | query | `string` | `""` | Exact top-level job-name filter. |
-| `exclude_job_id` | query | `string` | `""` | Exclude one analysis job from the result. |
-
-Return value/effect: returns an object with `test_name`, `total_runs`, `failures`, `passes`, `failure_rate`, `first_seen`, `last_seen`, `last_classification`, `classifications`, `recent_runs`, `comments`, `consecutive_failures`, and `note`.
-
-Field notes:
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `classifications` | `object` | Count map keyed by classification. |
-| `recent_runs` | `array<object>` | Rows with `job_id`, `job_name`, `build_number`, `error_message`, `error_signature`, `classification`, `child_job_name`, `child_build_number`, and `analyzed_at`. |
-| `comments` | `array<object>` | Related comments shaped like `{comment, username, created_at}`. |
-| `passes` | `integer \| null` | `null` when `job_name` is omitted, because only failures are stored. |
-| `failure_rate` | `number \| null` | `null` when `job_name` is omitted. |
-
-Status codes: `200` success; `422` invalid query value.
+Return value/effect:
+- `200 OK` returns:
+  - `test_name`
+  - `total_runs`
+  - `failures`
+  - `passes`
+  - `failure_rate`
+  - `first_seen`
+  - `last_seen`
+  - `last_classification`
+  - `classifications`
+  - `recent_runs`
+  - `comments`
+  - `consecutive_failures`
+  - `note`
+- `passes` and `failure_rate` can be `null` when no `job_name` filter is supplied and the endpoint cannot compute a pass denominator.
+- When no matching history exists, the response still returns `200` with zeroed counts and empty collections.
 
 ```bash
-curl -sS "$BASE_URL/history/test/tests.api.test_login.test_admin_login?limit=10&job_name=folder/job-name"
+curl 'http://localhost:8000/history/test/tests.test_auth.test_login?limit=10&job_name=my-pipeline'
 ```
 
 ### `GET /history/search`
+Find failures that share one error signature.
 
-Find tests sharing an error signature.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `signature` | string | required | Error-signature hash to search. |
+| `exclude_job_id` | string | `""` | Excludes rows from one analysis job. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `signature` | query | `string` | required | Error signature hash to search for. |
-| `exclude_job_id` | query | `string` | `""` | Exclude one analysis job from the result. |
-
-Return value/effect: returns `{signature, total_occurrences, unique_tests, tests, last_classification, comments}`. `tests` items are `{test_name, occurrences}`. `comments` items are `{comment, username, created_at}`.
-
-Status codes: `200` success; `422` missing or invalid query value.
+Return value/effect:
+- `200 OK` returns:
+  - `signature`
+  - `total_occurrences`
+  - `unique_tests`
+  - `tests`: array of `{ "test_name": "...", "occurrences": <int> }`
+  - `last_classification`
+  - `comments`: array of `{ "comment": "...", "username": "...", "created_at": "..." }`
+- `422 Unprocessable Entity` when `signature` is omitted.
 
 ```bash
-curl -sS "$BASE_URL/history/search?signature=4f9f8a0f..."
+curl 'http://localhost:8000/history/search?signature=abc123def456'
 ```
 
-### `GET /history/stats/{job_name:path}`
+### `GET /history/stats/{job_name}`
+Return aggregate failure statistics for one Jenkins job name.
 
-Get aggregate statistics for a top-level job.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_name` | string | required | Jenkins job name path parameter. |
+| `exclude_job_id` | string | `""` | Excludes rows from one analysis job. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_name` | path | `string` | required | Top-level Jenkins job name. Path form allows embedded slashes. |
-| `exclude_job_id` | query | `string` | `""` | Exclude one analysis job from the calculation. |
-
-Return value/effect: returns `{job_name, total_builds_analyzed, builds_with_failures, overall_failure_rate, most_common_failures, recent_trend}`. `most_common_failures` items are `{test_name, count, classification}`. `recent_trend` is `improving`, `worsening`, or `stable`.
-
-Status codes: `200` success.
+Return value/effect:
+- `200 OK` returns:
+  - `job_name`
+  - `total_builds_analyzed`
+  - `builds_with_failures`
+  - `overall_failure_rate`
+  - `most_common_failures`: array of `{ "test_name": "...", "count": <int>, "classification": "..." }`
+  - `recent_trend`: `stable`, `improving`, or `worsening`
+- If no history exists for the job, the endpoint still returns `200` with zeroed counters and `recent_trend: "stable"`.
 
 ```bash
-curl -sS "$BASE_URL/history/stats/folder/job-name"
+curl 'http://localhost:8000/history/stats/my-pipeline'
 ```
 
 ### `POST /history/classify`
+Create a history classification record for one test.
 
-Store a history-domain classification for a test.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `test_name` | string | required | Test name to classify. |
+| `classification` | string | required | One of `FLAKY`, `REGRESSION`, `INFRASTRUCTURE`, `KNOWN_BUG`, or `INTERMITTENT`. |
+| `reason` | string | `""` | Free-text reason. |
+| `job_name` | string | `""` | Job name scope stored on the classification record. |
+| `references` | string | `""` | Reference text such as Jira keys or URLs. |
+| `job_id` | string | required | Analysis job ID that the classification is tied to. |
+| `child_build_number` | integer | `0` | Child build scope. `0` acts as the wildcard value. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `test_name` | body | `string` | required | Test name to classify. Blank-after-trim is rejected. |
-| `classification` | body | `FLAKY \| REGRESSION \| INFRASTRUCTURE \| KNOWN_BUG \| INTERMITTENT` | required | History classification. Input is normalized to uppercase. |
-| `reason` | body | `string` | `""` | Free-text reasoning. |
-| `job_name` | body | `string` | `""` | Child job name context. Empty string means top-level. |
-| `references` | body | `string` | `""` | External references. Required for `KNOWN_BUG`. |
-| `job_id` | body | `string` | required | Analysis job identifier used to scope the classification. |
-| `child_build_number` | body | `integer >= 0` | `0` | Child build scope. |
+Return value/effect:
+- `201 Created` returns `{ "id": <classification_id> }`.
+- `400 Bad Request` when `test_name` is blank or when `KNOWN_BUG` is sent without non-empty `references`.
+- `403 Forbidden` when the allow list rejects the caller.
+- `422 Unprocessable Entity` for validation errors.
 
-Return value/effect: creates a classification row and returns `{"id": <classification_id>}`.
-
-Status codes: `201` created; `400` invalid business rule such as blank `test_name` or missing `references` for `KNOWN_BUG`; `422` validation failed.
-
-> **Note:** Requests with a username context are stored as human-authored and immediately visible. Requests without a username context are stored as `created_by="ai"` and remain hidden until the related analysis makes them visible.
+> **Warning:** `classification: "KNOWN_BUG"` requires a non-empty `references` value.
 
 ```bash
-curl -sS -X POST "$BASE_URL/history/classify" \
-  -H "Content-Type: application/json" \
-  -H "Cookie: jji_username=alice" \
+curl -X POST http://localhost:8000/history/classify \
+  -H 'Content-Type: application/json' \
   -d '{
-    "test_name": "tests.api.test_login.test_admin_login",
+    "test_name": "tests.test_auth.test_login",
     "classification": "FLAKY",
-    "reason": "Intermittent timeout in shared CI",
-    "job_id": "'"$JOB_ID"'"
+    "reason": "Intermittent network timeout",
+    "job_id": "job-123"
   }'
 ```
 
 ### `GET /history/classifications`
-
-Read visible primary override classifications.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `test_name` | query | `string` | `""` | Exact test-name filter. |
-| `classification` | query | `string` | `""` | Exact primary classification filter. |
-| `job_name` | query | `string` | `""` | Exact child-job-name filter stored with the classification. |
-| `parent_job_name` | query | `string` | `""` | Exact top-level job-name filter. |
-| `job_id` | query | `string` | `""` | Exact analysis job filter. |
-
-Return value/effect: returns `{"classifications": [...]}`. Each row includes `id`, `test_name`, `job_name`, `parent_job_name`, `classification`, `reason`, `references_info`, `created_by`, `job_id`, `child_build_number`, and `created_at`.
-
-Status codes: `200` success.
-
-> **Note:** This reader intentionally returns only visible primary classifications (`CODE ISSUE`, `PRODUCT BUG`, `INFRASTRUCTURE`). History labels from `POST /history/classify` are not returned here.
-
-```bash
-curl -sS "$BASE_URL/history/classifications?test_name=tests.api.test_login.test_admin_login"
-```
-
-## Issue and Integration Endpoints
-
-### `POST /results/{job_id}/preview-github-issue`
-
-Generate GitHub issue content for a stored failure.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-| `body` | body | `PreviewIssueRequest` | required | Preview request. |
-
-Return value/effect: returns `PreviewIssueResponse`. The server resolves the effective stored classification first, so manual overrides affect the generated content. Duplicate search is best-effort and only runs when a target repo URL and GitHub token are available.
-
-Status codes: `200` preview returned; `202` target job still pending/waiting/running; `400` target repository URL cannot be resolved or test lookup is invalid; `403` GitHub issue creation disabled; `404` job or failure not found; `409` target job failed; `422` validation failed.
-
-```bash
-curl -sS -X POST "$BASE_URL/results/$JOB_ID/preview-github-issue" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "test_name": "tests.api.test_login.test_admin_login",
-    "include_links": true,
-    "github_repo_url": "https://github.com/acme/tests",
-    "github_token": "ghp_example"
-  }'
-```
-
-### `POST /results/{job_id}/preview-jira-bug`
-
-Generate Jira bug content for a stored failure.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-| `body` | body | `PreviewIssueRequest` | required | Preview request. |
-
-Return value/effect: returns `PreviewIssueResponse`. Duplicate search is best-effort and runs only when usable Jira credentials and a Jira project key are available.
-
-Status codes: `200` preview returned; `202` target job still pending/waiting/running; `400` Jira URL not configured or target lookup invalid; `403` Jira issue creation disabled; `404` job or failure not found; `409` target job failed; `422` validation failed.
-
-```bash
-curl -sS -X POST "$BASE_URL/results/$JOB_ID/preview-jira-bug" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "test_name": "tests.api.test_login.test_admin_login",
-    "include_links": true,
-    "jira_token": "jira_example",
-    "jira_email": "alice@example.com",
-    "jira_project_key": "PROJ"
-  }'
-```
-
-### `POST /results/{job_id}/create-github-issue`
-
-Create a GitHub issue for a stored failure.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-| `body` | body | `CreateIssueRequest` | required | Final issue payload and optional tracker overrides. |
-
-Return value/effect: returns `CreateIssueResponse`. When a username context exists, the server appends reporter attribution to the issue body and creates a matching comment on the analysis report.
-
-Status codes: `201` created; `202` target job still pending/waiting/running; `400` missing GitHub token or target repository URL, or invalid repository URL; `401` GitHub token invalid or expired; `403` GitHub issue creation disabled; `404` job or failure not found; `409` target job failed; `422` validation failed; `502` GitHub API error or unreachable response.
-
-```bash
-curl -sS -X POST "$BASE_URL/results/$JOB_ID/create-github-issue" \
-  -H "Content-Type: application/json" \
-  -H "Cookie: jji_username=alice" \
-  -d '{
-    "test_name": "tests.api.test_login.test_admin_login",
-    "title": "Admin login fails with HTTP 500",
-    "body": "## Failure\n`tests.api.test_login.test_admin_login`\n\n## Error\nAssertionError: expected 200 got 500",
-    "github_repo_url": "https://github.com/acme/tests",
-    "github_token": "ghp_example"
-  }'
-```
-
-### `POST /results/{job_id}/create-jira-bug`
-
-Create a Jira bug for a stored failure.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-| `body` | body | `CreateIssueRequest` | required | Final bug payload and optional tracker overrides. |
-
-Return value/effect: returns `CreateIssueResponse`. When a username context exists, the server appends reporter attribution to the Jira description and creates a matching comment on the analysis report.
-
-Status codes: `201` created; `202` target job still pending/waiting/running; `400` Jira URL not configured, missing Jira project key, or missing Jira credentials; `401` Jira token invalid or expired; `403` Jira issue creation disabled; `404` job or failure not found; `409` target job failed; `422` validation failed; `502` Jira API error or unreachable response.
-
-```bash
-curl -sS -X POST "$BASE_URL/results/$JOB_ID/create-jira-bug" \
-  -H "Content-Type: application/json" \
-  -H "Cookie: jji_username=alice" \
-  -d '{
-    "test_name": "tests.api.test_login.test_admin_login",
-    "title": "Admin login fails with HTTP 500",
-    "body": "Failure observed in CI pipeline build 123.",
-    "jira_token": "jira_example",
-    "jira_email": "alice@example.com",
-    "jira_project_key": "PROJ",
-    "jira_security_level": "Internal"
-  }'
-```
-
-### `POST /results/{job_id}/push-reportportal`
-
-Push stored classifications into Report Portal.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `job_id` | path | `string` | required | Analysis job identifier. |
-| `child_job_name` | query | `string \| null` | `null` | Child job name for a scoped push. |
-| `child_build_number` | query | `integer \| null` | `null` | Child build number for a scoped push. Required when `child_job_name` is supplied. |
-
-Return value/effect: returns `ReportPortalPushResult`.
-
-Status codes: `200` result returned; `400` Report Portal disabled/not configured, invalid child scope, or `PUBLIC_BASE_URL` missing; `404` job not found; `422` validation failed.
-
-> **Note:** Many integration problems remain HTTP `200` and are reported in `errors[]`. Use the body, not only the status code, to determine success.
-
-```bash
-curl -sS -X POST "$BASE_URL/results/$JOB_ID/push-reportportal"
-```
-
-### `GET /api/capabilities`
-
-Get server feature toggles and credential availability.
-
-Parameters: none.
-
-Return value/effect: returns an object with the fields below.
+List visible primary classification records.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `github_issues_enabled` | `boolean` | required | Whether GitHub issue creation is enabled. |
-| `jira_issues_enabled` | `boolean` | required | Whether Jira issue creation is enabled. |
-| `server_github_token` | `boolean` | required | Whether the server has its own GitHub token configured. |
-| `server_jira_token` | `boolean` | required | Whether the server has Jira credentials configured. |
-| `server_jira_email` | `boolean` | required | Whether the server has a Jira Cloud email configured. |
-| `server_jira_project_key` | `string` | required | Configured default Jira project key, or `""`. |
-| `reportportal` | `boolean` | required | Whether Report Portal integration is enabled and configured. |
-| `reportportal_project` | `string` | required | Configured Report Portal project, or `""`. |
+| `test_name` | string | `""` | Exact test-name filter. |
+| `classification` | string | `""` | Exact classification filter. |
+| `job_name` | string | `""` | Exact job-name filter. |
+| `parent_job_name` | string | `""` | Exact parent-job-name filter. |
+| `job_id` | string | `""` | Exact job-ID filter. |
 
-Status codes: `200` success.
+Return value/effect:
+- `200 OK` returns `{ "classifications": [...] }`.
+- Each classification row includes `id`, `test_name`, `job_name`, `parent_job_name`, `classification`, `reason`, `references_info`, `created_by`, `job_id`, `child_build_number`, and `created_at`.
+- This endpoint returns the visible primary-domain records used for stored failure overrides.
 
 ```bash
-curl -sS "$BASE_URL/api/capabilities"
+curl 'http://localhost:8000/history/classifications?classification=PRODUCT%20BUG'
 ```
 
-### `POST /api/jira-projects`
+## Auth state and saved user tokens
+> **Note:** This section documents the live auth-state and saved-token endpoints. For user bootstrap, API keys, and role-management workflows, see [Manage Users, Access, and Token Usage](manage-users-access-and-token-usage.html). For tracker-specific profile workflows, see [Configure Your Profile and Notifications](configure-your-profile-and-notifications.html).
 
-List Jira projects visible to the supplied Jira credentials.
+### `GET /api/auth/me`
+Return the current request's resolved user identity.
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `jira_token` | body | `string` | `""` | Jira token. |
-| `jira_email` | body | `string` | `""` | Jira Cloud email. |
-| `query` | body | `string` | `""` | Free-text project filter. |
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
 
-Return value/effect: returns an array of `{key, name}` objects. If no user token is supplied, the endpoint returns only the server-configured project key when available.
+Return value/effect:
+- `200 OK` returns:
+  - `username`
+  - `role`
+  - `is_admin`
+- The endpoint also returns `200` when no current user exists; in that case `username` is empty and `is_admin` is `false`.
 
-Status codes: `200` success.
-
-```bash
-curl -sS -X POST "$BASE_URL/api/jira-projects" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jira_token": "jira_example",
-    "jira_email": "alice@example.com",
-    "query": "PROJ"
-  }'
-```
-
-### `POST /api/jira-security-levels`
-
-List Jira security levels for a project.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `jira_token` | body | `string` | `""` | Jira token. |
-| `jira_email` | body | `string` | `""` | Jira Cloud email. |
-| `project_key` | body | `string` | required | Jira project key. |
-
-Return value/effect: returns an array of `{id, name, description}` objects. Failures are swallowed and returned as `[]`.
-
-Status codes: `200` success; `422` validation failed.
-
-```bash
-curl -sS -X POST "$BASE_URL/api/jira-security-levels" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jira_token": "jira_example",
-    "jira_email": "alice@example.com",
-    "project_key": "PROJ"
-  }'
-```
-
-### `POST /api/validate-token`
-
-Validate a GitHub or Jira token.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `token_type` | body | `github \| jira` | required | Tracker type to validate. |
-| `token` | body | `string` | required | Tracker token. |
-| `email` | body | `string` | `""` | Jira Cloud email. Ignored for GitHub. |
-
-Return value/effect: returns `{valid, username, message}`. For GitHub, `username` is the GitHub login. For Jira, `username` is the display name.
-
-Status codes: `200` validation result; `422` validation failed.
-
-> **Note:** Invalid tokens, missing tokens, and unreachable trackers still return HTTP `200`; inspect `valid` and `message`.
-
-```bash
-curl -sS -X POST "$BASE_URL/api/validate-token" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "token_type": "github",
-    "token": "ghp_example"
-  }'
-```
-
-## Authentication and User Endpoints
-
-### `POST /api/auth/login`
-
-Authenticate using the bootstrap admin key or an admin user API key.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `username` | body | `string` | required | Login username. Use literal `admin` when authenticating with the bootstrap admin key. |
-| `api_key` | body | `string` | required | Bootstrap admin key or stored admin user API key. |
-
-Return value/effect: returns `{username, role, is_admin}` and sets `jji_session` plus `jji_username` cookies.
-
-Status codes: `200` logged in; `400` invalid JSON body or missing fields; `401` invalid credentials.
-
-```bash
-curl -i -sS -X POST "$BASE_URL/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin",
-    "api_key": "'"$ADMIN_KEY"'"
-  }'
+```javascript
+const res = await fetch("/api/auth/me", { credentials: "include" });
+console.log(await res.json());
 ```
 
 ### `POST /api/auth/logout`
+Clear the current admin-auth state.
 
-Log out the current admin session.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
 
-Parameters: none.
+Return value/effect:
+- `200 OK` returns `{ "ok": true }`.
 
-Return value/effect: returns `{"ok": true}` and clears the `jji_session` cookie. The `jji_username` cookie is not removed.
-
-Status codes: `200` success.
-
-```bash
-curl -sS -X POST "$BASE_URL/api/auth/logout" \
-  -H "Cookie: jji_session=$SESSION_TOKEN"
-```
-
-### `GET /api/auth/me`
-
-Get the current request identity.
-
-Parameters: none.
-
-Return value/effect: returns `{username, role, is_admin}`. Unauthenticated requests return `{"username": "", "role": "user", "is_admin": false}`.
-
-Status codes: `200` success.
-
-```bash
-curl -sS "$BASE_URL/api/auth/me" \
-  -H "Cookie: jji_username=alice"
+```javascript
+const res = await fetch("/api/auth/logout", {
+  method: "POST",
+  credentials: "include"
+});
+console.log(await res.json());
 ```
 
 ### `GET /api/user/tokens`
+Return the current user's saved tracker tokens.
 
-Get the saved personal GitHub and Jira tokens for the current username context.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
 
-Parameters: none.
+Return value/effect:
+- `200 OK` returns `{ "github_token": "...", "jira_email": "...", "jira_token": "..." }`.
+- If the current username is unknown to the database, the endpoint still returns `200` with empty strings for all three fields.
+- `401 Unauthorized` when no current user exists.
 
-Return value/effect: returns `{github_token, jira_email, jira_token}` and sends `Cache-Control: no-store`. If the current username is not tracked in the local user table, all values are returned as empty strings.
-
-Status codes: `200` success; `401` username required.
-
-```bash
-curl -sS "$BASE_URL/api/user/tokens" \
-  -H "Cookie: jji_username=alice"
+```javascript
+const res = await fetch("/api/user/tokens", { credentials: "include" });
+console.log(await res.json());
 ```
 
 ### `PUT /api/user/tokens`
+Merge non-empty token fields into the current user's saved token record.
 
-Save personal tracker credentials for the current username context.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `github_token` | string | omitted | GitHub personal access token. |
+| `jira_email` | string | omitted | Jira Cloud email. |
+| `jira_token` | string | omitted | Jira token. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `github_token` | body | `string` | omitted | GitHub token. Empty string clears the stored value. |
-| `jira_email` | body | `string` | omitted | Jira Cloud email. Empty string clears the stored value. |
-| `jira_token` | body | `string` | omitted | Jira token. Empty string clears the stored value. |
+Return value/effect:
+- `200 OK` returns `{ "ok": true }`.
+- Only non-empty fields in the request body are written.
+- Omitted fields are left unchanged.
+- `401 Unauthorized` when no current user exists.
+- `404 Not Found` when the current username does not exist in the database.
 
-Return value/effect: updates only the fields present in the JSON object. Omitted fields are left unchanged. Returns `{"ok": true}`.
+> **Warning:** Blank-string values are not persisted as clears; only non-empty values are written.
 
-Status codes: `200` saved; `400` invalid JSON body or non-object body; `401` username required; `404` user not found.
+```javascript
+const res = await fetch("/api/user/tokens", {
+  method: "PUT",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    github_token: "ghp_example",
+    jira_email: "alice@example.com",
+    jira_token: "jira-example"
+  })
+});
+console.log(await res.json());
+```
+
+## Notifications and mentions
+> **Note:** For end-user setup and browser flow details, see [Configure Your Profile and Notifications](configure-your-profile-and-notifications.html).
+
+### `GET /api/notifications/vapid-public-key`
+Return the public VAPID key used by browser push subscriptions.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
+
+Return value/effect:
+- `200 OK` returns `{ "vapid_public_key": "..." }`.
+- `404 Not Found` when Web Push is not configured.
+- `503 Service Unavailable` when push support is enabled but the VAPID keys are unavailable.
+
+```javascript
+const res = await fetch("/api/notifications/vapid-public-key");
+console.log(await res.json());
+```
+
+### `POST /api/notifications/subscribe`
+Register or update one push subscription for the current user.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `endpoint` | string | required | HTTPS push endpoint URL. Maximum length `2048`. |
+| `p256dh_key` | string | required | Client public key. Maximum length `256`. |
+| `auth_key` | string | required | Client auth secret. Maximum length `256`. |
+
+Return value/effect:
+- `200 OK` returns `{ "status": "subscribed" }`.
+- The subscription is upserted by `endpoint`.
+- The server keeps at most `10` subscriptions per user and drops the oldest extras.
+- `401 Unauthorized` when no current user exists.
+- `404 Not Found` when Web Push is not configured.
+- `403 Forbidden` when the allow list rejects the caller.
+- `422 Unprocessable Entity` when validation fails, including non-HTTPS endpoints.
+
+```javascript
+const res = await fetch("/api/notifications/subscribe", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    endpoint: "https://push.example.com/sub/abc123",
+    p256dh_key: "p256dh-test",
+    auth_key: "auth-test"
+  })
+});
+console.log(await res.json());
+```
+
+### `POST /api/notifications/unsubscribe`
+Remove one push subscription for the current user.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `endpoint` | string | required | HTTPS push endpoint URL. Maximum length `2048`. |
+
+Return value/effect:
+- `200 OK` returns `{ "status": "unsubscribed" }`.
+- `401 Unauthorized` when no current user exists.
+- `404 Not Found` when Web Push is not configured or when the endpoint is not owned by the current user.
+- `403 Forbidden` when the allow list rejects the caller.
+- `422 Unprocessable Entity` when validation fails, including non-HTTPS endpoints.
+
+```javascript
+const res = await fetch("/api/notifications/unsubscribe", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    endpoint: "https://push.example.com/sub/abc123"
+  })
+});
+console.log(await res.json());
+```
+
+### `GET /api/users/mentions`
+Return comments that mention the current user.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `offset` | integer | `0` | Pagination offset. Negative values are clamped to `0`. |
+| `limit` | integer | `50` | Pagination size. Values above `200` are clamped to `200`. |
+| `unread_only` | boolean-like string | `false` | Truthy values: `true`, `1`, `yes`. |
+
+Return value/effect:
+- `200 OK` returns:
+  - `mentions`: array of mention objects with `id`, `job_id`, `test_name`, `child_job_name`, `child_build_number`, `comment`, `username`, `created_at`, and `is_read`
+  - `total`
+  - `unread_count`
+- `401 Unauthorized` when no current user exists.
+- `403 Forbidden` when the allow list rejects the caller.
+- `400 Bad Request` when `offset` or `limit` is not an integer.
+
+```javascript
+const res = await fetch("/api/users/mentions?unread_only=true&limit=20", {
+  credentials: "include"
+});
+console.log(await res.json());
+```
+
+### `POST /api/users/mentions/read`
+Mark specific mention rows as read for the current user.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `comment_ids` | array<integer> | required | Non-empty list of comment IDs. Booleans are rejected. |
+
+Return value/effect:
+- `200 OK` returns `{ "ok": true }`.
+- `401 Unauthorized` when no current user exists.
+- `403 Forbidden` when the allow list rejects the caller.
+- `400 Bad Request` when `comment_ids` is missing, empty, or contains non-integers.
+
+```javascript
+const res = await fetch("/api/users/mentions/read", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ comment_ids: [12, 15] })
+});
+console.log(await res.json());
+```
+
+### `POST /api/users/mentions/read-all`
+Mark every unread mention as read for the current user.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
+
+Return value/effect:
+- `200 OK` returns `{ "marked_read": <count> }`.
+- `401 Unauthorized` when no current user exists.
+- `403 Forbidden` when the allow list rejects the caller.
+
+```javascript
+const res = await fetch("/api/users/mentions/read-all", {
+  method: "POST",
+  credentials: "include"
+});
+console.log(await res.json());
+```
+
+### `GET /api/users/mentions/unread-count`
+Return the unread-mention badge count for the current user.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
+
+Return value/effect:
+- `200 OK` returns `{ "count": <int> }`.
+- `401 Unauthorized` when no current user exists.
+- `403 Forbidden` when the allow list rejects the caller.
+
+```javascript
+const res = await fetch("/api/users/mentions/unread-count", {
+  credentials: "include"
+});
+console.log(await res.json());
+```
+
+### `GET /api/users/mentionable`
+Return the list of usernames that can be mentioned.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
+
+Return value/effect:
+- `200 OK` returns `{ "usernames": ["alice", "bob", ...] }`.
+- `401 Unauthorized` when no current user exists.
+- `403 Forbidden` when the allow list rejects the caller.
+
+```javascript
+const res = await fetch("/api/users/mentionable", {
+  credentials: "include"
+});
+console.log(await res.json());
+```
+
+## Metadata
+> **Note:** For end-user metadata workflows and examples, see [Organize Jobs with Metadata](organize-jobs-with-metadata.html).
+
+### `GET /api/jobs/metadata`
+List all stored job metadata, optionally filtered.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `team` | string | `""` | Exact team filter. |
+| `tier` | string | `""` | Exact tier filter. |
+| `version` | string | `""` | Exact version filter. |
+| `label` | string (repeatable) | none | Label filter. Repeating the parameter requires all listed labels to be present. |
+
+Return value/effect:
+- `200 OK` returns an array of metadata objects with `job_name`, `team`, `tier`, `version`, and `labels`.
 
 ```bash
-curl -sS -X PUT "$BASE_URL/api/user/tokens" \
-  -H "Content-Type: application/json" \
-  -H "Cookie: jji_username=alice" \
+curl 'http://localhost:8000/api/jobs/metadata?team=platform&label=nightly&label=smoke'
+```
+
+### `GET /api/jobs/{job_name:path}/metadata`
+Return one metadata object.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_name` | string | required | Jenkins job name. Path-style folder names are supported. |
+
+Return value/effect:
+- `200 OK` returns `{ "job_name": "...", "team": "...", "tier": "...", "version": "...", "labels": [...] }`.
+- `404 Not Found` when no metadata exists for the job.
+
+```bash
+curl http://localhost:8000/api/jobs/folder/subfolder/my-job/metadata
+```
+
+### `PUT /api/jobs/{job_name:path}/metadata`
+Create or update one metadata record.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_name` | string | required | Jenkins job name. |
+| `team` | string \| null | omitted | Team value to write. |
+| `tier` | string \| null | omitted | Tier value to write. |
+| `version` | string \| null | omitted | Version value to write. |
+| `labels` | array<string> | omitted | Label array to write. |
+
+Return value/effect:
+- `200 OK` returns the stored metadata object.
+- Omitted fields are preserved from the existing record.
+- `403 Forbidden` without admin access.
+
+```bash
+curl -X PUT http://localhost:8000/api/jobs/my-job/metadata \
+  -H 'Authorization: Bearer <admin-bearer-token>' \
+  -H 'Content-Type: application/json' \
   -d '{
-    "github_token": "ghp_example",
-    "jira_email": "alice@example.com",
-    "jira_token": "jira_example"
+    "team": "platform",
+    "tier": "critical",
+    "labels": ["nightly", "smoke"]
   }'
 ```
 
-## Admin Endpoints
+### `DELETE /api/jobs/{job_name:path}/metadata`
+Delete one metadata record.
 
-### `POST /api/admin/users`
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_name` | string | required | Jenkins job name. |
 
-Create a new admin user.
-
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `username` | body | `string` | required | New admin username. Must be 2-50 characters, start alphanumeric, and then use only alphanumerics, `.`, `_`, or `-`. `admin` is reserved. |
-
-Return value/effect: returns `{username, api_key, role}` with `role="admin"` and sends `Cache-Control: no-store`.
-
-Status codes: `200` created; `400` invalid JSON, invalid username, or duplicate username; `403` admin access required.
+Return value/effect:
+- `200 OK` returns `{ "status": "deleted", "job_name": "..." }`.
+- `404 Not Found` when no metadata exists for the job.
+- `403 Forbidden` without admin access.
 
 ```bash
-curl -sS -X POST "$BASE_URL/api/admin/users" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
+curl -X DELETE http://localhost:8000/api/jobs/my-job/metadata \
+  -H 'Authorization: Bearer <admin-bearer-token>'
+```
+
+### `PUT /api/jobs/metadata/bulk`
+Bulk upsert metadata records.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `items` | array<object> | required | Array of `1` to `1000` metadata rows. Each row has `job_name`, `team`, `tier`, `version`, and `labels`. |
+
+Return value/effect:
+- `200 OK` returns `{ "updated": <count> }`.
+- `403 Forbidden` without admin access.
+- `422 Unprocessable Entity` when validation fails or a row is missing `job_name`.
+
+> **Warning:** Bulk import is a full row replace for each item. Optional fields omitted from an item are stored as `null` or `[]`, not preserved from an existing row.
+
+```bash
+curl -X PUT http://localhost:8000/api/jobs/metadata/bulk \
+  -H 'Authorization: Bearer <admin-bearer-token>' \
+  -H 'Content-Type: application/json' \
   -d '{
-    "username": "release-manager"
+    "items": [
+      {
+        "job_name": "job-a",
+        "team": "alpha"
+      },
+      {
+        "job_name": "job-b",
+        "team": "beta",
+        "labels": ["ci"]
+      }
+    ]
+  }'
+```
+
+### `GET /api/jobs/metadata/rules`
+Return the configured metadata-rule file name and normalized rule list.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
+
+Return value/effect:
+- `200 OK` returns:
+  - `rules_file`: basename of the configured rules file, or `null`
+  - `rules`: normalized rule array
+- Each rule can contain:
+  - `pattern`
+  - `team`
+  - `tier`
+  - `version`
+  - `labels`
+
+```bash
+curl http://localhost:8000/api/jobs/metadata/rules
+```
+
+### `POST /api/jobs/metadata/rules/preview`
+Preview the metadata that the current rule set would assign to one job name.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_name` | string | required | Jenkins job name to test against the loaded rules. |
+
+Return value/effect:
+- `200 OK` returns:
+  - `job_name`
+  - `matched`
+  - `metadata`: object or `null`
+- `422 Unprocessable Entity` when `job_name` is missing, blank, or not a string.
+
+```bash
+curl -X POST http://localhost:8000/api/jobs/metadata/rules/preview \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "job_name": "team-a/nightly"
+  }'
+```
+
+### `GET /api/dashboard/filtered`
+Return dashboard entries with attached metadata and optional metadata filters.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `team` | string | `""` | Exact team filter. |
+| `tier` | string | `""` | Exact tier filter. |
+| `version` | string | `""` | Exact version filter. |
+| `label` | string (repeatable) | none | Label filter. Repeating the parameter requires all listed labels to be present. |
+
+Return value/effect:
+- `200 OK` returns the same dashboard entry shape as `GET /api/dashboard`.
+- Every returned job also includes `metadata`, which is either a metadata object or `null`.
+- Without filters, the endpoint returns all dashboard jobs with metadata attached.
+
+```bash
+curl 'http://localhost:8000/api/dashboard/filtered?team=platform&label=nightly'
+```
+
+## Admin
+> **Note:** For admin workflows and operational guidance, see [Manage Users, Access, and Token Usage](manage-users-access-and-token-usage.html).
+
+### `DELETE /api/results/bulk`
+Delete multiple analysis jobs and their related data in one request.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_ids` | array<string> | required | Array of `1` to `500` job IDs. Duplicate IDs are de-duplicated while preserving order. |
+
+Return value/effect:
+- `200 OK` returns:
+  - `deleted`: array of deleted job IDs
+  - `failed`: array of `{ "job_id": "...", "reason": "..." }`
+  - `total`: number of unique job IDs processed
+- `403 Forbidden` without admin access.
+- `422 Unprocessable Entity` for validation errors.
+
+```bash
+curl -X DELETE http://localhost:8000/api/results/bulk \
+  -H 'Authorization: Bearer <admin-bearer-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "job_ids": ["job-1", "job-2"]
+  }'
+```
+
+### `DELETE /results/{job_id}`
+Delete one analysis job and all related data.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Analysis job ID. |
+
+Return value/effect:
+- `200 OK` returns `{ "status": "deleted", "job_id": "..." }`.
+- `404 Not Found` when the job does not exist.
+- `403 Forbidden` without admin access.
+
+```bash
+curl -X DELETE http://localhost:8000/results/job-123 \
+  -H 'Authorization: Bearer <admin-bearer-token>'
+```
+
+### `GET /api/admin/token-usage`
+Return aggregated AI token-usage totals with optional filters and grouping.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `start_date` | string | none | Lower bound for `created_at`. |
+| `end_date` | string | none | Upper bound for `created_at`. A date-only value such as `2026-04-27` is expanded to the end of that day. |
+| `ai_provider` | string | none | Exact provider filter. |
+| `ai_model` | string | none | Exact model filter. |
+| `call_type` | string | none | Exact call-type filter. |
+| `group_by` | string | none | One of `provider`, `model`, `call_type`, `day`, `week`, `month`, or `job`. |
+
+Return value/effect:
+- `200 OK` returns:
+  - `total_input_tokens`
+  - `total_output_tokens`
+  - `total_cache_read_tokens`
+  - `total_cache_write_tokens`
+  - `total_cost_usd`
+  - `total_calls`
+  - `total_duration_ms`
+  - `breakdown`
+- `breakdown` is empty when `group_by` is omitted.
+- When present, each breakdown row includes `group_key`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd`, `call_count`, and `avg_duration_ms`.
+- `403 Forbidden` without admin access.
+- `422 Unprocessable Entity` when `group_by` is not one of the supported values.
+
+```bash
+curl 'http://localhost:8000/api/admin/token-usage?group_by=provider&start_date=2026-04-01&end_date=2026-04-30' \
+  -H 'Authorization: Bearer <admin-bearer-token>'
+```
+
+### `GET /api/admin/token-usage/summary`
+Return dashboard-oriented token-usage summaries.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
+
+Return value/effect:
+- `200 OK` returns:
+  - `today`
+  - `this_week`
+  - `this_month`
+  - `top_models`
+  - `top_jobs`
+- Period objects include `calls`, `tokens`, `input_tokens`, `output_tokens`, and `cost_usd`.
+- `top_models` rows include `model`, `calls`, and `cost_usd`.
+- `top_jobs` rows include `job_id`, `calls`, and `cost_usd`.
+- `403 Forbidden` without admin access.
+
+```bash
+curl http://localhost:8000/api/admin/token-usage/summary \
+  -H 'Authorization: Bearer <admin-bearer-token>'
+```
+
+### `GET /api/admin/token-usage/{job_id}`
+Return raw token-usage records for one analysis job.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `job_id` | string | required | Analysis job ID. |
+
+Return value/effect:
+- `200 OK` returns:
+  - `job_id`
+  - `records`: array of rows with `id`, `job_id`, `created_at`, `ai_provider`, `ai_model`, `call_type`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `total_tokens`, `cost_usd`, `duration_ms`, `prompt_chars`, and `response_chars`
+- `404 Not Found` when no token-usage rows exist for the job.
+- `403 Forbidden` without admin access.
+
+```bash
+curl http://localhost:8000/api/admin/token-usage/job-123 \
+  -H 'Authorization: Bearer <admin-bearer-token>'
+```
+
+### `POST /api/admin/users`
+Create a new admin user and return its generated API key.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `username` | string | required | New admin username. Must be 2 to 50 characters, start with an alphanumeric character, and only contain letters, digits, `.`, `_`, or `-`. |
+
+Return value/effect:
+- `200 OK` returns `{ "username": "...", "api_key": "...", "role": "admin" }`.
+- `400 Bad Request` when the username is invalid, already taken, or reserved.
+- `403 Forbidden` without admin access.
+
+```bash
+curl -X POST http://localhost:8000/api/admin/users \
+  -H 'Authorization: Bearer <admin-bearer-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "username": "newadmin"
   }'
 ```
 
 ### `GET /api/admin/users`
+List tracked users.
 
-List all tracked users.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| None | n/a | n/a | No request parameters. |
 
-Parameters: none.
-
-Return value/effect: returns `{"users": [...]}`. Each user row includes `id`, `username`, `role`, `created_at`, and `last_seen`.
-
-Status codes: `200` success; `403` admin access required.
+Return value/effect:
+- `200 OK` returns `{ "users": [...] }`.
+- Each user row includes `id`, `username`, `role`, `created_at`, and `last_seen`.
+- `403 Forbidden` without admin access.
 
 ```bash
-curl -sS "$BASE_URL/api/admin/users" \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl http://localhost:8000/api/admin/users \
+  -H 'Authorization: Bearer <admin-bearer-token>'
 ```
 
 ### `DELETE /api/admin/users/{username}`
+Delete one admin user.
 
-Delete an admin user.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `username` | string | required | Admin username to delete. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `username` | path | `string` | required | Admin username to delete. |
-
-Return value/effect: returns `{"deleted": "<username>"}`. Active sessions for that user are removed.
-
-Status codes: `200` deleted; `400` cannot delete your own account or the last admin; `403` admin access required; `404` admin user not found.
+Return value/effect:
+- `200 OK` returns `{ "deleted": "<username>" }`.
+- `400 Bad Request` when the request would delete the caller's own account or the last admin user.
+- `404 Not Found` when the named admin user does not exist.
+- `403 Forbidden` without admin access.
 
 ```bash
-curl -sS -X DELETE "$BASE_URL/api/admin/users/release-manager" \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl -X DELETE http://localhost:8000/api/admin/users/oldadmin \
+  -H 'Authorization: Bearer <admin-bearer-token>'
 ```
 
 ### `PUT /api/admin/users/{username}/role`
+Change one tracked user's role.
 
-Change a user’s role.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `username` | string | required | Username to update. |
+| `role` | string | required | Target role: `admin` or `user`. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `username` | path | `string` | required | Username to update. |
-| `role` | body | `admin \| user` | required | New role. |
-
-Return value/effect: returns `{username, role}` and, when promoting to admin, also returns `api_key`. Responses use `Cache-Control: no-store`. Demotion removes the stored API key and invalidates that user’s sessions.
-
-Status codes: `200` updated; `400` invalid JSON, invalid role, same role, self-change, reserved `admin`, or last-admin demotion; `403` admin access required; `404` user not found.
+Return value/effect:
+- `200 OK` returns `{ "username": "...", "role": "..." }`.
+- When promoting to `admin`, the response also includes `api_key`.
+- Demoting an admin to `user` removes their admin key and invalidates their active sessions.
+- `400 Bad Request` when the caller targets themself, requests the current role, uses an invalid role, targets the reserved `admin` user, or attempts to demote the last admin.
+- `404 Not Found` when the user does not exist.
+- `403 Forbidden` without admin access.
 
 ```bash
-curl -sS -X PUT "$BASE_URL/api/admin/users/alice/role" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
+curl -X PUT http://localhost:8000/api/admin/users/alice/role \
+  -H 'Authorization: Bearer <admin-bearer-token>' \
+  -H 'Content-Type: application/json' \
   -d '{
     "role": "admin"
   }'
 ```
 
 ### `POST /api/admin/users/{username}/rotate-key`
+Rotate or set an admin user's API key.
 
-Rotate an admin user API key.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `username` | string | required | Admin username whose key will be rotated. |
+| `new_key` | string \| null | auto-generate | Optional replacement key. Must be at least 16 characters when supplied. |
 
-| Name | In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `username` | path | `string` | required | Admin username whose key will be rotated. |
-| `new_key` | body | `string \| omitted` | omitted | Optional replacement API key. Must be at least 16 characters when supplied. If omitted, the server generates a new key. |
-
-Return value/effect: returns `{username, new_api_key}` and sends `Cache-Control: no-store`. Existing sessions for that user are invalidated.
-
-Status codes: `200` rotated; `400` invalid JSON, non-object body, or invalid custom key; `403` admin access required; `404` admin user not found.
+Return value/effect:
+- `200 OK` returns `{ "username": "...", "new_api_key": "..." }`.
+- Existing sessions for that admin user are invalidated.
+- `400 Bad Request` for invalid JSON or invalid key input.
+- `404 Not Found` when the admin user does not exist.
+- `403 Forbidden` without admin access.
 
 ```bash
-curl -sS -X POST "$BASE_URL/api/admin/users/alice/rotate-key" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
+curl -X POST http://localhost:8000/api/admin/users/alice/rotate-key \
+  -H 'Authorization: Bearer <admin-bearer-token>' \
+  -H 'Content-Type: application/json' \
   -d '{
-    "new_key": "jji_custom_admin_key_123456"
+    "new_key": "a-very-long-custom-admin-key"
   }'
-```
-
-## Service Endpoints
-
-### `GET /ai-configs`
-
-List distinct AI provider/model pairs found in completed stored analyses.
-
-Parameters: none.
-
-Return value/effect: returns an array of objects shaped like `{ai_provider, ai_model}`.
-
-Status codes: `200` success.
-
-```bash
-curl -sS "$BASE_URL/ai-configs"
-```
-
-### `GET /health`
-
-Basic health check.
-
-Parameters: none.
-
-Return value/effect: returns `{"status": "healthy"}`.
-
-Status codes: `200` success.
-
-```bash
-curl -sS "$BASE_URL/health"
 ```
 
 ## Related Pages
 
 - [CLI Command Reference](cli-command-reference.html)
+- [Analyze a Jenkins Job](analyze-a-jenkins-job.html)
+- [Investigate Failure History](investigate-failure-history.html)
+- [Manage Users, Access, and Token Usage](manage-users-access-and-token-usage.html)
 - [Configuration and Environment Reference](configuration-and-environment-reference.html)
-- [Analyzing Jenkins Jobs](analyzing-jenkins-jobs.html)
-- [Analyzing JUnit XML and Raw Failures](analyzing-junit-xml-and-raw-failures.html)
-- [Managing Admin Users and API Keys](managing-admin-users-and-api-keys.html)

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>jenkins-job-insight</title>
+    <title>Push Classifications to Report Portal - jenkins-job-insight</title>
     <meta name="description" content="Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.">
     <link rel="stylesheet" href="assets/style.css">
     <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
@@ -86,7 +86,7 @@
                     
                     <li>
                         <a href="push-classifications-to-report-portal.html"
-                           class="nav-link">
+                           class="nav-link active" aria-current="page">
                             Push Classifications to Report Portal
                         </a>
                     </li>
@@ -197,187 +197,206 @@
 
         <main class="content">
             
-            <section class="index-header">
-                <h1 class="index-title">jenkins-job-insight</h1>
-                <p class="index-tagline">Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.</p>
-                
-                
-                  
-                    
-                  
-                
-                  
-                
-                  
-                
-                  
-                
-                
-                <a href="analyze-your-first-jenkins-job.html" class="index-cta">Get Started →</a>
-                
-            </section>
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="push-classifications-to-report-portal">Push Classifications to Report Portal</h1>
+<p>You want the classifications already saved in JJI to show up on the matching Report Portal failures so your triage stays consistent without relabeling the same failures twice. This guide shows the fastest push flow and how to interpret launches that only partially matched.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>A saved JJI analysis that already contains failures, plus its <code>job_id</code></li>
+<li>Report Portal configured on the JJI server with <code>REPORTPORTAL_URL</code>, <code>REPORTPORTAL_PROJECT</code>, <code>REPORTPORTAL_API_TOKEN</code>, and <code>PUBLIC_BASE_URL</code></li>
+<li>A Report Portal token that can update the target launch</li>
+<li>If your Report Portal uses a self-signed certificate, <code>REPORTPORTAL_VERIFY_SSL=false</code></li>
+</ul>
+<h2 id="quick-example">Quick example</h2>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>push-reportportal<span class="w"> </span>job-123
+</code></pre></div>
 
-            <section class="card-grid">
-                
-                <div class="card">
-                    <h3 class="card-title">Getting Started</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="analyze-your-first-jenkins-job.html">Analyze Your First Jenkins Job</a>
-                            
-                            <p class="card-page-desc">Start JJI with Docker or a local install, connect Jenkins and an AI provider, and open your first failure report in about a minute.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="analyze-your-first-jenkins-job.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">User Guides</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="configure-your-profile-and-notifications.html">Configure Your Profile and Notifications</a>
-                            
-                            <p class="card-page-desc">Choose your display name, save personal GitHub or Jira tokens for cross-browser use, and enable browser notifications for @mentions.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a>
-                            
-                            <p class="card-page-desc">Submit analyses from the dashboard, REST API, or `jji`, track queued jobs through the status view, and rerun builds when you need fresh results.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="review-and-classify-failures.html">Review and Classify Failures</a>
-                            
-                            <p class="card-page-desc">Work through grouped failures, nested child jobs, comments, mentions, reviewed states, and manual classification overrides in the report view.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="investigate-failure-history.html">Investigate Failure History</a>
-                            
-                            <p class="card-page-desc">Search past failures by test, signature, job, or classification so you can spot recurring breakage and separate noise from real regressions.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="customize-ai-analysis.html">Customize AI Analysis</a>
-                            
-                            <p class="card-page-desc">Choose providers and models, add peer reviewers, pass extra repositories, tune prompts, and control artifact and timeout behavior for better explanations.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a>
-                            
-                            <p class="card-page-desc">Preview issue text, check likely duplicates, select the right repo or Jira project, and create tickets directly from a failure.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="push-classifications-to-report-portal.html">Push Classifications to Report Portal</a>
-                            
-                            <p class="card-page-desc">Match analyzed failures to a Report Portal launch and publish classifications, including how to understand unmatched or partial results.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="organize-jobs-with-metadata.html">Organize Jobs with Metadata</a>
-                            
-                            <p class="card-page-desc">Assign team, tier, version, and labels to jobs, preview automatic matches, and use metadata filters to focus dashboards and triage queues.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="manage-users-access-and-token-usage.html">Manage Users, Access, and Token Usage</a>
-                            
-                            <p class="card-page-desc">Bootstrap admins, rotate API keys, enforce allow lists, change roles, and monitor AI token usage on a shared instance.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="configure-your-profile-and-notifications.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">Recipes</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="copy-common-analysis-recipes.html">Copy Common Analysis Recipes</a>
-                            
-                            <p class="card-page-desc">Use ready-made CLI and API snippets for background analysis, waiting for Jenkins, peer review, extra repo context, self-signed Jenkins, and forced analysis.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="copy-common-deployment-recipes.html">Copy Common Deployment Recipes</a>
-                            
-                            <p class="card-page-desc">Use working container and platform patterns for Docker Compose, dev mode, reverse-proxy deployments, health checks, metrics, and OpenShift alerts.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="copy-common-analysis-recipes.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">Reference</h3>
-                    <ul class="card-pages">
-                        
-                        <li>
-                            <a href="cli-command-reference.html">CLI Command Reference</a>
-                            
-                            <p class="card-page-desc">Look up `jji` commands, options, output modes, and profile-driven usage.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="rest-api-reference.html">REST API Reference</a>
-                            
-                            <p class="card-page-desc">Look up endpoints, request fields, status codes, and response shapes across analysis, history, comments, auth, notifications, metadata, and admin APIs.</p>
-                            
-                        </li>
-                        
-                        <li>
-                            <a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a>
-                            
-                            <p class="card-page-desc">Look up server env vars, `config.toml` profile fields, request overrides, metadata rules, and integration settings.</p>
-                            
-                        </li>
-                        
-                    </ul>
-                    
-                    <a href="cli-command-reference.html" class="card-link">Explore →</a>
-                    
-                </div>
-                
-            </section>
+<div class="highlight"><pre><span></span><code>Pushed 3 classification(s) to Report Portal
+Launch ID: 42
+</code></pre></div>
 
-            <div class="llm-docs-banner">
-                <div class="llm-docs-icon">🤖</div>
-                <div class="llm-docs-content">
-                    <strong>AI-friendly documentation</strong>
-                    <p>This documentation is optimized for AI consumption.</p>
-                    <div class="llm-docs-links">
-                        <a href="llms.txt">llms.txt</a> — structured index
-                        <span class="llm-docs-sep">·</span>
-                        <a href="llms-full.txt">llms-full.txt</a> — complete docs in one file
-                    </div>
+<p>Run this when the analysis is already saved in JJI. JJI finds the matching Report Portal launch, updates the matched failed items, and prints the launch it touched.</p>
+<h2 id="step-by-step">Step-by-step</h2>
+<ol>
+<li>Configure the server-side Report Portal settings.</li>
+</ol>
+<div class="highlight"><pre><span></span><code>REPORTPORTAL_URL=https://reportportal.example.com
+REPORTPORTAL_PROJECT=my-project
+REPORTPORTAL_API_TOKEN=your-rp-token
+PUBLIC_BASE_URL=https://jji.example.com
+
+# Optional for self-signed certificates
+REPORTPORTAL_VERIFY_SSL=false
+</code></pre></div>
+
+<p><code>REPORTPORTAL_URL</code>, <code>REPORTPORTAL_PROJECT</code>, and <code>REPORTPORTAL_API_TOKEN</code> make the feature available. <code>PUBLIC_BASE_URL</code> is required because each push includes a link back to the JJI report.</p>
+<blockquote>
+<p><strong>Tip:</strong> You usually do not need <code>ENABLE_REPORTPORTAL=true</code>. JJI enables the integration automatically when the URL, project, and token are set. <code>ENABLE_REPORTPORTAL=false</code> forces it off.</p>
+</blockquote>
+<p>See <a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a> for the full setting list.</p>
+<ol>
+<li>Push the saved analysis from the CLI.</li>
+</ol>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>push-reportportal<span class="w"> </span>job-123
+</code></pre></div>
+
+<p>JJI looks up the Report Portal launch by the Jenkins build URL stored with that analysis. It then updates the matched failed items with the JJI classification and a link back to the report.</p>
+<ol>
+<li>Use the web UI when you prefer point-and-click.</li>
+</ol>
+<p>Open the saved report and click <strong>Push to Report Portal</strong>. For reports without child jobs, the button appears in the main report header.</p>
+<ol>
+<li>Push a specific child job when the analysis contains pipeline or nested child runs.</li>
+</ol>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>push-reportportal<span class="w"> </span>job-123<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--child-job-name<span class="w"> </span><span class="s2">&quot;my-child&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--child-build-number<span class="w"> </span><span class="m">42</span>
+</code></pre></div>
+
+<p>Use the same child job name and build number shown in the JJI report. The same approach works for nested child jobs too.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>--child-job-name</code> and <code>--child-build-number</code> are a pair. If you provide the child job name, you must also provide the child build number.</p>
+</blockquote>
+<p>In the UI, use the <strong>Push to Report Portal</strong> button on the child job section you want to sync.</p>
+<ol>
+<li>Switch to JSON output when you need the exact result.</li>
+</ol>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>--json<span class="w"> </span>push-reportportal<span class="w"> </span>job-123
+</code></pre></div>
+
+<p>Use the returned fields to tell whether the push fully succeeded, partially succeeded, or needs follow-up. See <a href="cli-command-reference.html">CLI Command Reference</a> for the command variants and global options.</p>
+<h2 id="advanced-usage">Advanced Usage</h2>
+<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>--json<span class="w"> </span>push-reportportal<span class="w"> </span>job-123
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Common outcome</th>
+<th>Result pattern</th>
+<th>What it means</th>
+<th>What to do next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Successful push</td>
+<td><code>pushed &gt; 0</code>, <code>unmatched = []</code>, <code>errors = []</code></td>
+<td>Everything JJI could update was pushed cleanly.</td>
+<td>No follow-up needed.</td>
+</tr>
+<tr>
+<td><code>Some classifications could not be pushed.</code></td>
+<td><code>pushed &gt; 0</code> with <code>unmatched</code> or <code>errors</code></td>
+<td>JJI updated some Report Portal items, but not all of them.</td>
+<td>Review the unmatched names or errors, fix the cause, then run the same push again.</td>
+</tr>
+<tr>
+<td><code>No classifications could be matched.</code></td>
+<td><code>pushed = 0</code>, <code>unmatched</code> populated, <code>errors = []</code></td>
+<td>JJI finished the push attempt, but none of the remaining items could be turned into a Report Portal update.</td>
+<td>Check the unmatched names and the classification mapping below.</td>
+</tr>
+<tr>
+<td><code>Failed to push classifications to Report Portal.</code></td>
+<td><code>pushed = 0</code>, <code>errors</code> populated</td>
+<td>JJI could not complete the push.</td>
+<td>Fix the reported problem, then retry.</td>
+</tr>
+</tbody>
+</table>
+<p>For automation, read the JSON fields instead of relying on the process exit code alone. A push can return structured <code>unmatched</code> or <code>errors</code> details without turning into a CLI failure.</p>
+<p>JJI publishes these classification mappings into Report Portal:</p>
+<table>
+<thead>
+<tr>
+<th>JJI classification</th>
+<th>Sent to Report Portal as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PRODUCT BUG</code></td>
+<td>Product Bug</td>
+</tr>
+<tr>
+<td><code>CODE ISSUE</code></td>
+<td>Automation Bug</td>
+</tr>
+<tr>
+<td><code>INFRASTRUCTURE</code></td>
+<td>System Issue</td>
+</tr>
+</tbody>
+</table>
+<p>Matching is tolerant of common naming differences. Exact test-name matches work, and short Report Portal item names can still match fully qualified names from JJI, but unrelated naming schemes remain unmatched.</p>
+<p>Only failed Report Portal items are updated. If a failure already has Jira matches attached to a product-bug report, JJI pushes those issue links along with the classification. See <a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a> for that workflow.</p>
+<blockquote>
+<p><strong>Note:</strong> If a saved history classification marks a test as <code>INFRASTRUCTURE</code>, JJI pushes it to Report Portal as a System Issue even when the latest AI classification says something else.</p>
+</blockquote>
+<p>If you prefer a shorter command, <code>jji push-rp job-123</code> performs the same push.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li><code>Report Portal integration is disabled or not configured</code>: set <code>REPORTPORTAL_URL</code>, <code>REPORTPORTAL_PROJECT</code>, and <code>REPORTPORTAL_API_TOKEN</code>, and make sure <code>ENABLE_REPORTPORTAL</code> is not forcing the feature off.</li>
+<li><code>PUBLIC_BASE_URL must be set</code>: point <code>PUBLIC_BASE_URL</code> at the public JJI URL users actually open in the browser.</li>
+<li>The <strong>Push to Report Portal</strong> button is missing: the server is not currently exposing Report Portal support, or the report contains child jobs and you need the button inside the child job section instead.</li>
+<li><code>Job ... not found</code>: use the JJI <code>job_id</code>, not the Jenkins build number.</li>
+<li><code>Child job ... not found</code>: recheck both the child job name and child build number from the report.</li>
+<li><code>No failures to push to Report Portal.</code>: the selected report or child run has no failures, so JJI stops before contacting Report Portal.</li>
+<li><code>No Report Portal launch found</code>: make sure the matching Report Portal launch description contains the Jenkins build URL from the analyzed run.</li>
+<li><code>Ambiguous RP launch</code>: more than one launch matches the same Jenkins build URL. Remove the duplicate launches, then retry.</li>
+<li><code>No failed test items found in RP launch.</code>: the launch exists, but there were no failed items for JJI to update.</li>
+<li><code>No overlap</code> or many <code>unmatched</code> items: keep test names aligned between JJI and Report Portal. Short-name versus fully qualified-name differences are fine; unrelated names are not.</li>
+<li><code>403</code> or <code>Not a launch owner</code>: use a Report Portal token that has permission to update that launch.</li>
+<li>TLS or certificate errors: set <code>REPORTPORTAL_VERIFY_SSL=false</code> when your Report Portal uses a self-signed certificate.</li>
+</ul>
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="review-and-classify-failures.html">Review and Classify Failures</a></li>
+<li><a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a></li>
+<li><a href="create-github-issues-and-jira-bugs.html">Create GitHub Issues and Jira Bugs</a></li>
+<li><a href="cli-command-reference.html">CLI Command Reference</a></li>
+<li><a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a></li>
+</ul>
                 </div>
-            </div>
+            </article>
+            <nav class="page-nav">
+                
+                <a href="create-github-issues-and-jira-bugs.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Create GitHub Issues and Jira Bugs</span>
+                </a>
+                
+                
+                <a href="organize-jobs-with-metadata.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Organize Jobs with Metadata</span>
+                </a>
+                
+            </nav>
+            
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#prerequisites">Prerequisites</a></li>
+<li><a href="#quick-example">Quick example</a></li>
+<li><a href="#step-by-step">Step-by-step</a></li>
+<li><a href="#advanced-usage">Advanced Usage</a></li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+<li><a href="#related-pages">Related Pages</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+            
 
         </main>
 

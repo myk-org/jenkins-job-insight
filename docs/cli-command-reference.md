@@ -1,895 +1,1082 @@
 # CLI Command Reference
 
-## Global Options
+All commands below also accept the global options in this page. For request and response bodies, see [REST API Reference](rest-api-reference.html).
 
-These options apply to every command. `jji config ...` commands do not require a server connection.
+## Command groups
+| Group | Commands |
+| --- | --- |
+| Top level | `health`, `analyze`, `re-analyze`, `status`, `classify`, `capabilities`, `jira-projects`, `jira-security-levels`, `ai-configs`, `mentionable-users`, `mentions`, `mentions-mark-read`, `mentions-mark-all-read`, `preview-issue`, `create-issue`, `validate-token`, `push-reportportal`, `override-classification` |
+| `results` | `list`, `dashboard`, `show`, `delete`, `review-status`, `set-reviewed`, `enrich-comments` |
+| `history` | `test`, `search`, `stats`, `failures` |
+| `comments` | `list`, `add`, `delete` |
+| `classifications` | `list` |
+| `metadata` | `list`, `get`, `set`, `delete`, `import`, `rules`, `preview` |
+| `auth` | `login`, `logout`, `whoami` |
+| `admin users` | `list`, `create`, `delete`, `rotate-key`, `change-role` |
+| `admin` | `token-usage` |
+| `config` | `show`, `servers`, `completion` |
 
-| Name | Type | Default / source | Description |
+## Global options
+### `jji [GLOBAL OPTIONS] COMMAND`
+Applies connection, authentication, SSL, and JSON behavior to the invoked command.
+
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--server`, `-s` | string | `JJI_SERVER`, then `[default].server` | Server profile name or full `http://`/`https://` URL. A full URL does not load any other profile keys. |
-| `--json` | flag | `false` | Pretty-print JSON instead of text or table output. |
-| `--user` | string | `JJI_USERNAME`, then profile `username`, else empty | Username cookie used for comment and review attribution. |
-| `--api-key` | string | `JJI_API_KEY`, then profile `api_key`, else empty | Bearer token used for admin and other protected API calls. |
-| `--no-verify-ssl` | flag | `JJI_NO_VERIFY_SSL`, then profile `no_verify_ssl`, else `false` | Disable HTTPS certificate verification for the server connection. |
-| `--verify-ssl` | flag | unset | Force HTTPS certificate verification on, overriding profile `no_verify_ssl`. |
-| `--insecure` | flag | `false` | Alias for `--no-verify-ssl`. |
+| `--server`, `-s` | string | profile default or required | Server profile name or full server URL. Env: `JJI_SERVER`. |
+| `--json` | boolean | `false` | Pretty-print JSON instead of text output. |
+| `--user` | string | profile `username` or empty | Username used for comments and review actions. Env: `JJI_USERNAME`. |
+| `--api-key` | string | profile `api_key` or empty | Bearer token for admin-authenticated commands. Env: `JJI_API_KEY`. |
+| `--no-verify-ssl` | boolean | profile `no_verify_ssl` or `false` | Disable TLS certificate verification. Env: `JJI_NO_VERIFY_SSL`. |
+| `--verify-ssl` | boolean | unset | Force TLS verification on, overriding profile SSL settings. |
+| `--insecure` | boolean | `false` | Alias for `--no-verify-ssl`. |
 
 ```bash
-jji --server prod --api-key "$JJI_API_KEY" results list --json
-jji --server https://jji.example.com --insecure health
+jji --server prod --api-key "$JJI_API_KEY" results dashboard
 ```
 
-Effect: The CLI resolves the server, username, SSL behavior, and admin API key before running the selected command.
+**Return value/effect:** Applies the selected server, auth, SSL, and output mode to the command that follows.
 
-> **Note:** `--json` works both before the command and after the leaf command, for example `jji --json results list` and `jji results list --json`.
-
-
-> **Warning:** `--verify-ssl` and `--insecure` are mutually exclusive.
+> **Note:** `--json` works both before the command (`jji --json health`) and after the leaf command (`jji health --json`).
+>
 
 
-> **Note:** When the server returns `401` or `403`, the CLI prints a hint to use `--api-key` or `JJI_API_KEY`.
+> **Note:** If `--server` is a full `http://` or `https://` URL, profile defaults are not loaded for that invocation.
+>
 
-## Output Modes
 
-| Mode | Syntax | Behavior |
-| --- | --- | --- |
-| Text / table | default | Commands print aligned tables or command-specific summary text. Generic table output preserves full values and prints `No results.` for empty datasets. |
-| JSON | `--json` | Commands print pretty-formatted JSON with 2-space indentation. |
+> **Warning:** `--verify-ssl` and `--insecure` cannot be used together.
+
+## Output modes
+### `--json`
+Prints the full JSON payload for the selected command.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--json` | boolean | `false` | Switch from table/plain-text output to pretty-printed JSON. |
 
 ```bash
-jji results list --json
-jji --json history test tests.TestA.test_one
+jji results show job-123 --json
 ```
 
-Effect: JSON mode returns the raw response body for the command. Text mode may show a summary instead of every field.
+**Return value/effect:** Returns the raw command payload as formatted JSON.
 
-> **Note:** `jji capabilities` prints JSON even without `--json`.
+### `jji admin token-usage --format csv`
+Enables CSV output for token usage reporting.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--format` | string | `table` | Output format for `admin token-usage`: `table`, `json`, or `csv`. |
+
+```bash
+jji admin token-usage --group-by provider --format csv
+```
+
+**Return value/effect:** Prints CSV headers and rows for token-usage data.
+
+> **Note:** `--format csv` is only supported by `jji admin token-usage`.
+>
 
 
-> **Note:** `jji results show --full` also prints the full stored result document as JSON.
+> **Note:** Global `--json` overrides `--format`.
 
-## Config File
+## Profile-driven usage
+### Config file layout
+Profiles are loaded from `config.toml`.
 
-`jji` reads its local config file from `$XDG_CONFIG_HOME/jji/config.toml`. When `XDG_CONFIG_HOME` is unset, the path is `~/.config/jji/config.toml`.
-
-### Top-Level Sections
-
-| Section | Keys | Description |
-| --- | --- | --- |
-| `[default]` | `server` | Name of the default server profile used when `--server` and `JJI_SERVER` are unset. |
-| `[defaults]` | any server-profile keys except `server` | Shared values merged into every `[servers.<name>]` entry. |
-| `[servers.<name>]` | `url` plus optional profile keys | Named server profile. |
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `CONFIG_FILE` | path | `$XDG_CONFIG_HOME/jji/config.toml` or `~/.config/jji/config.toml` | CLI profile file location. |
+| `[default].server` | string | unset | Default profile name used when `--server` is omitted. |
+| `[defaults]` | table | unset | Values merged into every named profile. |
+| `[servers.<name>]` | table | required per profile | Named server profile. |
+| `XDG_CONFIG_HOME` | environment variable | unset | Overrides the base config directory. |
 
 ```toml
 [default]
 server = "dev"
 
 [defaults]
-username = "alice"
-tests_repo_url = "https://github.com/example/tests"
+jenkins_url = "https://jenkins.example.com"
 ai_provider = "claude"
 ai_model = "opus-4"
 
 [servers.dev]
 url = "http://localhost:8000"
-no_verify_ssl = true
+username = "alice"
 
 [servers.prod]
 url = "https://jji.example.com"
-api_key = "jji_admin_..."
-jira_token = "jira-token"
-jira_email = "alice@example.com"
-github_repo_url = "https://github.com/example/repo"
+username = "alice"
+api_key = "prod-api-key"
 ```
 
-Effect: The selected profile provides default values for shared connection settings and for commands such as `analyze`, `preview-issue`, `create-issue`, `jira-projects`, and `jira-security-levels`.
+**Return value/effect:** Commands can use a profile name with `--server`, or use the default profile automatically.
 
-> **Warning:** `[defaults].server` is invalid. Put the default profile name in `[default].server`.
+> **Note:** CLI flags and env vars override profile values.
+>
 
-### Resolution Rules
 
-| Priority | Source | Notes |
-| --- | --- | --- |
-| 1 | CLI flags and bound environment variables | Highest precedence. |
-| 2 | Selected `[servers.<name>]` entry | Loaded when `--server NAME` or `[default].server` selects a profile. |
-| 3 | `[defaults]` section | Merged into the selected server entry before command-specific overrides. |
-| 4 | Omitted | Unset fields are not sent by the CLI. |
+> **Tip:** See [Configuration and Environment Reference](configuration-and-environment-reference.html) for the full configuration surface.
 
-```bash
-jji --server prod health
-JJI_SERVER=prod jji health
-jji --server https://jji.example.com health
-```
-
-Effect: A concrete `http://` or `https://` value for `--server` or `JJI_SERVER` is self-contained; no other profile fields are inherited.
-
-### Profile Keys
+### Profile keys: connection and auth
+These keys are read directly by the CLI.
 
 | Key | Type | Default | Used by | Description |
 | --- | --- | --- | --- | --- |
-| `url` | string | required | all non-`config` commands | Base URL of the JJI server. Must be a non-empty trimmed string. |
-| `username` | string | `""` | shared global option | Default username cookie for comment and review actions. |
-| `no_verify_ssl` | boolean | `false` | shared global option | Default TLS verification behavior for the server connection. |
-| `api_key` | string | `""` | shared global option | Default Bearer token for admin and protected commands. |
-| `jenkins_url` | string | `""` | `analyze` | Default Jenkins server URL. |
-| `jenkins_user` | string | `""` | `analyze` | Default Jenkins username. |
-| `jenkins_password` | string | `""` | `analyze` | Default Jenkins password or API token. |
-| `jenkins_ssl_verify` | boolean | unset | `analyze` | Default Jenkins TLS verification flag. |
-| `tests_repo_url` | string | `""` | `analyze` | Default tests repository URL. |
-| `ai_provider` | string | `""` | `analyze` | Default AI provider. |
-| `ai_model` | string | `""` | `analyze` | Default AI model. |
-| `ai_cli_timeout` | integer | `0` | `analyze` | Default AI CLI timeout in minutes. `0` means unset in the CLI config. |
-| `jira_url` | string | `""` | `analyze` | Default Jira instance URL. |
-| `jira_email` | string | `""` | `analyze`, `jira-projects`, `jira-security-levels`, Jira issue preview/create | Default Jira Cloud email. |
-| `jira_api_token` | string | `""` | `analyze` | Default Jira Cloud API token for analysis-time Jira lookup. |
-| `jira_pat` | string | `""` | `analyze` | Default Jira Server / Data Center personal access token for analysis-time Jira lookup. |
-| `jira_token` | string | `""` | `jira-projects`, `jira-security-levels`, Jira issue preview/create | Default Jira token for Jira utility and Jira issue commands. |
-| `jira_project_key` | string | `""` | `analyze`, Jira issue preview/create | Default Jira project key. |
-| `jira_security_level` | string | `""` | Jira issue preview/create | Default Jira security level name. |
-| `jira_ssl_verify` | boolean | unset | `analyze` | Default Jira TLS verification flag. |
-| `jira_max_results` | integer | `0` | `analyze` | Default Jira search result limit. `0` means unset in the CLI config. |
-| `enable_jira` | boolean | unset | `analyze` | Default Jira integration toggle. |
-| `github_token` | string | `""` | `analyze`, GitHub issue preview/create | Default GitHub token. |
-| `github_repo_url` | string | `""` | GitHub issue preview/create | Default GitHub repository URL override. |
-| `peers` | string | `""` | `analyze` | Default peer-review list in `provider:model[,provider:model...]` format. |
-| `peer_analysis_max_rounds` | integer | `0` | `analyze` | Default peer review round limit. `0` means unset in the CLI config. |
-| `additional_repos` | string | `""` | `analyze` | Default additional repository list in `name:url[,name:url...]` format. Each URL may append `:ref`. |
-| `wait_for_completion` | boolean | unset | `analyze` | Default wait behavior before analysis starts. |
-| `poll_interval_minutes` | integer | `0` | `analyze` | Default Jenkins polling interval. `0` means unset in the CLI config. |
-| `max_wait_minutes` | integer | `0` | `analyze` | Default maximum wait time. `0` means unset in the CLI config. |
-
-```toml
-[servers.dev]
-url = "http://localhost:8000"
-username = "alice"
-jenkins_url = "https://jenkins.example.com"
-jira_token = "jira-token"
-github_repo_url = "https://github.com/example/repo"
-peers = "claude:opus-4,gemini:2.5-pro"
-additional_repos = "infra:https://github.com/example/infra:main"
-```
-
-Effect: These keys are read only when a named server profile is selected.
-
-> **Note:** `jira_token` is separate from `jira_api_token` and `jira_pat`. `analyze` reads `jira_api_token` / `jira_pat`; Jira utility and Jira issue commands read `jira_token`.
-
-
-> **Note:** `peers`, `jira_token`, `jira_security_level`, `github_repo_url`, and `additional_repos` must be strings. `peer_analysis_max_rounds` must be an integer.
-
-## Command Groups
-
-| Command | Effect with no leaf subcommand |
-| --- | --- |
-| `jji` | Prints top-level help. |
-| `jji results` | Prints `results` group help. |
-| `jji history` | Prints `history` group help. |
-| `jji comments` | Prints `comments` group help. |
-| `jji classifications` | Prints `classifications` group help. |
-| `jji auth` | Prints `auth` group help. |
-| `jji admin` | Prints `admin` group help. |
-| `jji admin users` | Prints `admin users` group help. |
-| `jji config` | Runs `jji config show`. |
+| `url` | string | required | all commands | Base URL for the server profile. |
+| `username` | string | `""` | global `--user` fallback | Default CLI username. |
+| `no_verify_ssl` | boolean | `false` | global SSL handling | Default TLS verification behavior. |
+| `api_key` | string | `""` | global `--api-key` fallback | Default admin bearer token. |
 
 ```bash
-jji --help
-jji results --help
-jji config
+jji --server prod health
 ```
 
-Effect: Group commands are navigation points; the executable work happens in the leaf commands below.
+**Return value/effect:** Resolves the server connection without repeating the full URL or admin key on every command.
 
-> **Tip:** `--help` is available on the root command, every command group, and every leaf command.
+### Profile keys: analysis defaults
+These keys are merged into `jji analyze` when the matching CLI option is omitted.
 
-## Core Commands
+| Key | Type | Default | Used by | Description |
+| --- | --- | --- | --- | --- |
+| `jenkins_url` | string | `""` | `analyze` | Jenkins base URL. |
+| `jenkins_user` | string | `""` | `analyze` | Jenkins username. |
+| `jenkins_password` | string | `""` | `analyze` | Jenkins password or token. |
+| `jenkins_ssl_verify` | boolean/null | unset | `analyze` | Jenkins TLS verification override. |
+| `jenkins_timeout` | integer | `0` | `analyze` | Jenkins request timeout override. `0` means no CLI override. |
+| `tests_repo_url` | string | `""` | `analyze` | Tests repository URL. |
+| `ai_provider` | string | `""` | `analyze` | Default AI provider. |
+| `ai_model` | string | `""` | `analyze` | Default AI model. |
+| `ai_cli_timeout` | integer | `0` | `analyze` | AI CLI timeout override in minutes. `0` means no CLI override. |
+| `enable_jira` | boolean/null | unset | `analyze` | Default Jira enable/disable state. |
+| `peers` | string | `""` | `analyze` | Peer AI list in `provider:model,provider:model` format. |
+| `peer_analysis_max_rounds` | integer | `0` | `analyze` | Peer analysis round override. `0` means no CLI override. |
+| `additional_repos` | string | `""` | `analyze` | Extra repo list in `name:url`, optional `:ref`, optional trailing `@token` format. |
+| `wait_for_completion` | boolean/null | unset | `analyze` | Default wait behavior before analysis starts. |
+| `poll_interval_minutes` | integer | `0` | `analyze` | Poll interval override. `0` means no CLI override. |
+| `max_wait_minutes` | integer | `0` | `analyze` | Max wait override. `0` means no CLI override. |
+| `force` | boolean/null | unset | `analyze` | Default force-analysis behavior. |
+
+```bash
+jji analyze --job-name periodic-e2e --build-number 274
+```
+
+**Return value/effect:** Sends profile defaults together with the required job name and build number.
+
+### Profile keys: Jira and GitHub defaults
+These keys are used by issue-preview, issue-creation, and Jira lookup commands.
+
+| Key | Type | Default | Used by | Description |
+| --- | --- | --- | --- | --- |
+| `jira_url` | string | `""` | `analyze` | Jira base URL for analysis-time matching. |
+| `jira_email` | string | `""` | `analyze`, `jira-projects`, `jira-security-levels`, Jira issue commands | Jira email value used when required. |
+| `jira_api_token` | string | `""` | `analyze` | Jira Cloud API token for analysis-time matching. |
+| `jira_pat` | string | `""` | `analyze` | Jira Server/DC PAT for analysis-time matching. |
+| `jira_token` | string | `""` | `jira-projects`, `jira-security-levels`, Jira issue commands | Jira token fallback for CLI lookup and issue commands. |
+| `jira_project_key` | string | `""` | `analyze`, Jira issue commands | Default Jira project key. |
+| `jira_security_level` | string | `""` | Jira issue commands | Default Jira security level name. |
+| `jira_ssl_verify` | boolean/null | unset | `analyze` | Jira TLS verification override. |
+| `jira_max_results` | integer | `0` | `analyze` | Jira search limit override. `0` means no CLI override. |
+| `github_token` | string | `""` | `analyze`, GitHub issue commands | GitHub token fallback. |
+| `github_repo_url` | string | `""` | GitHub issue commands | Default GitHub repository URL override. |
+
+```bash
+jji preview-issue job-123 --test tests.e2e.test_login --type jira
+```
+
+**Return value/effect:** Uses profile tracker defaults when matching CLI options are not supplied.
+
+## Server and discovery
+Global options are omitted from the tables below unless they change command behavior.
 
 ### `jji health`
-
 Checks server health.
 
-Parameters/options: shared global options only.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
 
 ```bash
 jji health
 ```
 
-Effect: Default output is a one-row status table. `--json` returns the raw health object.
-
-### `jji analyze`
-
-Queues a Jenkins build for analysis.
-
-#### Required parameters
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `--job-name`, `-j` | string | required | Jenkins job name. |
-| `--build-number`, `-b` | integer | required | Build number to analyze. Must be greater than `0`. |
-
-#### Analysis selection and AI options
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `--provider` | string | profile `ai_provider`, else unset | AI provider name. |
-| `--model` | string | profile `ai_model`, else unset | AI model name. |
-| `--jira` / `--no-jira` | flag pair | profile `enable_jira`, else unset | Enable or disable Jira integration for this request. |
-| `--raw-prompt` | string | unset | Extra instructions appended to the AI prompt. |
-| `--peers` | string | profile `peers`, else unset | Peer-review list in `provider:model[,provider:model...]` format. |
-| `--peer-analysis-max-rounds` | integer | profile `peer_analysis_max_rounds`, else unset | Peer-review round limit. Must be between `1` and `10`. |
-
-#### Jenkins, repository, Jira, and GitHub options
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `--jenkins-url` | string | `JENKINS_URL`, then profile `jenkins_url`, else unset | Jenkins server URL. |
-| `--jenkins-user` | string | `JENKINS_USER`, then profile `jenkins_user`, else unset | Jenkins username. |
-| `--jenkins-password` | string | `JENKINS_PASSWORD`, then profile `jenkins_password`, else unset | Jenkins password or API token. |
-| `--jenkins-ssl-verify` / `--no-jenkins-ssl-verify` | flag pair | profile `jenkins_ssl_verify`, else unset | Jenkins TLS verification flag. |
-| `--jenkins-artifacts-max-size-mb` | integer | unset | Maximum Jenkins artifact size in MB. Must be greater than `0`. |
-| `--get-job-artifacts` / `--no-get-job-artifacts` | flag pair | unset | Download or skip downloading all build artifacts for AI context. |
-| `--tests-repo-url` | string | `TESTS_REPO_URL`, then profile `tests_repo_url`, else unset | Tests repository URL. |
-| `--jira-url` | string | `JIRA_URL`, then profile `jira_url`, else unset | Jira instance URL. |
-| `--jira-email` | string | `JIRA_EMAIL`, then profile `jira_email`, else unset | Jira Cloud email. |
-| `--jira-api-token` | string | `JIRA_API_TOKEN`, then profile `jira_api_token`, else unset | Jira Cloud API token for analysis-time lookup. |
-| `--jira-pat` | string | `JIRA_PAT`, then profile `jira_pat`, else unset | Jira Server / Data Center personal access token for analysis-time lookup. |
-| `--jira-project-key` | string | `JIRA_PROJECT_KEY`, then profile `jira_project_key`, else unset | Jira project key. |
-| `--jira-ssl-verify` / `--no-jira-ssl-verify` | flag pair | profile `jira_ssl_verify`, else unset | Jira TLS verification flag. |
-| `--jira-max-results` | integer | profile `jira_max_results`, else unset | Maximum Jira search results. Must be greater than `0`. |
-| `--github-token` | string | `GITHUB_TOKEN`, then profile `github_token`, else unset | GitHub token. |
-| `--additional-repos` | string | profile `additional_repos`, else unset | Additional repositories in `name:url[,name:url...]` format. Each URL may append `:ref`. |
-
-#### Monitoring options
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `--wait` / `--no-wait` | flag pair | profile `wait_for_completion`, else unset | Wait or do not wait for Jenkins completion before analysis begins. |
-| `--poll-interval` | integer | profile `poll_interval_minutes`, else unset | Jenkins polling interval in minutes. Must be greater than `0`. |
-| `--max-wait` | integer | profile `max_wait_minutes`, else unset | Maximum wait time in minutes. Must be `0` or greater. |
-
-```bash
-jji analyze \
-  --job-name ocp-e2e \
-  --build-number 142 \
-  --provider claude \
-  --model opus-4 \
-  --jenkins-url https://jenkins.example.com \
-  --tests-repo-url https://github.com/example/tests \
-  --wait \
-  --poll-interval 5
-```
-
-Effect: Queues an analysis request. Default output prints `Job queued`, `Status`, and `Poll`; `--json` returns the queued response, including `job_id` and `result_url`.
-
-> **Note:** `--peers` accepts `provider:model[,provider:model...]`. `--additional-repos` accepts `name:url[,name:url...]`, and each URL may append `:ref` after the repository path.
-
-
-> **Warning:** Invalid `--peers`, invalid `--additional-repos`, out-of-range `--peer-analysis-max-rounds`, or invalid numeric bounds exit with status `1`.
-
-### `jji re-analyze JOB_ID`
-
-Re-runs a stored analysis with the same settings.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id to re-run. |
-
-```bash
-jji re-analyze old-job-1
-```
-
-Effect: Queues a new analysis. Default output prints the new `job_id`, `status`, and poll URL; `--json` returns the queued response.
-
-### `jji status JOB_ID`
-
-Checks the current status of an analysis job.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-
-```bash
-jji status abc-123
-```
-
-Effect: Default output prints only `job_id` and `status`. `--json` returns the full stored result object when available.
-
-## Results Commands
-
-### `jji results list`
-
-Lists recent analyzed jobs.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `--limit`, `-l` | integer | `50` | Maximum number of jobs to return. |
-
-```bash
-jji results list --limit 10
-```
-
-Effect: Default output shows `job_id`, `status`, `jenkins_url`, and `created_at`. `--json` returns the raw list.
-
-### `jji results dashboard`
-
-Lists jobs with dashboard metadata.
-
-Parameters/options: shared global options only.
-
-```bash
-jji results dashboard
-```
-
-Effect: Default output shows `job_id`, `job_name`, `build_number`, `status`, `failure_count`, `reviewed_count`, `comment_count`, and `created_at`. `--json` returns the raw list.
-
-### `jji results show JOB_ID`
-
-Shows a stored analysis result.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-| `--full`, `-f` | flag | `false` | Print the full stored result document as JSON. |
-
-```bash
-jji results show abc-123
-jji results show abc-123 --full
-```
-
-Effect: Default output is a summary row with `job_id`, `status`, `summary`, `failures`, `children`, `ai_provider`, and `created_at`. `--full` or `--json` prints the full stored result document.
-
-### `jji results delete JOB_ID`
-
-Deletes a stored job and related data.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id to delete. |
-
-```bash
-jji results delete abc-123
-```
-
-Effect: Default output prints `Deleted job <job_id>`. `--json` returns the API response.
-
-### `jji results review-status JOB_ID`
-
-Shows review progress for a stored analysis.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-
-```bash
-jji results review-status job-1
-```
-
-Effect: Default output is a one-row table with `total_failures`, `reviewed_count`, and `comment_count`. `--json` returns the raw response object.
-
-### `jji results set-reviewed JOB_ID`
-
-Sets or clears the reviewed state for a test failure.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-| `--test`, `-t` | string | required | Fully qualified test name. |
-| `--reviewed` / `--not-reviewed` | flag pair | required | Choose the reviewed state to apply. |
-| `--child-job` | string | `""` | Optional child job name. |
-| `--child-build` | integer | `0` | Optional child build number. Must be non-negative. Values greater than `0` require `--child-job`. |
-
-```bash
-jji results set-reviewed job-1 --test tests.TestA.test_one --reviewed
-```
-
-Effect: Default output prints `Marked as reviewed` or `Marked as not reviewed`, optionally with `reviewed_by`. `--json` returns the API response.
-
-### `jji results enrich-comments JOB_ID`
-
-Refreshes comment metadata such as live PR or ticket status.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-
-```bash
-jji results enrich-comments job-1
-```
-
-Effect: Default output prints `Enriched N comment(s).` `--json` returns the raw response object.
-
-## History Commands
-
-### `jji history test TEST_NAME`
-
-Shows failure history for one test.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `TEST_NAME` | string | required | Fully qualified test name. |
-| `--limit`, `-l` | integer | `20` | Maximum number of recent runs to include. |
-| `--job-name`, `-j` | string | `""` | Restrict history to one Jenkins job name. |
-| `--exclude-job-id` | string | `""` | Exclude one stored analysis job id from the history query. |
-
-```bash
-jji history test tests.TestA.test_one --limit 10
-```
-
-Effect: Default output prints summary fields plus optional `Recent runs` and `Comments` tables. `--json` returns the full history document.
-
-### `jji history search`
-
-Finds tests that share an error signature.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `--signature`, `-s` | string | required | Error signature hash. |
-| `--exclude-job-id` | string | `""` | Exclude one stored analysis job id from the search. |
-
-```bash
-jji history search --signature sig-abc123
-```
-
-Effect: Default output prints signature totals and a test occurrence table. `--json` returns the full search response.
-
-### `jji history stats JOB_NAME`
-
-Shows aggregate statistics for one Jenkins job.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_NAME` | string | required | Jenkins job name. |
-| `--exclude-job-id` | string | `""` | Exclude one stored analysis job id from the stats query. |
-
-```bash
-jji history stats ocp-e2e
-```
-
-Effect: Default output prints aggregate counts plus an optional `Most common failures` table. `--json` returns the full stats object.
-
-### `jji history failures`
-
-Lists paginated failure history.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `--limit`, `-l` | integer | `50` | Page size. |
-| `--offset`, `-o` | integer | `0` | Page offset. |
-| `--search`, `-s` | string | `""` | Test-name search text. |
-| `--classification`, `-c` | string | `""` | Classification filter. |
-| `--job-name`, `-j` | string | `""` | Jenkins job-name filter. |
-
-```bash
-jji history failures --classification "PRODUCT BUG" --job-name ocp-e2e --limit 25
-```
-
-Effect: Default output prints a `Total:` line and a failure table. `--json` returns the paginated response object.
-
-## Classification Commands
-
-### `jji classify TEST_NAME`
-
-Creates a manual classification for a failure.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `TEST_NAME` | string | required | Fully qualified test name. |
-| `--type`, `-t` | string | required | Manual classification. The CLI uppercases the value before sending it. CLI help lists `FLAKY`, `REGRESSION`, `INFRASTRUCTURE`, `KNOWN_BUG`, and `INTERMITTENT`. |
-| `--job-id` | string | required | Stored analysis job id this classification applies to. |
-| `--reason`, `-r` | string | `""` | Free-form reason text. |
-| `--job-name`, `-j` | string | `""` | Parent job name when no child job is supplied. |
-| `--references` | string | `""` | Bug URLs or ticket keys. |
-| `--child-job` | string | `""` | Optional child job name. |
-| `--child-build` | integer | `0` | Optional child build number. |
-
-```bash
-jji classify tests.TestA.test_one --type FLAKY --job-id job-123 --reason "intermittent DNS"
-```
-
-Effect: Default output prints the created record id. `--json` returns the created classification object.
-
-### `jji classifications list`
-
-Lists stored manual classifications.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `--job-id` | string | `""` | Filter by stored analysis job id. |
-| `--test-name`, `-t` | string | `""` | Filter by fully qualified test name. |
-| `--type`, `-c` | string | `""` | Classification filter. The CLI uppercases the value before sending it. |
-| `--job-name`, `-j` | string | `""` | Filter by job name. |
-| `--parent-job-name` | string | `""` | Filter by parent job name. |
-
-```bash
-jji classifications list --type flaky --parent-job-name pipeline-parent
-```
-
-Effect: Default output prints classification rows or `No classifications found.` `--json` returns the full `{classifications:[...]}` payload.
-
-### `jji override-classification JOB_ID`
-
-Overrides a failure classification in a stored result.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-| `--test`, `-t` | string | required | Fully qualified test name. |
-| `--classification`, `-c` | string | required | Override value. CLI help lists `CODE ISSUE`, `PRODUCT BUG`, and `INFRASTRUCTURE`. |
-| `--child-job` | string | `""` | Optional child job name. |
-| `--child-build` | integer | `0` | Optional child build number. |
-
-```bash
-jji override-classification job-1 --test tests.TestA.test_one --classification "PRODUCT BUG"
-```
-
-Effect: Default output prints the new classification. `--json` returns the API response.
-
-## Comment Commands
-
-> **Note:** Comment and review commands use the shared `--user` option or the selected profile `username` for attribution.
-
-### `jji comments list JOB_ID`
-
-Lists comments for one stored analysis job.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-
-```bash
-jji comments list job-1
-```
-
-Effect: Default output prints comment rows or `No comments for this job.` `--json` returns the full response, including `comments` and `reviews`.
-
-### `jji comments add JOB_ID`
-
-Adds a comment to one failure.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-| `--test`, `-t` | string | required | Fully qualified test name. |
-| `--message`, `-m` | string | required | Comment text. |
-| `--child-job` | string | `""` | Optional child job name. |
-| `--child-build` | integer | `0` | Optional child build number. |
-
-```bash
-jji comments add job-1 --test tests.TestA.test_one --message "Opened JIRA-123"
-```
-
-Effect: Default output prints `Comment added (id: ...)`. `--json` returns the created comment object.
-
-### `jji comments delete JOB_ID COMMENT_ID`
-
-Deletes a comment.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-| `COMMENT_ID` | integer | required | Comment id to delete. |
-
-```bash
-jji comments delete job-1 42
-```
-
-Effect: Default output prints `Comment deleted.` `--json` returns the API response.
-
-## Tracker and Automation Commands
-
-> **Note:** `preview-issue` and `create-issue` send only the credentials for the selected `--type`. GitHub runs ignore Jira credentials; Jira runs ignore GitHub credentials.
+**Return value/effect:** Default output prints `Status`, optional component `Checks`, and optional error-rate information. JSON mode returns the full health payload.
 
 ### `jji capabilities`
+Shows server support for post-analysis automation.
 
-Shows server-supported post-analysis automation features.
-
-Parameters/options: shared global options only.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
 
 ```bash
 jji capabilities
 ```
 
-Effect: Prints the capability object. Text mode and JSON mode both emit JSON, including fields such as `github_issues_enabled` and `jira_issues_enabled`.
-
-### `jji jira-projects`
-
-Lists available Jira projects.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `--query` | string | `""` | Optional search text used to filter projects. |
-| `--jira-token` | string | profile `jira_token`, else unset | Jira token. |
-| `--jira-email` | string | profile `jira_email`, else unset | Jira Cloud email. |
-
-```bash
-jji jira-projects --query platform
-```
-
-Effect: Default output prints `key` / `name` rows or `No Jira projects found.` `--json` returns the raw list.
-
-### `jji jira-security-levels PROJECT_KEY`
-
-Lists Jira security levels for one project.
-
-| Name | Type | Default / source | Description |
-| --- | --- | --- | --- |
-| `PROJECT_KEY` | string | required | Jira project key. |
-| `--jira-token` | string | profile `jira_token`, else unset | Jira token. |
-| `--jira-email` | string | profile `jira_email`, else unset | Jira Cloud email. |
-
-```bash
-jji jira-security-levels PROJ
-```
-
-Effect: Default output prints `name` / `description` rows or `No security levels found.` `--json` returns the raw list.
+**Return value/effect:** Prints the capability object, including GitHub/Jira automation flags.
 
 ### `jji ai-configs`
+Lists provider/model pairs from completed analyses.
 
-Lists known AI provider/model pairs from completed analyses.
-
-Parameters/options: shared global options only.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
 
 ```bash
 jji ai-configs
 ```
 
-Effect: Default output prints `ai_provider` and `ai_model` rows. If no completed analyses exist, the CLI prints `No AI configurations found from completed analyses.` and exits successfully. `--json` returns the raw list.
+**Return value/effect:** Default output prints a two-column table of provider/model pairs. If no completed analyses have recorded AI settings, the command prints `No AI configurations found from completed analyses.`
 
+### `jji jira-projects`
+Lists Jira projects available to the supplied Jira credentials.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--query` | string | `""` | Filter the project list by a search string. |
+| `--jira-token` | string | profile `jira_token` or empty | Jira token override. |
+| `--jira-email` | string | profile `jira_email` or empty | Jira email override. |
+
+```bash
+jji jira-projects --query platform
+```
+
+**Return value/effect:** Default output prints project `KEY` and `NAME`. JSON mode returns the full project array.
+
+### `jji jira-security-levels PROJECT_KEY`
+Lists Jira issue security levels for a project.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `PROJECT_KEY` | string | — | Jira project key to inspect. |
+| `--jira-token` | string | profile `jira_token` or empty | Jira token override. |
+| `--jira-email` | string | profile `jira_email` or empty | Jira email override. |
+
+```bash
+jji jira-security-levels PROJ
+```
+
+**Return value/effect:** Default output prints security level names and descriptions. If none are returned, the command prints `No security levels found.`
+
+## Analysis jobs
+### `jji analyze`
+Queues a Jenkins build for analysis.
+
+**Required options**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--job-name`, `-j` | string | — | Jenkins job name. |
+| `--build-number`, `-b` | integer | — | Build number to analyze. Must be greater than `0`. |
+
+**AI and context options**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--provider` | string | profile `ai_provider` or omitted | AI provider, for example `claude`, `gemini`, or `cursor`. |
+| `--model` | string | profile `ai_model` or omitted | AI model name. |
+| `--raw-prompt` | string | omitted | Extra prompt text appended to the analysis request. |
+| `--peers` | string | profile `peers` or omitted | Peer AIs in `provider:model,provider:model` format. |
+| `--peer-analysis-max-rounds` | integer | profile `peer_analysis_max_rounds` or omitted | Debate rounds for peer analysis. Valid range: `1` to `10`. |
+| `--additional-repos` | string | profile `additional_repos` or omitted | Extra repos in `name:url`, optional `:ref`, optional trailing `@token` format. |
+
+**Jenkins, Jira, and GitHub options**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--jira/--no-jira` | boolean | profile `enable_jira` or omitted | Enable or disable Jira matching for this run. |
+| `--jenkins-url` | string | profile `jenkins_url` or env `JENKINS_URL` | Jenkins base URL. |
+| `--jenkins-user` | string | profile `jenkins_user` or env `JENKINS_USER` | Jenkins username. |
+| `--jenkins-password` | string | profile `jenkins_password` or env `JENKINS_PASSWORD` | Jenkins password or token. |
+| `--jenkins-ssl-verify/--no-jenkins-ssl-verify` | boolean | profile `jenkins_ssl_verify` or omitted | Jenkins TLS verification override. |
+| `--jenkins-timeout` | integer | profile `jenkins_timeout` or omitted | Jenkins API timeout in seconds. Must be greater than `0`. |
+| `--jenkins-artifacts-max-size-mb` | integer | omitted | Artifact size cap in MB. Must be greater than `0`. |
+| `--get-job-artifacts/--no-get-job-artifacts` | boolean | omitted | Download or skip Jenkins artifacts for AI context. |
+| `--tests-repo-url` | string | profile `tests_repo_url` or env `TESTS_REPO_URL` | Tests repository URL. |
+| `--jira-url` | string | profile `jira_url` or env `JIRA_URL` | Jira base URL. |
+| `--jira-email` | string | profile `jira_email` or env `JIRA_EMAIL` | Jira Cloud email. |
+| `--jira-api-token` | string | profile `jira_api_token` or env `JIRA_API_TOKEN` | Jira Cloud API token. |
+| `--jira-pat` | string | profile `jira_pat` or env `JIRA_PAT` | Jira Server/DC PAT. |
+| `--jira-project-key` | string | profile `jira_project_key` or env `JIRA_PROJECT_KEY` | Jira project key. |
+| `--jira-ssl-verify/--no-jira-ssl-verify` | boolean | profile `jira_ssl_verify` or omitted | Jira TLS verification override. |
+| `--jira-max-results` | integer | profile `jira_max_results` or omitted | Jira search limit. Must be greater than `0`. |
+| `--github-token` | string | profile `github_token` or env `GITHUB_TOKEN` | GitHub token. |
+| `--ai-cli-timeout` | integer | profile `ai_cli_timeout` or omitted | AI CLI timeout in minutes. Must be greater than `0`. |
+
+**Monitoring options**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--wait/--no-wait` | boolean | profile `wait_for_completion` or omitted | Wait for Jenkins completion before analysis. |
+| `--poll-interval` | integer | profile `poll_interval_minutes` or omitted | Poll interval in minutes. Must be greater than `0`. |
+| `--max-wait` | integer | profile `max_wait_minutes` or omitted | Max wait in minutes. Must be `0` or greater. |
+| `--force/--no-force` | boolean | profile `force` or omitted | Force analysis even when the build succeeded. |
+
+```bash
+jji analyze \
+  --job-name periodic-e2e \
+  --build-number 274 \
+  --provider claude \
+  --model opus-4 \
+  --wait \
+  --poll-interval 2 \
+  --additional-repos "infra:https://github.com/org/infra:main"
+```
+
+**Return value/effect:** Default output prints the queued `job_id`, queued `status`, and poll URL. JSON mode returns the full queue response.
+
+> **Warning:** `--peer-analysis-max-rounds` must be between `1` and `10`.
+>
+
+
+> **Warning:** Invalid `--peers` and `--additional-repos` strings exit with an error.
+>
+
+
+> **Tip:** See [Copy Common Analysis Recipes](copy-common-analysis-recipes.html) for copy-ready command combinations built from these flags.
+
+### `jji re-analyze JOB_ID`
+Queues a new analysis using the settings from a previous analysis.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Existing analysis job ID. |
+
+```bash
+jji re-analyze job-123
+```
+
+**Return value/effect:** Default output prints the new queued `job_id`, queued `status`, and poll URL. JSON mode returns the full queue response.
+
+### `jji status JOB_ID`
+Shows the status of an analysis job.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Analysis job ID to inspect. |
+
+```bash
+jji status job-123
+```
+
+**Return value/effect:** Default output prints only `job_id` and `status`. JSON mode returns the full stored result payload.
+
+### `jji results list`
+Lists recent analysis jobs.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--limit`, `-l` | integer | `50` | Maximum number of jobs to return. |
+
+```bash
+jji results list --limit 20
+```
+
+**Return value/effect:** Default output prints a table with job ID, status, Jenkins URL, and creation time. JSON mode returns the full array.
+
+### `jji results dashboard`
+Lists analysis jobs with dashboard summary fields.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
+
+```bash
+jji results dashboard
+```
+
+**Return value/effect:** Default output prints job name, build number, status, failure count, reviewed count, comment count, and creation time. JSON mode returns the full array.
+
+### `jji results show JOB_ID`
+Shows the stored result for a job.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Analysis job ID to display. |
+| `--full`, `-f` | boolean | `false` | Print the full JSON result without requiring global `--json`. |
+
+```bash
+jji results show job-123 --full
+```
+
+**Return value/effect:** Default output prints a short summary. `--full` and `--json` print the complete stored result.
+
+### `jji results delete [JOB_ID ...]`
+Deletes one or more stored jobs.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID ...` | string list | empty | One or more job IDs to delete. |
+| `--all` | boolean | `false` | Delete all jobs returned by the dashboard. |
+| `--confirm` | boolean | `false` | Required together with `--all`. |
+
+```bash
+jji results delete job-123 job-124
+```
+
+**Return value/effect:** One job prints `Deleted job ...`. Multiple jobs print a deleted count and any failed IDs. JSON mode returns the raw delete response.
+
+> **Warning:** `--all` cannot be combined with explicit job IDs.
+>
+
+
+> **Warning:** `--all` requires `--confirm`.
+
+### `jji results review-status JOB_ID`
+Shows review counters for a stored analysis.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Analysis job ID. |
+
+```bash
+jji results review-status job-123
+```
+
+**Return value/effect:** Default output prints `total_failures`, `reviewed_count`, and `comment_count`. JSON mode returns the full response.
+
+### `jji results set-reviewed JOB_ID`
+Sets or clears the reviewed state for one failure.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Analysis job ID. |
+| `--test`, `-t` | string | — | Failure test name. |
+| `--reviewed/--not-reviewed` | boolean | — | Mark the failure reviewed or not reviewed. |
+| `--child-job` | string | `""` | Child job name for pipeline child failures. |
+| `--child-build` | integer | `0` | Child build number. |
+
+```bash
+jji results set-reviewed job-123 --test tests.e2e.test_login --reviewed
+```
+
+**Return value/effect:** Default output prints `Marked as reviewed` or `Marked as not reviewed`, including the reviewer when returned. JSON mode returns the raw response.
+
+> **Warning:** `--child-build` must be `0` or greater.
+>
+
+
+> **Warning:** A positive `--child-build` requires `--child-job`.
+
+### `jji results enrich-comments JOB_ID`
+Refreshes comment-linked ticket and PR status data.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Analysis job ID. |
+
+```bash
+jji results enrich-comments job-123
+```
+
+**Return value/effect:** Default output prints `Enriched N comment(s).` JSON mode returns the raw enrichment response.
+
+## Failure history and classification
+### `jji history test TEST_NAME`
+Shows history for one test.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `TEST_NAME` | string | — | Fully qualified test name. |
+| `--limit`, `-l` | integer | `20` | Maximum recent runs to include. |
+| `--job-name`, `-j` | string | `""` | Restrict history to one Jenkins job name. |
+| `--exclude-job-id` | string | `""` | Exclude one analysis job ID from the lookup. |
+
+```bash
+jji history test tests.e2e.test_login --limit 10
+```
+
+**Return value/effect:** Default output prints top-level history fields and optional `Recent runs` and `Comments` tables. JSON mode returns the full history object.
+
+### `jji history search --signature SIGNATURE`
+Finds failures that share one error signature.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--signature`, `-s` | string | — | Error signature hash to search for. |
+| `--exclude-job-id` | string | `""` | Exclude one analysis job ID from the lookup. |
+
+```bash
+jji history search --signature 8b9f4d...
+```
+
+**Return value/effect:** Default output prints total occurrences, unique test count, and a table of matching tests. JSON mode returns the full search object.
+
+### `jji history stats JOB_NAME`
+Shows aggregate failure statistics for one Jenkins job.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_NAME` | string | — | Jenkins job name. |
+| `--exclude-job-id` | string | `""` | Exclude one analysis job ID from the lookup. |
+
+```bash
+jji history stats periodic-e2e
+```
+
+**Return value/effect:** Default output prints analyzed build counts, failure rate, and an optional `Most common failures` table. JSON mode returns the full stats object.
+
+### `jji history failures`
+Lists paginated failure history.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--limit`, `-l` | integer | `50` | Page size. |
+| `--offset`, `-o` | integer | `0` | Starting offset. |
+| `--search`, `-s` | string | `""` | Test-name substring filter. |
+| `--classification`, `-c` | string | `""` | Classification filter. |
+| `--job-name`, `-j` | string | `""` | Jenkins job-name filter. |
+
+```bash
+jji history failures --classification "PRODUCT BUG" --limit 25
+```
+
+**Return value/effect:** Default output prints a total/offset line and a table of matching failures. JSON mode returns the paginated payload.
+
+### `jji classify TEST_NAME`
+Creates a manual classification for one failure.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `TEST_NAME` | string | — | Fully qualified test name. |
+| `--type`, `-t` | string | — | Classification value: `FLAKY`, `REGRESSION`, `INFRASTRUCTURE`, `KNOWN_BUG`, or `INTERMITTENT`. |
+| `--job-id` | string | — | Analysis job ID the classification applies to. |
+| `--reason`, `-r` | string | `""` | Free-text reason. |
+| `--job-name`, `-j` | string | `""` | Job name override. |
+| `--references` | string | `""` | Bug URLs or ticket keys. |
+| `--child-job` | string | `""` | Child job name. |
+| `--child-build` | integer | `0` | Child build number. |
+
+```bash
+jji classify tests.e2e.test_login --type REGRESSION --job-id job-123 --reason "fails after merge"
+```
+
+**Return value/effect:** Default output prints the created classification ID. JSON mode returns the full creation response.
+
+### `jji override-classification JOB_ID`
+Overrides the analysis classification on one failure.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Analysis job ID. |
+| `--test`, `-t` | string | — | Failure test name. |
+| `--classification`, `-c` | string | — | Override value: `CODE ISSUE`, `PRODUCT BUG`, or `INFRASTRUCTURE`. |
+| `--child-job` | string | `""` | Child job name. |
+| `--child-build` | integer | `0` | Child build number. |
+
+```bash
+jji override-classification job-123 --test tests.e2e.test_login --classification "PRODUCT BUG"
+```
+
+**Return value/effect:** Default output prints the new classification. JSON mode returns the full response.
+
+### `jji classifications list`
+Lists stored classifications.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--job-id` | string | `""` | Filter by job ID. |
+| `--test-name`, `-t` | string | `""` | Filter by test name. |
+| `--type`, `-c` | string | `""` | Filter by classification. |
+| `--job-name`, `-j` | string | `""` | Filter by job name. |
+| `--parent-job-name` | string | `""` | Filter by parent job name. |
+
+```bash
+jji classifications list --job-name periodic-e2e --type REGRESSION
+```
+
+**Return value/effect:** Default output prints a table of classification records. If none match, the command prints `No classifications found.`
+
+## Comments and mentions
+### `jji comments list JOB_ID`
+Lists comments for a stored analysis.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Analysis job ID. |
+
+```bash
+jji comments list job-123
+```
+
+**Return value/effect:** Default output prints a table of comments. JSON mode returns the full response object, including `comments` and `reviews`.
+
+### `jji comments add JOB_ID`
+Adds a comment to one failure.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Analysis job ID. |
+| `--test`, `-t` | string | — | Failure test name. |
+| `--message`, `-m` | string | — | Comment text. |
+| `--child-job` | string | `""` | Child job name. |
+| `--child-build` | integer | `0` | Child build number. |
+
+```bash
+jji comments add job-123 --test tests.e2e.test_login --message "tracking in PROJ-456"
+```
+
+**Return value/effect:** Default output prints the created comment ID. JSON mode returns the full creation response.
+
+### `jji comments delete JOB_ID COMMENT_ID`
+Deletes one comment.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_ID` | string | — | Analysis job ID. |
+| `COMMENT_ID` | integer | — | Comment ID to delete. |
+
+```bash
+jji comments delete job-123 42
+```
+
+**Return value/effect:** Default output prints `Comment deleted.` JSON mode returns the raw delete response.
+
+### `jji mentionable-users`
+Lists usernames that can be mentioned in comments.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
+
+```bash
+jji mentionable-users
+```
+
+**Return value/effect:** Default output prints one username per line. JSON mode returns `{ "usernames": [...] }`.
+
+### `jji mentions`
+Lists the current user's mentions.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--limit`, `-l` | integer | `50` | Maximum mentions to return. |
+| `--offset`, `-o` | integer | `0` | Pagination offset. |
+| `--unread` | boolean | `false` | Restrict output to unread mentions. |
+
+```bash
+jji mentions --unread
+```
+
+**Return value/effect:** Default output prints a summary line and a mentions table. JSON mode returns the full paginated mentions payload.
+
+### `jji mentions-mark-read --ids IDS`
+Marks selected mentions as read.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--ids` | string | — | Comma-separated positive integer comment IDs. |
+
+```bash
+jji mentions-mark-read --ids 10,11,12
+```
+
+**Return value/effect:** Marks the requested mentions as read. Use `--json` to inspect the server response.
+
+> **Warning:** Every ID must be a positive integer.
+
+### `jji mentions-mark-all-read`
+Marks all mentions as read.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
+
+```bash
+jji mentions-mark-all-read
+```
+
+**Return value/effect:** Marks all mentions as read. Use `--json` to inspect the server response.
+
+## Issues and integrations
 ### `jji preview-issue JOB_ID`
-
 Previews generated issue content for GitHub or Jira.
 
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-| `--test`, `-t` | string | required | Fully qualified test name. |
-| `--type` | string | required | Target tracker. Allowed values: `github`, `jira`. |
-| `--child-job` | string | `""` | Optional child job name. |
-| `--child-build` | integer | `0` | Optional child build number. |
-| `--include-links` | flag | `false` | Include clickable URLs in the generated body. |
-| `--ai-provider` | string | unset | AI provider override for issue-content generation. |
-| `--ai-model` | string | unset | AI model override for issue-content generation. |
-| `--github-token` | string | profile `github_token`, else unset | GitHub token for GitHub issue preview. |
-| `--github-repo-url` | string | profile `github_repo_url`, else unset | GitHub repository URL override. |
-| `--jira-token` | string | profile `jira_token`, else unset | Jira token for Jira bug preview. |
-| `--jira-email` | string | profile `jira_email`, else unset | Jira Cloud email for Jira bug preview. |
-| `--jira-project-key` | string | profile `jira_project_key`, else unset | Jira project key override. |
-| `--jira-security-level` | string | profile `jira_security_level`, else unset | Jira security level name. |
+| `JOB_ID` | string | — | Analysis job ID. |
+| `--test`, `-t` | string | — | Failure test name. |
+| `--type` | string | — | Issue target: `github` or `jira`. |
+| `--child-job` | string | `""` | Child job name. |
+| `--child-build` | integer | `0` | Child build number. |
+| `--include-links` | boolean | `false` | Include full URLs in the generated body. |
+| `--ai-provider` | string | `""` | AI provider override for issue text generation. |
+| `--ai-model` | string | `""` | AI model override for issue text generation. |
+| `--github-token` | string | profile `github_token` or empty | GitHub token override. Used only with `--type github`. |
+| `--github-repo-url` | string | profile `github_repo_url` or empty | GitHub repository URL override. Used only with `--type github`. |
+| `--jira-token` | string | profile `jira_token` or empty | Jira token override. Used only with `--type jira`. |
+| `--jira-email` | string | profile `jira_email` or empty | Jira email override. Used only with `--type jira`. |
+| `--jira-project-key` | string | profile `jira_project_key` or empty | Jira project key override. Used only with `--type jira`. |
+| `--jira-security-level` | string | profile `jira_security_level` or empty | Jira security level name override. Used only with `--type jira`. |
 
 ```bash
-jji preview-issue job-1 \
-  --test tests.TestA.test_one \
-  --type github \
-  --include-links \
-  --ai-provider claude \
-  --ai-model opus-4
+jji preview-issue job-123 --test tests.e2e.test_login --type github --include-links
 ```
 
-Effect: Default output prints `Title`, `Body`, and any `Similar issues`. `--json` returns the preview object.
+**Return value/effect:** Default output prints the generated title, body, and any returned similar issues. JSON mode returns the full preview object.
+
+> **Note:** GitHub credential options are ignored for `--type jira`. Jira credential options are ignored for `--type github`.
 
 ### `jji create-issue JOB_ID`
-
 Creates a GitHub issue or Jira bug from a stored failure.
 
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-| `--test`, `-t` | string | required | Fully qualified test name. |
-| `--type` | string | required | Target tracker. Allowed values: `github`, `jira`. |
-| `--title` | string | required | Final issue title. |
-| `--body` | string | required | Final issue body. |
-| `--child-job` | string | `""` | Optional child job name. |
-| `--child-build` | integer | `0` | Optional child build number. |
-| `--github-token` | string | profile `github_token`, else unset | GitHub token for GitHub issue creation. |
-| `--github-repo-url` | string | profile `github_repo_url`, else unset | GitHub repository URL override. |
-| `--jira-token` | string | profile `jira_token`, else unset | Jira token for Jira bug creation. |
-| `--jira-email` | string | profile `jira_email`, else unset | Jira Cloud email for Jira bug creation. |
-| `--jira-project-key` | string | profile `jira_project_key`, else unset | Jira project key override. |
-| `--jira-security-level` | string | profile `jira_security_level`, else unset | Jira security level name. |
+| `JOB_ID` | string | — | Analysis job ID. |
+| `--test`, `-t` | string | — | Failure test name. |
+| `--type` | string | — | Issue target: `github` or `jira`. |
+| `--title` | string | — | Issue title. |
+| `--body` | string | — | Issue body. |
+| `--child-job` | string | `""` | Child job name. |
+| `--child-build` | integer | `0` | Child build number. |
+| `--github-token` | string | profile `github_token` or empty | GitHub token override. Used only with `--type github`. |
+| `--github-repo-url` | string | profile `github_repo_url` or empty | GitHub repository URL override. Used only with `--type github`. |
+| `--jira-token` | string | profile `jira_token` or empty | Jira token override. Used only with `--type jira`. |
+| `--jira-email` | string | profile `jira_email` or empty | Jira email override. Used only with `--type jira`. |
+| `--jira-project-key` | string | profile `jira_project_key` or empty | Jira project key override. Used only with `--type jira`. |
+| `--jira-security-level` | string | profile `jira_security_level` or empty | Jira security level name override. Used only with `--type jira`. |
 
 ```bash
-jji create-issue job-1 \
-  --test tests.TestA.test_one \
+jji create-issue \
+  job-123 \
+  --test tests.e2e.test_login \
   --type jira \
-  --title "DNS timeout in ocp-e2e" \
-  --body "Reproduced in multiple runs."
+  --title "tests.e2e.test_login fails on periodic-e2e" \
+  --body "Failure details..."
 ```
 
-Effect: Default output prints the created issue key or number, the URL, and any `comment_id` added to the JJI record. `--json` returns the created issue object.
+**Return value/effect:** Default output prints the created issue key/number, URL, and any created JJI comment ID. JSON mode returns the full creation response.
 
-### `jji validate-token {github|jira}`
+### `jji validate-token TOKEN_TYPE`
+Validates a GitHub or Jira token.
 
-Validates a tracker token.
-
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `{github\|jira}` | string | required | Token type. Allowed values: `github`, `jira`. |
-| `--token` | string | interactive prompt | Token value to validate. Input is hidden when prompted. |
-| `--email` | string | `""` | Jira Cloud email. Used only for Jira validation. |
+| `TOKEN_TYPE` | string | — | Token type: `github` or `jira`. |
+| `--token` | string | prompt | Token value. The CLI prompts and hides input when omitted. |
+| `--email` | string | `""` | Jira email value, used with Jira validation when needed. |
 
 ```bash
-jji validate-token jira --token jira-token --email user@example.com
+jji validate-token github --token "$GITHUB_TOKEN"
 ```
 
-Effect: Valid tokens exit with status `0` and print `Valid`; invalid tokens exit with status `1` and print `Invalid`. `--json` returns the validation object.
+**Return value/effect:** Prints `Valid` on success. Invalid tokens exit non-zero. JSON mode returns the full validation payload.
 
-### `jji push-reportportal JOB_ID` / `jji push-rp JOB_ID`
+### `jji push-reportportal JOB_ID`
+Pushes JJI classifications into Report Portal.
 
-Pushes stored classifications into Report Portal. `push-rp` is a hidden alias.
-
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `JOB_ID` | string | required | Stored analysis job id. |
-| `--child-job-name` | string | unset | Optional child job name for pipeline child pushes. |
-| `--child-build-number` | integer | unset | Optional child build number for pipeline child pushes. |
+| `JOB_ID` | string | — | Analysis job ID. |
+| `--child-job-name` | string | unset | Child job name for pipeline child pushes. |
+| `--child-build-number` | integer | unset | Child build number for pipeline child pushes. |
 
 ```bash
-jji push-rp job-123
+jji push-reportportal job-123
 ```
 
-Effect: Default output prints the pushed count, optional launch id, unmatched tests, and any errors. `--json` returns the raw response object.
+**Return value/effect:** Default output prints pushed count, optional launch ID, unmatched tests, and error count/details. JSON mode returns the full push response.
 
-## Auth and Admin Commands
+> **Note:** Hidden alias: `jji push-rp JOB_ID`.
 
-> **Note:** `jji auth login` validates credentials only. It does not persist authentication between CLI invocations. For later commands, use the shared `--api-key`, `JJI_API_KEY`, or profile `api_key`.
-
-
-> **Warning:** `jji admin users create`, `jji admin users rotate-key`, and `jji admin users change-role USER admin` may print API keys only once.
-
+## Auth and admin
 ### `jji auth login`
+Validates admin credentials against the server.
 
-Validates admin credentials.
-
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--username`, `-u` | string | required | Admin username. |
-| `--api-key`, `-k` | string | required | Admin API key to validate. |
+| `--username`, `-u` | string | — | Admin username. |
+| `--api-key`, `-k` | string | — | Admin API key. |
 
 ```bash
-jji auth login --username admin --api-key jji_admin_key
+jji auth login --username admin --api-key "$JJI_API_KEY"
 ```
 
-Effect: Default output prints `username`, `role`, and `admin` status. `--json` returns the auth object.
+**Return value/effect:** Default output prints username, role, and admin status. JSON mode returns the full auth response.
+
+> **Note:** This command does not persist credentials to `config.toml`.
 
 ### `jji auth logout`
+Calls the server logout endpoint.
 
-Sends the logout request.
-
-Parameters/options: shared global options only.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
 
 ```bash
-jji auth logout --json
+jji auth logout
 ```
 
-Effect: Sends the logout request. Use `--json` to inspect returned fields.
+**Return value/effect:** Logs out the current server session. Use `--json` to inspect the server response.
 
 ### `jji auth whoami`
+Shows the current authenticated user.
 
-Shows current authenticated user info.
-
-Parameters/options: shared global options only.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
 
 ```bash
 jji auth whoami
 ```
 
-Effect: Default output prints `username`, `role`, and `is_admin`. `--json` returns the same fields as a JSON object.
+**Return value/effect:** Default output prints `username`, `role`, and `is_admin`. JSON mode returns the full auth payload.
 
 ### `jji admin users list`
+Lists all known users.
 
-Lists all users.
-
-Parameters/options: shared global options only.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
 
 ```bash
 jji admin users list
 ```
 
-Effect: Default output prints user rows or `No users found.` `--json` returns `{users:[...]}`.
+**Return value/effect:** Default output prints a user table with role, creation time, and last-seen time. JSON mode returns the full user list payload.
 
 ### `jji admin users create USERNAME`
-
 Creates a new admin user.
 
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `USERNAME` | string | required | Username for the new admin user. |
+| `USERNAME` | string | — | Username for the new admin user. |
 
 ```bash
 jji admin users create newadmin
 ```
 
-Effect: Default output prints the created username and the new API key once. `--json` returns the same response object.
+**Return value/effect:** Default output prints the created username and the new API key. JSON mode returns the full response.
+
+> **Warning:** The new API key is only shown when the command runs.
 
 ### `jji admin users delete USERNAME`
-
 Deletes an admin user.
 
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `USERNAME` | string | required | Username to delete. |
-| `--force`, `-f` | flag | `false` | Skip the confirmation prompt. |
+| `USERNAME` | string | — | Username to delete. |
+| `--force`, `-f` | boolean | `false` | Skip the confirmation prompt. |
 
 ```bash
 jji admin users delete oldadmin --force
 ```
 
-Effect: Prompts for confirmation unless `--force` is set. Default output prints `Deleted admin user: <name>`; `--json` returns the API response.
+**Return value/effect:** Default output prints `Deleted admin user: ...`. JSON mode returns the raw delete response.
 
 ### `jji admin users rotate-key USERNAME`
+Rotates one admin user's API key.
 
-Rotates an admin user's API key.
-
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `USERNAME` | string | required | Username whose key should be rotated. |
+| `USERNAME` | string | — | Username whose key should be rotated. |
 
 ```bash
 jji admin users rotate-key myuser
 ```
 
-Effect: Default output prints the username and the new API key once. `--json` returns the same response object.
+**Return value/effect:** Default output prints the username and new API key. JSON mode returns the full rotation response.
+
+> **Warning:** The rotated API key is only shown when the command runs.
 
 ### `jji admin users change-role USERNAME ROLE`
-
 Changes a user's role.
 
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `USERNAME` | string | required | Username to update. |
-| `ROLE` | string | required | New role. CLI help lists `admin` and `user`. |
+| `USERNAME` | string | — | Username to modify. |
+| `ROLE` | string | — | New role: `admin` or `user`. |
 
 ```bash
 jji admin users change-role myuser admin
 ```
 
-Effect: Default output prints the new role. If the API returns a new key during promotion to `admin`, the CLI prints it once. `--json` returns the same response object.
+**Return value/effect:** Default output prints the updated role. Promoting to `admin` also prints a newly generated API key when returned. JSON mode returns the full response.
 
-## Config Commands
+> **Warning:** Promotion-generated API keys are only shown when the command runs.
 
-Config commands use the local config file only and do not contact the server.
+### `jji admin token-usage`
+Reports AI token and cost usage.
 
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--period` | string | unset | Preset range: `today`, `week`, `month`, or `all`. |
+| `--start-date` | string | unset | Start date in `YYYY-MM-DD` format. |
+| `--end-date` | string | unset | End date in `YYYY-MM-DD` format. |
+| `--provider` | string | unset | Filter by AI provider. |
+| `--model` | string | unset | Filter by AI model. |
+| `--call-type` | string | unset | Filter by call type. |
+| `--group-by` | string | unset | Group by `provider`, `model`, `call_type`, `day`, `week`, `month`, or `job`. |
+| `--job-id` | string | unset | Switch to per-job token usage for one analysis job. |
+| `--format` | string | `table` | Output format: `table`, `json`, or `csv`. |
+
+```bash
+jji admin token-usage --group-by provider
+```
+
+**Return value/effect:** With no filters, the command prints a summary dashboard (`Today`, `This Week`, `This Month`, and top models). With filters or a period, it prints aggregated totals and an optional breakdown. With `--job-id`, it prints per-call records for one job.
+
+> **Note:** `--job-id` switches to per-job mode.
+>
+
+
+> **Note:** `--period today|week|month` sets the start date automatically.
+>
+
+
+> **Warning:** Invalid `--period` or `--format` values exit with an error.
+
+## Metadata
+### `jji metadata list`
+Lists job metadata records.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--team` | string | `""` | Filter by team. |
+| `--tier` | string | `""` | Filter by tier. |
+| `--version` | string | `""` | Filter by version. |
+| `--label`, `-l` | string list | empty | Filter by one or more labels. Repeat the option for multiple labels. |
+
+```bash
+jji metadata list --team platform --label nightly
+```
+
+**Return value/effect:** Default output prints a metadata table with job name, team, tier, version, and labels. JSON mode returns the full array.
+
+### `jji metadata get JOB_NAME`
+Shows metadata for one job.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_NAME` | string | — | Job name to look up. |
+
+```bash
+jji metadata get periodic-e2e
+```
+
+**Return value/effect:** Default output prints the metadata row for the selected job. JSON mode returns the full object.
+
+### `jji metadata set JOB_NAME`
+Creates or updates metadata for one job.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_NAME` | string | — | Job name to update. |
+| `--team` | string | `""` | Team value. |
+| `--tier` | string | `""` | Tier value. |
+| `--version` | string | `""` | Version value. |
+| `--label`, `-l` | string list | empty | Label values. Repeat to set multiple labels. |
+
+```bash
+jji metadata set periodic-e2e --team platform --tier critical --label nightly
+```
+
+**Return value/effect:** Default output prints `Metadata set for ...`. JSON mode returns the full stored metadata object.
+
+### `jji metadata delete JOB_NAME`
+Deletes metadata for one job.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_NAME` | string | — | Job name to delete metadata for. |
+
+```bash
+jji metadata delete periodic-e2e
+```
+
+**Return value/effect:** Default output prints `Metadata deleted for ...`. JSON mode returns the raw delete response.
+
+### `jji metadata import FILE_PATH`
+Bulk imports metadata from a JSON or YAML file.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `FILE_PATH` | string | — | Path to a JSON file or a `.yaml`/`.yml` file containing an array of metadata objects. |
+
+```bash
+jji metadata import ./job-metadata.yaml
+```
+
+**Return value/effect:** Default output prints `Imported N metadata entries.` JSON mode returns the raw bulk-update response.
+
+> **Note:** JSON is used for non-YAML extensions.
+>
+
+
+> **Warning:** The file must contain an array of objects.
+
+### `jji metadata rules`
+Lists configured metadata auto-assignment rules.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only global options. |
+
+```bash
+jji metadata rules
+```
+
+**Return value/effect:** Default output prints the rules file path when returned, plus a numbered rule list. JSON mode returns the full rules object.
+
+### `jji metadata preview JOB_NAME`
+Previews metadata rule matching for one job name.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `JOB_NAME` | string | — | Job name to test against the configured rules. |
+
+```bash
+jji metadata preview test-smoke
+```
+
+**Return value/effect:** Default output prints the matched metadata or `No rules matched ...`. JSON mode returns the full preview result.
+
+## Config commands
 ### `jji config` / `jji config show`
+Shows the current CLI config file and configured profiles.
 
-Shows the current local config file summary. `jji config` is the same command as `jji config show`.
-
-Parameters/options: none.
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only config file state. |
 
 ```bash
 jji config
 ```
 
-Effect: If the config file exists, the CLI prints the resolved file path, the selected default server, and one summary line per server. If the file is missing, the CLI prints the resolved path and a bootstrap snippet.
+**Return value/effect:** Prints the config file path, default server, and configured server list. If the config file does not exist, the command prints the expected path and a starter snippet.
+
+### `jji config servers`
+Lists configured server profiles.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| none | — | — | Uses only config file state. |
+
+```bash
+jji config servers
+```
+
+**Return value/effect:** Default output prints a table of profile names, URLs, usernames, SSL behavior, and default-marker state. JSON mode returns an object keyed by server name.
 
 ### `jji config completion [SHELL]`
-
 Prints shell-completion setup instructions.
 
-| Name | Type | Default / source | Description |
+| Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `SHELL` | string | `zsh` | Shell type. Allowed values: `bash`, `zsh`. |
+| `SHELL` | string | `zsh` | Shell type: `bash` or `zsh`. |
 
 ```bash
 jji config completion bash
 ```
 
-Effect: Prints shell setup instructions that call `jji --show-completion bash` or `jji --show-completion zsh`. Unsupported shell values exit with status `1`.
+**Return value/effect:** Prints the shell snippet that evaluates `jji --show-completion ...` for the selected shell.
 
-### `jji config servers`
-
-Lists configured server profiles.
-
-Parameters/options: shared `--json` only.
-
-```bash
-jji config servers
-jji config servers --json
-```
-
-Effect: Default output prints a table with `name`, `url`, `username`, `no_verify_ssl`, and a `*` marker for the default server. `--json` returns an object keyed by server name with `url`, `username`, `no_verify_ssl`, and `default`.
+> **Warning:** Only `bash` and `zsh` are supported.
 
 ## Related Pages
 
-- [Configuration and Environment Reference](configuration-and-environment-reference.html)
+- [Analyze a Jenkins Job](analyze-a-jenkins-job.html)
+- [Investigate Failure History](investigate-failure-history.html)
+- [Copy Common Analysis Recipes](copy-common-analysis-recipes.html)
 - [REST API Reference](rest-api-reference.html)
-- [Running Your First Analysis](quickstart.html)
-- [Analyzing Jenkins Jobs](analyzing-jenkins-jobs.html)
-- [Managing Admin Users and API Keys](managing-admin-users-and-api-keys.html)
+- [Configuration and Environment Reference](configuration-and-environment-reference.html)

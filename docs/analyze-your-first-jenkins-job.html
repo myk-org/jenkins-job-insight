@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Running Your First Analysis - jenkins-job-insight</title>
-    <meta name="description" content="Turn Jenkins failures into actionable analysis, team review, and ready-to-file bugs.">
+    <title>Analyze Your First Jenkins Job - jenkins-job-insight</title>
+    <meta name="description" content="Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.">
     <link rel="stylesheet" href="assets/style.css">
     <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
     <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
@@ -14,7 +14,7 @@
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <a href="index.html" class="sidebar-logo">jenkins-job-insight</a>
-            <p class="sidebar-tagline">Turn Jenkins failures into actionable analysis, team review, and ready-to-file bugs.</p>
+            <p class="sidebar-tagline">Turn failing Jenkins jobs into clear answers, collaborative reviews, and ready-to-file bugs.</p>
         </div>
 
         <div class="sidebar-search">
@@ -29,9 +29,9 @@
                 <ul class="nav-group-pages">
                     
                     <li>
-                        <a href="quickstart.html"
+                        <a href="analyze-your-first-jenkins-job.html"
                            class="nav-link active" aria-current="page">
-                            Running Your First Analysis
+                            Analyze Your First Jenkins Job
                         </a>
                     </li>
                     
@@ -43,79 +43,86 @@
                 <ul class="nav-group-pages">
                     
                     <li>
-                        <a href="analyzing-jenkins-jobs.html"
+                        <a href="configure-your-profile-and-notifications.html"
                            class="nav-link">
-                            Analyzing Jenkins Jobs
+                            Configure Your Profile and Notifications
                         </a>
                     </li>
                     
                     <li>
-                        <a href="analyzing-junit-xml-and-raw-failures.html"
+                        <a href="analyze-a-jenkins-job.html"
                            class="nav-link">
-                            Analyzing JUnit XML and Raw Failures
+                            Analyze a Jenkins Job
                         </a>
                     </li>
                     
                     <li>
-                        <a href="monitoring-and-rerunning-analyses.html"
+                        <a href="review-and-classify-failures.html"
                            class="nav-link">
-                            Monitoring and Re-Running Analyses
+                            Review and Classify Failures
                         </a>
                     </li>
                     
                     <li>
-                        <a href="reviewing-commenting-and-reclassifying-failures.html"
+                        <a href="investigate-failure-history.html"
                            class="nav-link">
-                            Reviewing, Commenting, and Reclassifying Failures
+                            Investigate Failure History
                         </a>
                     </li>
                     
                     <li>
-                        <a href="managing-your-profile-and-personal-tokens.html"
+                        <a href="customize-ai-analysis.html"
                            class="nav-link">
-                            Managing Your Profile and Personal Tokens
+                            Customize AI Analysis
                         </a>
                     </li>
                     
                     <li>
-                        <a href="tracking-failure-history.html"
+                        <a href="create-github-issues-and-jira-bugs.html"
                            class="nav-link">
-                            Tracking Failure History
+                            Create GitHub Issues and Jira Bugs
                         </a>
                     </li>
                     
                     <li>
-                        <a href="creating-github-issues-and-jira-bugs.html"
+                        <a href="push-classifications-to-report-portal.html"
                            class="nav-link">
-                            Creating GitHub Issues and Jira Bugs
+                            Push Classifications to Report Portal
                         </a>
                     </li>
                     
                     <li>
-                        <a href="improving-analysis-with-repository-context.html"
+                        <a href="organize-jobs-with-metadata.html"
                            class="nav-link">
-                            Improving Analysis with Repository Context
+                            Organize Jobs with Metadata
                         </a>
                     </li>
                     
                     <li>
-                        <a href="adding-peer-review-with-multiple-ai-models.html"
+                        <a href="manage-users-access-and-token-usage.html"
                            class="nav-link">
-                            Adding Peer Review with Multiple AI Models
+                            Manage Users, Access, and Token Usage
+                        </a>
+                    </li>
+                    
+                </ul>
+            </div>
+            
+            <div class="nav-group">
+                <h3 class="nav-group-title">Recipes</h3>
+                <ul class="nav-group-pages">
+                    
+                    <li>
+                        <a href="copy-common-analysis-recipes.html"
+                           class="nav-link">
+                            Copy Common Analysis Recipes
                         </a>
                     </li>
                     
                     <li>
-                        <a href="pushing-classifications-to-report-portal.html"
+                        <a href="copy-common-deployment-recipes.html"
                            class="nav-link">
-                            Pushing Classifications to Report Portal
-                        </a>
-                    </li>
-                    
-                    <li>
-                        <a href="managing-admin-users-and-api-keys.html"
-                           class="nav-link">
-                            Managing Admin Users and API Keys
+                            Copy Common Deployment Recipes
                         </a>
                     </li>
                     
@@ -196,21 +203,19 @@
                          converted to HTML server-side by the markdown library, not
                          user-supplied input. XSS risk is minimal and accepted since
                          the AI generates the content, not end users. -->
-                    <h1 id="running-your-first-analysis">Running Your First Analysis</h1>
-<p>You want to get from a fresh setup to one real Jenkins analysis you can inspect from both the terminal and the browser. The fastest supported path uses Docker Compose so the service, web UI, and supported AI CLIs come up together with the fewest moving parts.</p>
+                    <h1 id="analyze-your-first-jenkins-job">Analyze Your First Jenkins Job</h1>
+<p>You want JJI running, pointed at one real Jenkins failure, and showing a report you can use instead of digging through raw Jenkins output. The fastest first run uses Docker Compose for the server, then <code>jji</code> from the checkout to queue one build and open the stored result.</p>
 <h2 id="prerequisites">Prerequisites</h2>
 <ul>
-<li>Docker with Docker Compose</li>
-<li><code>uv</code> installed so you can install the <code>jji</code> CLI</li>
-<li>A Jenkins URL, username, API token or password, and a build number you want to inspect</li>
-<li>One AI provider credential; the simplest first run is <code>claude</code> with <code>ANTHROPIC_API_KEY</code></li>
+<li>Docker with Docker Compose, or Python 3.12 plus Node.js, npm, and <code>uv</code> if you want the local-install path</li>
+<li>A Jenkins URL, username, password or API token, and a build number you want to inspect</li>
+<li>One AI provider credential. The smallest first setup is <code>claude</code> with <code>ANTHROPIC_API_KEY</code></li>
 </ul>
 <h2 id="quick-example">Quick Example</h2>
 <div class="highlight"><pre><span></span><code>cp<span class="w"> </span>.env.example<span class="w"> </span>.env
 </code></pre></div>
 
-<div class="highlight"><pre><span></span><code># set at least these values in .env
-JENKINS_URL=https://jenkins.example.com
+<div class="highlight"><pre><span></span><code>JENKINS_URL=https://jenkins.example.com
 JENKINS_USER=your-username
 JENKINS_PASSWORD=your-api-token
 AI_PROVIDER=claude
@@ -219,30 +224,17 @@ ANTHROPIC_API_KEY=your-anthropic-api-key
 </code></pre></div>
 
 <div class="highlight"><pre><span></span><code>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>-d
-uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>jenkins-job-insight
-
-<span class="nb">export</span><span class="w"> </span><span class="nv">JJI_SERVER</span><span class="o">=</span>http://localhost:8000
-<span class="nb">export</span><span class="w"> </span><span class="nv">JJI_USERNAME</span><span class="o">=</span>jdoe
-
-jji<span class="w"> </span>health
-jji<span class="w"> </span>analyze<span class="w"> </span>--job-name<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--build-number<span class="w"> </span><span class="m">123</span>
+uv<span class="w"> </span>run<span class="w"> </span>jji<span class="w"> </span>--server<span class="w"> </span>http://localhost:8000<span class="w"> </span>--user<span class="w"> </span>jdoe<span class="w"> </span>health
+uv<span class="w"> </span>run<span class="w"> </span>jji<span class="w"> </span>--server<span class="w"> </span>http://localhost:8000<span class="w"> </span>--user<span class="w"> </span>jdoe<span class="w"> </span>analyze<span class="w"> </span>--job-name<span class="w"> </span>my-job<span class="w"> </span>--build-number<span class="w"> </span><span class="m">42</span>
 </code></pre></div>
 
-<p>Open <code>http://localhost:8000</code>, enter the same username on the register page, and use the dashboard to open the new run. After <code>jji analyze</code>, copy the printed <code>job_id</code>; <code>jji status &lt;job_id&gt;</code> follows the run from the terminal, and the <code>Poll:</code> URL is the browser URL for the same stored result.</p>
 <div class="highlight"><pre><span></span><code>Job queued: &lt;job_id&gt;
 Status: queued
 Poll: /results/&lt;job_id&gt;
 </code></pre></div>
 
+<p>Open <code>http://localhost:8000</code>, save the same username (<code>jdoe</code>), then paste the printed <code>Poll:</code> path after that host. If the build is still finishing or the analysis is still running, JJI shows the live status page first and switches to the report when it completes.</p>
 <h2 id="step-by-step">Step-by-Step</h2>
-<div class="highlight"><pre><span></span><code>flowchart LR
-  A[Set Jenkins and AI values] --&gt; B[docker compose up -d]
-  B --&gt; C[Open /register and save a username]
-  C --&gt; D[jji analyze --job-name ... --build-number ...]
-  D --&gt; E[/status/&lt;job_id&gt; while work is in progress]
-  E --&gt; F[/results/&lt;job_id&gt; when analysis is complete]
-</code></pre></div>
-
 <ol>
 <li>Create the server environment file.</li>
 </ol>
@@ -257,95 +249,69 @@ AI_MODEL=your-model-name
 ANTHROPIC_API_KEY=your-anthropic-api-key
 </code></pre></div>
 
-<p>This is the minimum setup for a Jenkins-backed analysis. Keep the rest of <code>.env</code> at the defaults for your first run.</p>
+<p>Replace the placeholders with real values. For the first run, keep everything else at the defaults from <code>.env.example</code>.</p>
 <blockquote>
-<p><strong>Tip:</strong> Use a failed build number for your first run. A passed build finishes cleanly, but there is nothing to analyze.</p>
+<p><strong>Tip:</strong> Use a failed build that has already finished. You will get to the report faster than waiting for Jenkins to complete a running job.</p>
 </blockquote>
 <ol>
-<li>Start the service and point the CLI at it.</li>
+<li>Start JJI and confirm the server is reachable.</li>
 </ol>
 <div class="highlight"><pre><span></span><code>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>-d
-uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>jenkins-job-insight
-
-<span class="nb">export</span><span class="w"> </span><span class="nv">JJI_SERVER</span><span class="o">=</span>http://localhost:8000
-<span class="nb">export</span><span class="w"> </span><span class="nv">JJI_USERNAME</span><span class="o">=</span>jdoe
-
-jji<span class="w"> </span>health
+uv<span class="w"> </span>run<span class="w"> </span>jji<span class="w"> </span>--server<span class="w"> </span>http://localhost:8000<span class="w"> </span>--user<span class="w"> </span>jdoe<span class="w"> </span>health
 </code></pre></div>
 
-<p>Use the same <code>JJI_USERNAME</code> you plan to save in the browser so future comments and review actions line up under one name. When the service is ready, <code>jji health</code> returns <code>healthy</code>.</p>
+<p>When the container is ready, the health command should report <code>healthy</code>. The same server at <code>http://localhost:8000</code> serves the web UI and the API.</p>
 <ol>
-<li>Register your browser profile.</li>
+<li>Save a browser username.</li>
 </ol>
-<p>Open <code>http://localhost:8000/</code>. On a first visit, the app sends you to <code>/register</code>.</p>
-<p>Enter a username and click <strong>Save</strong>. For a normal first run, leave the API key, GitHub token, Jira email, and Jira token fields empty.</p>
+<p>Open <code>http://localhost:8000/</code>. On the first visit, JJI sends you to <code>/register</code>.</p>
+<p>Enter the same username you used with <code>--user</code> and click <strong>Save</strong>. Leave <code>API Key</code>, <code>GitHub Token</code>, <code>Jira Email</code>, and <code>Jira Token</code> empty for this first run.</p>
 <blockquote>
-<p><strong>Note:</strong> You do not need an admin API key or tracker tokens to run your first analysis. A username is enough.</p>
+<p><strong>Note:</strong> A username is enough to analyze a job and open the report. Admin access and personal tracker tokens are only needed for later features.</p>
 </blockquote>
 <ol>
-<li>Queue the analysis from the CLI.</li>
+<li>Queue the Jenkins build.</li>
 </ol>
-<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>analyze<span class="w"> </span>--job-name<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--build-number<span class="w"> </span><span class="m">123</span>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>jji<span class="w"> </span>--server<span class="w"> </span>http://localhost:8000<span class="w"> </span>--user<span class="w"> </span>jdoe<span class="w"> </span>analyze<span class="w"> </span>--job-name<span class="w"> </span>my-job<span class="w"> </span>--build-number<span class="w"> </span><span class="m">42</span>
 </code></pre></div>
 
-<p>Replace <code>test</code> and <code>123</code> with a real Jenkins job and build number. Because Jenkins and AI defaults are already in <code>.env</code>, this first command only needs the job name and build number.</p>
-<p>The CLI prints three important lines:</p>
-<ul>
-<li><code>Job queued</code>: the new <code>job_id</code></li>
-<li><code>Status</code>: the current stored status, starting as <code>queued</code></li>
-<li><code>Poll</code>: the stored result URL for this run</li>
-</ul>
-<p>If the Jenkins build is still running, the stored job can stay in <code>waiting</code> before JJI starts the AI analysis.</p>
+<p>Replace <code>my-job</code> and <code>42</code> with a real Jenkins job and build number. If the job lives inside Jenkins folders, keep the full Jenkins path style, such as <code>folder/job-name</code>.</p>
+<p>The command prints a new <code>job_id</code> plus a <code>Poll:</code> path. JJI stores the run immediately, then moves it through <code>waiting</code>, <code>pending</code>, or <code>running</code> until the report is ready.</p>
 <ol>
-<li>Inspect the run from the CLI.</li>
+<li>Open the first report.</li>
 </ol>
-<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>status<span class="w"> </span>&lt;job_id&gt;
-jji<span class="w"> </span>results<span class="w"> </span>show<span class="w"> </span>&lt;job_id&gt;
-jji<span class="w"> </span>results<span class="w"> </span>dashboard
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>jji<span class="w"> </span>--server<span class="w"> </span>http://localhost:8000<span class="w"> </span>--user<span class="w"> </span>jdoe<span class="w"> </span>status<span class="w"> </span>&lt;job_id&gt;
+uv<span class="w"> </span>run<span class="w"> </span>jji<span class="w"> </span>--server<span class="w"> </span>http://localhost:8000<span class="w"> </span>--user<span class="w"> </span>jdoe<span class="w"> </span>results<span class="w"> </span>show<span class="w"> </span>&lt;job_id&gt;
 </code></pre></div>
 
-<p>Use <code>jji status</code> while the run is still moving through <code>waiting</code>, <code>pending</code>, or <code>running</code>. Use <code>jji results show</code> for a one-run summary, and <code>jji results dashboard</code> when you want the recent-analysis list with failure counts and review progress.</p>
-<ol>
-<li>Inspect the same run in the web UI.</li>
-</ol>
-<p>Open the <code>Poll:</code> URL from <code>jji analyze</code>, or go back to <code>http://localhost:8000/</code> and click the row on the dashboard. The UI handles the rest:</p>
-<ul>
-<li>in-progress work opens the status page</li>
-<li>completed work opens the report page</li>
-<li>the status page refreshes every 10 seconds and switches to the final report automatically</li>
-</ul>
-<p>Once the run is complete, the report page shows the summary, AI provider/model, grouped failures, and a direct link back to the Jenkins build.</p>
+<p>Use <code>status</code> while the run is in progress. Then either open <code>http://localhost:8000</code> plus the <code>Poll:</code> path, or click the new row on the dashboard.</p>
+<p>The dashboard opens the live status page for in-progress runs and the final report for completed runs. The status page refreshes every 10 seconds and automatically switches to the report page, where you will see the Jenkins link, failure count, AI provider/model, a key takeaway, and the grouped failures from the build.</p>
 <h2 id="advanced-usage">Advanced Usage</h2>
-<h3 id="save-your-cli-server-profile">Save your CLI server profile</h3>
-<p>If you do not want to export <code>JJI_SERVER</code> and <code>JJI_USERNAME</code> in every shell, create <code>~/.config/jji/config.toml</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="k">[default]</span>
-<span class="n">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+<h3 id="run-from-a-local-install-instead-of-docker">Run from a local install instead of Docker</h3>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>sync
 
-<span class="k">[servers.local]</span>
-<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000&quot;</span>
-<span class="n">username</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;jdoe&quot;</span>
+<span class="nb">cd</span><span class="w"> </span>frontend
+npm<span class="w"> </span>ci<span class="w"> </span>--no-audit<span class="w"> </span>--no-fund
+npx<span class="w"> </span>vite<span class="w"> </span>build
+<span class="nb">cd</span><span class="w"> </span>..
+
+<span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>claude
+<span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>your-model-name
+<span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>your-anthropic-api-key
+
+uv<span class="w"> </span>run<span class="w"> </span>jenkins-job-insight
 </code></pre></div>
 
-<p>After that, <code>jji health</code> and <code>jji analyze ...</code> use that profile automatically. The same file can also hold Jenkins, AI, and other per-server defaults when you want the CLI to supply them.</p>
-<h3 id="override-jenkins-or-ai-settings-on-one-run">Override Jenkins or AI settings on one run</h3>
-<div class="highlight"><pre><span></span><code>jji<span class="w"> </span>analyze<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--job-name<span class="w"> </span><span class="nb">test</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--build-number<span class="w"> </span><span class="m">123</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--jenkins-url<span class="w"> </span>https://jenkins.example.com<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--jenkins-user<span class="w"> </span>your-username<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--jenkins-password<span class="w"> </span>your-api-token<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--provider<span class="w"> </span>claude<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--model<span class="w"> </span>your-model-name
-</code></pre></div>
-
-<p>Use this when you do not want to keep Jenkins credentials or AI defaults in the server environment.</p>
-<h3 id="switch-ai-providers">Switch AI providers</h3>
-<p>Use one provider at a time and set the matching authentication variable.</p>
+<p>Reuse the same <code>.env</code> file from the Docker steps for <code>JENKINS_*</code> and other server settings. For a local process, export <code>AI_PROVIDER</code>, <code>AI_MODEL</code>, and the matching provider credential before you start the server.</p>
+<blockquote>
+<p><strong>Warning:</strong> If a local run says no AI provider or model is configured even though those values are in <code>.env</code>, export them in your shell before starting <code>uv run jenkins-job-insight</code>.</p>
+</blockquote>
+<h3 id="choose-a-different-ai-provider">Choose a different AI provider</h3>
 <table>
 <thead>
 <tr>
 <th>Provider</th>
-<th>Example <code>.env</code> values</th>
+<th>Minimum settings</th>
 </tr>
 </thead>
 <tbody>
@@ -363,31 +329,46 @@ jji<span class="w"> </span>results<span class="w"> </span>dashboard
 </tr>
 </tbody>
 </table>
-<p>If you want multi-model peer review after your first successful run, see <a href="adding-peer-review-with-multiple-ai-models.html">Adding Peer Review with Multiple AI Models</a> for details.</p>
-<h3 id="run-from-a-source-checkout-instead-of-docker">Run from a source checkout instead of Docker</h3>
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>sync
-<span class="nb">cd</span><span class="w"> </span>frontend<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>install<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>npm<span class="w"> </span>run<span class="w"> </span>build
-uv<span class="w"> </span>run<span class="w"> </span>jenkins-job-insight
+<p>The Docker image already includes the supported provider CLIs. You only need to supply the matching credentials.</p>
+<blockquote>
+<p><strong>Tip:</strong> <code>gemini</code> can also use <code>gemini auth login</code> instead of <code>GEMINI_API_KEY</code>.</p>
+</blockquote>
+<h3 id="save-cli-defaults-so-you-can-skip-repeated-flags">Save CLI defaults so you can skip repeated flags</h3>
+<div class="highlight"><pre><span></span><code><span class="k">[default]</span>
+<span class="n">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+
+<span class="k">[servers.local]</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000&quot;</span>
+<span class="n">username</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;jdoe&quot;</span>
 </code></pre></div>
 
-<p>Use this when you want a local process instead of a container. Build the web UI before starting the server, or browser routes will not load.</p>
-<p>If you want to analyze JUnit XML or raw failures without Jenkins, see <a href="analyzing-junit-xml-and-raw-failures.html">Analyzing JUnit XML and Raw Failures</a> for details.</p>
-<h3 id="make-generated-links-absolute">Make generated links absolute</h3>
-<p>Set <code>PUBLIC_BASE_URL</code> on the server if you want <code>Poll:</code> and other generated links to use a full public URL instead of <code>/results/&lt;job_id&gt;</code>.</p>
+<p>Save that as <code>~/.config/jji/config.toml</code>. After that, <code>uv run jji health</code> and <code>uv run jji analyze --job-name my-job --build-number 42</code> can use the saved server and username automatically.</p>
+<h3 id="make-the-poll-line-use-a-full-url">Make the <code>Poll:</code> line use a full URL</h3>
+<div class="highlight"><pre><span></span><code>PUBLIC_BASE_URL=https://jji.example.com
+</code></pre></div>
+
+<p>Without <code>PUBLIC_BASE_URL</code>, JJI returns relative links such as <code>/results/&lt;job_id&gt;</code>. Set it when you want the CLI output and generated report links to point at the public hostname directly.</p>
+<ul>
+<li>See <a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a> for every server setting.</li>
+<li>See <a href="cli-command-reference.html">CLI Command Reference</a> for all <code>jji</code> commands.</li>
+<li>See <a href="copy-common-analysis-recipes.html">Copy Common Analysis Recipes</a> for ready-made commands such as <code>--no-wait</code>, self-signed Jenkins, forced analysis, and extra repository context.</li>
+<li>See <a href="copy-common-deployment-recipes.html">Copy Common Deployment Recipes</a> for container and reverse-proxy patterns.</li>
+</ul>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <ul>
-<li><code>Error: No server specified</code>: export <code>JJI_SERVER=http://localhost:8000</code>, pass <code>--server http://localhost:8000</code>, or save a CLI server profile.</li>
-<li>The browser keeps sending you to <code>/register</code>: save a username first. A normal user does not need a password or API key.</li>
-<li>The browser shows <code>Frontend not built</code>: this only happens on a local source checkout. Run <code>cd frontend &amp;&amp; npm install &amp;&amp; npm run build</code>, then restart the server.</li>
-<li>Jenkins certificate errors on the first run: set <code>JENKINS_SSL_VERIFY=false</code> in <code>.env</code>, or pass <code>--no-jenkins-ssl-verify</code> on the CLI.</li>
-<li>The run stays in <code>waiting</code>: JJI is still watching Jenkins finish the build. If you do not want that behavior, re-run with <code>--no-wait</code>.</li>
+<li><code>Error: No server specified</code>: pass <code>--server http://localhost:8000</code>, or save a CLI profile in <code>~/.config/jji/config.toml</code>.</li>
+<li>The browser keeps sending you to <code>/register</code>: save a username first. A normal first run does not need an API key.</li>
+<li>The local install shows <code>Frontend not built</code>: rebuild the frontend with <code>npm ci --no-audit --no-fund</code> and <code>npx vite build</code> in <code>frontend/</code>, then restart the server.</li>
+<li>Jenkins TLS errors block the first run: set <code>JENKINS_SSL_VERIFY=false</code> in <code>.env</code>, or use the self-signed Jenkins recipe in <a href="copy-common-analysis-recipes.html">Copy Common Analysis Recipes</a>.</li>
+<li>The run stays in <code>waiting</code>: JJI is still polling Jenkins for build completion. Use a finished build for the fastest first run, or see <a href="copy-common-analysis-recipes.html">Copy Common Analysis Recipes</a> for a no-wait example.</li>
+<li>The <code>Poll:</code> line is only <code>/results/&lt;job_id&gt;</code>: that is expected until <code>PUBLIC_BASE_URL</code> is set.</li>
 </ul>
 <h2 id="related-pages">Related Pages</h2>
 <ul>
-<li><a href="analyzing-jenkins-jobs.html">Analyzing Jenkins Jobs</a></li>
-<li><a href="analyzing-junit-xml-and-raw-failures.html">Analyzing JUnit XML and Raw Failures</a></li>
-<li><a href="monitoring-and-rerunning-analyses.html">Monitoring and Re-Running Analyses</a></li>
-<li><a href="cli-command-reference.html">CLI Command Reference</a></li>
+<li><a href="analyze-a-jenkins-job.html">Analyze a Jenkins Job</a></li>
+<li><a href="review-and-classify-failures.html">Review and Classify Failures</a></li>
+<li><a href="copy-common-analysis-recipes.html">Copy Common Analysis Recipes</a></li>
+<li><a href="copy-common-deployment-recipes.html">Copy Common Deployment Recipes</a></li>
 <li><a href="configuration-and-environment-reference.html">Configuration and Environment Reference</a></li>
 </ul>
                 </div>
@@ -397,9 +378,9 @@ uv<span class="w"> </span>run<span class="w"> </span>jenkins-job-insight
                 <div></div>
                 
                 
-                <a href="analyzing-jenkins-jobs.html" class="page-nav-link page-nav-next">
+                <a href="configure-your-profile-and-notifications.html" class="page-nav-link page-nav-next">
                     <span class="page-nav-label">Next</span>
-                    <span class="page-nav-title">Analyzing Jenkins Jobs</span>
+                    <span class="page-nav-title">Configure Your Profile and Notifications</span>
                 </a>
                 
             </nav>
@@ -413,11 +394,10 @@ uv<span class="w"> </span>run<span class="w"> </span>jenkins-job-insight
 <li><a href="#quick-example">Quick Example</a></li>
 <li><a href="#step-by-step">Step-by-Step</a></li>
 <li><a href="#advanced-usage">Advanced Usage</a><ul>
-<li><a href="#save-your-cli-server-profile">Save your CLI server profile</a></li>
-<li><a href="#override-jenkins-or-ai-settings-on-one-run">Override Jenkins or AI settings on one run</a></li>
-<li><a href="#switch-ai-providers">Switch AI providers</a></li>
-<li><a href="#run-from-a-source-checkout-instead-of-docker">Run from a source checkout instead of Docker</a></li>
-<li><a href="#make-generated-links-absolute">Make generated links absolute</a></li>
+<li><a href="#run-from-a-local-install-instead-of-docker">Run from a local install instead of Docker</a></li>
+<li><a href="#choose-a-different-ai-provider">Choose a different AI provider</a></li>
+<li><a href="#save-cli-defaults-so-you-can-skip-repeated-flags">Save CLI defaults so you can skip repeated flags</a></li>
+<li><a href="#make-the-poll-line-use-a-full-url">Make the Poll: line use a full URL</a></li>
 </ul>
 </li>
 <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -433,7 +413,7 @@ uv<span class="w"> </span>run<span class="w"> </span>jenkins-job-insight
 
         <footer class="page-footer">
             
-            <span class="footer-version">Generated from version 3.0.0</span>
+            <span class="footer-version">Generated from version 3.2.0</span>
             <span class="footer-sep">&middot;</span>
             
             Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
