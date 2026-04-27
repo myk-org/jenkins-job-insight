@@ -33,6 +33,13 @@ docker run -d -p 8000:8000 -v ./data:/data \
 - CLI flag: `--max-concurrent`
 - Config file (`~/.config/jji/config.toml`): `max_concurrent_ai_calls`
 
+Example API override:
+```bash
+curl -X POST http://localhost:8000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"job_name": "my-job", "build_number": 42, "max_concurrent_ai_calls": 2}'
+```
+
 ## Features
 
 - **AI-Powered Failure Analysis** — Classifies test failures as code issues or product bugs
