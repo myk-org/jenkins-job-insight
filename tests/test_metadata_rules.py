@@ -333,7 +333,7 @@ class TestMetadataRulesAPI:
                 resp = await client.get("/api/jobs/metadata/rules")
                 assert resp.status_code == 200
                 data = resp.json()
-                assert data["rules_file"] == "/data/rules.yaml"
+                assert data["rules_file"] == "rules.yaml"
                 assert len(data["rules"]) == 1
 
     async def test_preview_rules_endpoint(self) -> None:

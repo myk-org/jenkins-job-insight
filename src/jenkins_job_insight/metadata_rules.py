@@ -139,7 +139,7 @@ def _match_single_rule(job_name: str, rule: dict) -> dict | None:
             if value is not None:
                 matched_fields[key] = value
     else:
-        if not fnmatch.fnmatch(job_name, pattern):
+        if not fnmatch.fnmatchcase(job_name, pattern):
             return None
 
     # Copy explicit fields from rule.

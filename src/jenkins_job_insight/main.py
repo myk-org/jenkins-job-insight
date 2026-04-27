@@ -4384,7 +4384,11 @@ async def list_metadata_rules() -> dict:
     settings = get_settings()
     rules = settings.metadata_rules
     return {
-        "rules_file": settings.metadata_rules_file or None,
+        "rules_file": (
+            Path(settings.metadata_rules_file).name
+            if settings.metadata_rules_file
+            else None
+        ),
         "rules": rules,
     }
 
