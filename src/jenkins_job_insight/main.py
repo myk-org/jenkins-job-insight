@@ -632,6 +632,18 @@ class ErrorTrackingMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _set_username_cookie(response: Response, username: str, *, secure: bool) -> None:
+    """Set the jji_username cookie with consistent attributes."""
+    response.set_cookie(
+        "jji_username",
+        username,
+        path="/",
+        max_age=365 * 24 * 60 * 60,
+        samesite="lax",
+        secure=secure,
+    )
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     """Authenticate requests: admin via session/Bearer, regular users via cookie."""
 
@@ -671,25 +683,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
             proxy_username = request.headers.get("x-forwarded-user", "").strip()
 
         if path.startswith("/register"):
-            # Session auth takes precedence over X-Forwarded-User
-            session_token = request.cookies.get("jji_session")
-            has_session = False
-            if session_token:
-                session = await storage.get_session(session_token)
-                if session:
-                    has_session = True
-
-            if proxy_username and proxy_username.lower() != "admin" and not has_session:
+            if proxy_username and proxy_username.lower() != "admin":
+                # Session auth takes precedence over X-Forwarded-User —
+                # only check when an SSO redirect would otherwise fire.
+                session_token = request.cookies.get("jji_session")
+                if session_token and await storage.get_session(session_token):
+                    return await call_next(request)
                 # SSO user hitting /register — redirect to dashboard
                 response = RedirectResponse(url="/", status_code=303)
                 if request.cookies.get("jji_username", "") != proxy_username:
-                    response.set_cookie(
-                        "jji_username",
-                        proxy_username,
-                        path="/",
-                        max_age=365 * 24 * 60 * 60,
-                        samesite="lax",
-                        secure=settings.secure_cookies,
+                    _set_username_cookie(
+                        response, proxy_username, secure=settings.secure_cookies
                     )
                 return response
             return await call_next(request)
@@ -791,13 +795,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if getattr(request.state, "set_proxy_cookie", None):
             proxy_cookie_value = request.state.set_proxy_cookie
             if request.cookies.get("jji_username", "") != proxy_cookie_value:
-                response.set_cookie(
-                    "jji_username",
-                    proxy_cookie_value,
-                    path="/",
-                    max_age=365 * 24 * 60 * 60,
-                    samesite="lax",
-                    secure=settings.secure_cookies,
+                _set_username_cookie(
+                    response, proxy_cookie_value, secure=settings.secure_cookies
                 )
 
         # Refresh session cookie max_age if session was renewed
