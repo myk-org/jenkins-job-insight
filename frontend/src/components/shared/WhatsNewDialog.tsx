@@ -64,7 +64,7 @@ export function WhatsNewDialog() {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-signal-blue" />
+            <Sparkles aria-hidden="true" className="h-5 w-5 text-signal-blue" />
             What&apos;s New
           </DialogTitle>
           <DialogDescription>
