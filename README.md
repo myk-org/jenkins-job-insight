@@ -34,6 +34,7 @@ docker run -d -p 8000:8000 -v ./data:/data \
 - Config file (`~/.config/jji/config.toml`): `max_concurrent_ai_calls`
 
 Example API override:
+
 ```bash
 curl -X POST http://localhost:8000/analyze \
   -H "Content-Type: application/json" \
