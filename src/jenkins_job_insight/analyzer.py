@@ -1237,6 +1237,7 @@ async def analyze_child_job(
     peer_ai_configs: list | None = None,
     peer_analysis_max_rounds: int = 3,
     additional_repos: dict[str, Path] | None = None,
+    max_concurrent_ai_calls: int = 3,
 ) -> ChildJobAnalysis:
     """Analyze a single child job, recursively analyzing its failed children.
 
@@ -1328,10 +1329,13 @@ async def analyze_child_job(
                 peer_ai_configs=peer_ai_configs,
                 peer_analysis_max_rounds=peer_analysis_max_rounds,
                 additional_repos=additional_repos,
+                max_concurrent_ai_calls=max_concurrent_ai_calls,
             )
             for child_name, child_num in failed_children
         ]
-        child_results = await run_parallel_with_limit(child_tasks)
+        child_results = await run_parallel_with_limit(
+            child_tasks, max_concurrency=max_concurrent_ai_calls
+        )
 
         # Handle exceptions in results
         child_analyses = []
@@ -1415,7 +1419,9 @@ async def analyze_child_job(
                     additional_repos=additional_repos,
                 )
             )
-        group_results = await run_parallel_with_limit(tasks)
+        group_results = await run_parallel_with_limit(
+            tasks, max_concurrency=max_concurrent_ai_calls
+        )
 
         # Flatten results and handle exceptions
         failures = []
@@ -1722,10 +1728,13 @@ async def analyze_job(
                         peer_ai_configs=peer_ai_configs,
                         peer_analysis_max_rounds=peer_analysis_max_rounds,
                         additional_repos=cloned_repos or None,
+                        max_concurrent_ai_calls=settings.max_concurrent_ai_calls,
                     )
                     for child_name, child_num in failed_child_jobs
                 ]
-                child_results = await run_parallel_with_limit(child_tasks)
+                child_results = await run_parallel_with_limit(
+                    child_tasks, max_concurrency=settings.max_concurrent_ai_calls
+                )
 
                 # Handle exceptions in results
                 for i, result in enumerate(child_results):
@@ -1819,7 +1828,9 @@ async def analyze_job(
                             additional_repos=cloned_repos or None,
                         )
                     )
-                group_results = await run_parallel_with_limit(failure_tasks)
+                group_results = await run_parallel_with_limit(
+                    failure_tasks, max_concurrency=settings.max_concurrent_ai_calls
+                )
 
                 # Flatten results and handle exceptions
                 failures = []

@@ -94,6 +94,10 @@ class BaseAnalysisRequest(BaseModel):
         default=None,
         description="AI CLI timeout in minutes (overrides AI_CLI_TIMEOUT env var)",
     )
+    max_concurrent_ai_calls: Annotated[int, Field(gt=0)] | None = Field(
+        default=None,
+        description="Max concurrent AI CLI calls (overrides MAX_CONCURRENT_AI_CALLS env var)",
+    )
     jira_url: str | None = Field(
         default=None,
         description="Jira instance URL (overrides JIRA_URL env var)",

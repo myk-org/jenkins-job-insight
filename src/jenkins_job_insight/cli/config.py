@@ -34,6 +34,7 @@ class ServerConfig:
     ai_provider: str = ""
     ai_model: str = ""
     ai_cli_timeout: int = 0  # 0 means use server default
+    max_concurrent_ai_calls: int = 0  # 0 means use server default
     # Jira
     jira_url: str = ""
     jira_email: str = ""
@@ -222,6 +223,9 @@ def _server_config_from_dict(data: dict) -> ServerConfig:
         ai_provider=data.get("ai_provider", ""),
         ai_model=data.get("ai_model", ""),
         ai_cli_timeout=data.get("ai_cli_timeout", 0),
+        max_concurrent_ai_calls=_validated_non_negative_int(
+            data, "max_concurrent_ai_calls"
+        ),
         # Peer analysis
         peers=_validated_str(data, "peers"),
         peer_analysis_max_rounds=_validated_int(data, "peer_analysis_max_rounds"),

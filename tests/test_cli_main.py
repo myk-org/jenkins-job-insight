@@ -957,6 +957,36 @@ class TestAnalyzeAllOptions:
         kwargs = mock_client.analyze.call_args[1]
         assert kwargs[body_key] == expected_value
 
+    def test_max_concurrent_option(self, mock_client):
+        """--max-concurrent should be forwarded as max_concurrent_ai_calls."""
+        mock_client.analyze.return_value = self._ANALYZE_RESPONSE
+        result = runner.invoke(
+            app,
+            [
+                "analyze",
+                "--job-name",
+                "my-job",
+                "--build-number",
+                "1",
+                "--max-concurrent",
+                "5",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        kwargs = mock_client.analyze.call_args[1]
+        assert kwargs["max_concurrent_ai_calls"] == 5
+
+    def test_max_concurrent_zero_not_forwarded(self, mock_client):
+        """--max-concurrent 0 (default) should not forward the field."""
+        mock_client.analyze.return_value = self._ANALYZE_RESPONSE
+        result = runner.invoke(
+            app,
+            ["analyze", "--job-name", "my-job", "--build-number", "1"],
+        )
+        assert result.exit_code == 0, result.output
+        kwargs = mock_client.analyze.call_args[1]
+        assert "max_concurrent_ai_calls" not in kwargs
+
     def test_no_optional_fields_when_not_provided(self, mock_client):
         """When no optional flags are given and no env vars set, extras should be empty."""
         mock_client.analyze.return_value = self._ANALYZE_RESPONSE
@@ -1696,6 +1726,7 @@ class TestAnalyzeConfigDefaults:
         ai_provider="gemini",
         ai_model="2.5-pro",
         ai_cli_timeout=20,
+        max_concurrent_ai_calls=5,
         jira_url="https://jira.cfg.local",
         jira_email="cfg@example.com",
         jira_api_token=_FAKE_JIRA_API_TOKEN,
@@ -1752,6 +1783,7 @@ class TestAnalyzeConfigDefaults:
         assert result.exit_code == 0
         kwargs = client.analyze.call_args[1]
         assert kwargs["ai_cli_timeout"] == 20
+        assert kwargs["max_concurrent_ai_calls"] == 5
         assert kwargs["jira_max_results"] == 40
         assert kwargs["jenkins_timeout"] == 45
 

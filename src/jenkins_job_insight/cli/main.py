@@ -676,6 +676,11 @@ def analyze(
         "--force/--no-force",
         help="Force analysis even if the build succeeded.",
     ),
+    max_concurrent: int = typer.Option(
+        0,
+        "--max-concurrent",
+        help="Max concurrent AI CLI calls (0 = use server default).",
+    ),
     json_output: bool = _JSON_OPTION,
 ):
     """Submit a Jenkins job for analysis."""
@@ -695,6 +700,9 @@ def analyze(
             raise typer.Exit(1)
     if max_wait is not None and max_wait < 0:
         typer.echo("Error: --max-wait must be non-negative.", err=True)
+        raise typer.Exit(1)
+    if max_concurrent < 0:
+        typer.echo("Error: --max-concurrent must be non-negative.", err=True)
         raise typer.Exit(1)
 
     # Start from config defaults (lowest priority), then overlay CLI flags.
@@ -724,6 +732,7 @@ def analyze(
         # the dataclass default (0 = "use server default" for all these fields).
         _cfg_int_fields = {
             "ai_cli_timeout": cfg.ai_cli_timeout,
+            "max_concurrent_ai_calls": cfg.max_concurrent_ai_calls,
             "jira_max_results": cfg.jira_max_results,
             "jenkins_timeout": cfg.jenkins_timeout,
             "poll_interval_minutes": cfg.poll_interval_minutes,
@@ -731,6 +740,7 @@ def analyze(
         }
         _cfg_int_defaults = {
             "ai_cli_timeout": ServerConfig.ai_cli_timeout,
+            "max_concurrent_ai_calls": ServerConfig.max_concurrent_ai_calls,
             "jira_max_results": ServerConfig.jira_max_results,
             "jenkins_timeout": ServerConfig.jenkins_timeout,
             "poll_interval_minutes": ServerConfig.poll_interval_minutes,
@@ -800,6 +810,10 @@ def analyze(
     for key, value in _int_fields.items():
         if value is not None:
             extras[key] = value
+
+    # max_concurrent: 0 means "not set" (use server default).
+    if max_concurrent > 0:
+        extras["max_concurrent_ai_calls"] = max_concurrent
 
     # Boolean options: include only if explicitly set (not None).
     _bool_fields = {

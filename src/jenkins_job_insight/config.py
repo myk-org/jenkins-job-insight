@@ -196,6 +196,9 @@ class Settings(BaseSettings):
     # AI CLI timeout in minutes
     ai_cli_timeout: int = Field(default=10, gt=0)
 
+    # Max concurrent AI CLI calls
+    max_concurrent_ai_calls: int = Field(default=3, gt=0)
+
     # Peer analysis configuration
     peer_ai_configs: str = ""  # "provider:model,provider:model" format
     peer_analysis_max_rounds: int = Field(default=3, ge=1, le=10)

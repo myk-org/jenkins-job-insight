@@ -572,3 +572,27 @@ class TestForceAnalysisSettings:
         with patch.dict(os.environ, env, clear=True):
             settings = Settings(_env_file=None)
             assert settings.force_analysis is False
+
+
+class TestMaxConcurrentAiCalls:
+    """Tests for max_concurrent_ai_calls setting."""
+
+    def test_default_value_is_3(self) -> None:
+        """Default max_concurrent_ai_calls is 3."""
+        with patch.dict(os.environ, _build_env(), clear=True):
+            settings = Settings(_env_file=None)
+            assert settings.max_concurrent_ai_calls == 3
+
+    def test_env_override(self) -> None:
+        """MAX_CONCURRENT_AI_CALLS env var overrides the default."""
+        env = _build_env(MAX_CONCURRENT_AI_CALLS="5")
+        with patch.dict(os.environ, env, clear=True):
+            settings = Settings(_env_file=None)
+            assert settings.max_concurrent_ai_calls == 5
+
+    def test_env_value_of_1(self) -> None:
+        """MAX_CONCURRENT_AI_CALLS=1 is valid."""
+        env = _build_env(MAX_CONCURRENT_AI_CALLS="1")
+        with patch.dict(os.environ, env, clear=True):
+            settings = Settings(_env_file=None)
+            assert settings.max_concurrent_ai_calls == 1

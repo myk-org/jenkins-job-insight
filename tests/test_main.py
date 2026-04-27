@@ -3180,6 +3180,37 @@ class TestPeerAnalysisParams:
 
         assert merged.peer_analysis_max_rounds == 9
 
+    def test_merge_settings_max_concurrent_ai_calls_override(self) -> None:
+        """max_concurrent_ai_calls in request body overrides env default via _merge_settings."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+            ai_provider="claude",
+            ai_model="test-model",
+            max_concurrent_ai_calls=7,
+        )
+        settings = Settings()
+        merged = _merge_settings(body, settings)
+        assert merged.max_concurrent_ai_calls == 7
+
+    def test_merge_settings_max_concurrent_ai_calls_preserves_default(self) -> None:
+        """Omitted max_concurrent_ai_calls preserves the server default."""
+        from jenkins_job_insight.main import _merge_settings
+        from jenkins_job_insight.models import AnalyzeRequest
+
+        body = AnalyzeRequest(
+            job_name="test",
+            build_number=1,
+            ai_provider="claude",
+            ai_model="test-model",
+        )
+        settings = Settings()
+        merged = _merge_settings(body, settings)
+        assert merged.max_concurrent_ai_calls == 3
+
     def test_resolve_peer_ai_configs_none_uses_env(self, test_client) -> None:
         """When peer_ai_configs is None in request, _resolve_peer_ai_configs falls back to env default."""
         from jenkins_job_insight.main import _merge_settings, _resolve_peer_ai_configs

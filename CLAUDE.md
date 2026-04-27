@@ -111,6 +111,12 @@ Key patterns:
 - **User identification**: Cookie-based (`jji_username`), read/written client-side; display-only, not an authentication/authorization boundary
 - **Grouping**: `lib/grouping.ts` ports Python's `_grouping_key()` to TypeScript
 
+### Auto-Generated Documentation
+
+The `docs/` directory is **auto-generated** by [docsfy](https://github.com/myk-org/docsfy) and served via GitHub Pages. **NEVER edit files in `docs/` manually** — all changes will be overwritten on the next generation. To update documentation, either:
+- Update the source code and regenerate with docsfy
+- Update `AGENTS.md` or `README.md` for project-level documentation
+
 ### AI Tool Access (IMPORTANT)
 
 Never pre-feed data to the AI in the prompt. Instead, give the AI tools (API endpoints, scripts, commands) and let it decide what data it needs and extract it itself.
