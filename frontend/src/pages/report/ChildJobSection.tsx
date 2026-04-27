@@ -26,7 +26,7 @@ export function ChildJobSection({ child, jobId, depth = 0, activeHash, parentHas
   const hashId = childJobHashId(child.job_name, child.build_number, parentHashId)
   const expandKey = `jji-expand-${jobId}-${hashId}`
   const sectionRef = useRef<HTMLDivElement>(null)
-  const [expanded, setExpanded] = useSessionState(expandKey, false)
+  const [expanded, setExpanded] = useSessionState<boolean>(expandKey, false)
 
   // Auto-expand and scroll when the URL hash targets this child job or any descendant
   useEffect(() => {

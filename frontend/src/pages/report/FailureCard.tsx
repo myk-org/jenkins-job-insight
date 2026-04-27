@@ -94,7 +94,7 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
   const { githubIssuesEnabled, jiraIssuesEnabled, serverJiraProjectKey, comments, reviews, aiConfigs, result, classifications } = useReportState()
   const dispatch = useReportDispatch()
   const expandKey = `jji-expand-${jobId}-${scopedChildJobName}-${scopedChildBuildNumber}-${group.id}`
-  const [expanded, setExpanded] = useSessionState(expandKey, false)
+  const [expanded, setExpanded] = useSessionState<boolean>(expandKey, false)
   const [bugTarget, setBugTarget] = useState<'github' | 'jira' | null>(null)
   const [reviewingAll, setReviewingAll] = useState(false)
   const [reviewAllError, setReviewAllError] = useState<string | null>(null)
