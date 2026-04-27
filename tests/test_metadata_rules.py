@@ -474,28 +474,18 @@ class TestMetadataRulesCLI:
 
     def _invoke(self, args: list[str], handler) -> object:
         runner = CliRunner()
-        with patch(
-            "jenkins_job_insight.cli.main._get_client",
-            return_value=make_test_client(handler),
+        with (
+            patch.dict(os.environ, {"JJI_SERVER": "http://test-server"}),
+            patch(
+                "jenkins_job_insight.cli.main.get_server_config",
+                return_value=None,
+            ),
+            patch(
+                "jenkins_job_insight.cli.main._get_client",
+                return_value=make_test_client(handler),
+            ),
         ):
             result = runner.invoke(cli_app, args)
-            if result.exit_code != 0:
-                import sys
-
-                print(
-                    f"CLI FAILED: args={args}, exit_code={result.exit_code}",
-                    file=sys.stderr,
-                )
-                print(f"CLI OUTPUT: {result.output!r}", file=sys.stderr)
-                if result.exception:
-                    import traceback
-
-                    traceback.print_exception(
-                        type(result.exception),
-                        result.exception,
-                        result.exception.__traceback__,
-                        file=sys.stderr,
-                    )
             return result
 
     def test_metadata_rules_command(self) -> None:
