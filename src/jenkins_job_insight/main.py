@@ -682,14 +682,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if proxy_username and proxy_username.lower() != "admin" and not has_session:
                 # SSO user hitting /register — redirect to dashboard
                 response = RedirectResponse(url="/", status_code=303)
-                response.set_cookie(
-                    "jji_username",
-                    proxy_username,
-                    path="/",
-                    max_age=365 * 24 * 60 * 60,
-                    samesite="lax",
-                    secure=settings.secure_cookies,
-                )
+                if request.cookies.get("jji_username", "") != proxy_username:
+                    response.set_cookie(
+                        "jji_username",
+                        proxy_username,
+                        path="/",
+                        max_age=365 * 24 * 60 * 60,
+                        samesite="lax",
+                        secure=settings.secure_cookies,
+                    )
                 return response
             return await call_next(request)
 
@@ -788,14 +789,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Set jji_username cookie from X-Forwarded-User header (SSO)
         if getattr(request.state, "set_proxy_cookie", None):
-            response.set_cookie(
-                "jji_username",
-                request.state.set_proxy_cookie,
-                path="/",
-                max_age=365 * 24 * 60 * 60,
-                samesite="lax",
-                secure=settings.secure_cookies,
-            )
+            proxy_cookie_value = request.state.set_proxy_cookie
+            if request.cookies.get("jji_username", "") != proxy_cookie_value:
+                response.set_cookie(
+                    "jji_username",
+                    proxy_cookie_value,
+                    path="/",
+                    max_age=365 * 24 * 60 * 60,
+                    samesite="lax",
+                    secure=settings.secure_cookies,
+                )
 
         # Refresh session cookie max_age if session was renewed
         if getattr(request.state, "renew_session_token", None):
