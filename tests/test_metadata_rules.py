@@ -478,7 +478,8 @@ class TestMetadataRulesCLI:
             "jenkins_job_insight.cli.main._get_client",
             return_value=make_test_client(handler),
         ):
-            return runner.invoke(cli_app, args)
+            result = runner.invoke(cli_app, args, catch_exceptions=False)
+        return result
 
     def test_metadata_rules_command(self) -> None:
         response_data = {
