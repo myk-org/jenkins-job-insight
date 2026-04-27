@@ -1139,6 +1139,7 @@ async def analyze_failure_group(
     peer_analysis_max_rounds: int = 3,
     group_label: str = "",
     additional_repos: dict[str, Path] | None = None,
+    max_concurrent_ai_calls: int = 3,
 ) -> list[FailureAnalysis]:
     """Analyze a group of failures with the same error signature.
 
@@ -1159,6 +1160,9 @@ async def analyze_failure_group(
         group_label: Human-readable label identifying which failure group is
             being analyzed (e.g. ``"2/3"``). Forwarded to peer analysis for
             progress phase disambiguation.
+        additional_repos: Extra cloned repositories for AI context.
+        max_concurrent_ai_calls: Maximum concurrent AI CLI processes for
+            peer analysis parallelism (default: 3).
 
     Returns:
         List of FailureAnalysis objects, one per failure in the group.
@@ -1189,6 +1193,7 @@ async def analyze_failure_group(
             job_id=job_id,
             group_label=group_label,
             additional_repos=additional_repos,
+            max_concurrent_ai_calls=max_concurrent_ai_calls,
         )
 
     parsed, error_signature = await _run_single_ai_analysis(
@@ -1258,6 +1263,10 @@ async def analyze_child_job(
         artifacts_context: Jenkins artifacts context for AI analysis (optional).
         server_url: Base URL of this server for AI history API access.
         job_id: Current job ID to exclude from history queries.
+        peer_ai_configs: Peer AI configurations for multi-AI consensus analysis.
+        peer_analysis_max_rounds: Maximum debate rounds for peer analysis (default: 3).
+        additional_repos: Extra cloned repositories for AI context.
+        max_concurrent_ai_calls: Maximum concurrent AI CLI processes (default: 3).
 
     Returns:
         ChildJobAnalysis with analysis results or nested child analyses.
@@ -1417,6 +1426,7 @@ async def analyze_child_job(
                     if total_groups > 1
                     else "",
                     additional_repos=additional_repos,
+                    max_concurrent_ai_calls=max_concurrent_ai_calls,
                 )
             )
         group_results = await run_parallel_with_limit(

@@ -1773,11 +1773,14 @@ async def analyze_failures(
                 peer_ai_configs=peer_ai_configs,
                 peer_analysis_max_rounds=merged.peer_analysis_max_rounds,
                 additional_repos=cloned_repos or None,
+                max_concurrent_ai_calls=merged.max_concurrent_ai_calls,
             )
             for group_failures in groups.values()
         ]
 
-        results = await run_parallel_with_limit(coroutines)
+        results = await run_parallel_with_limit(
+            coroutines, max_concurrency=merged.max_concurrent_ai_calls
+        )
 
         # Flatten results and filter out exceptions
         all_analyses = []

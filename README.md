@@ -21,6 +21,12 @@ docker run -d -p 8000:8000 -v ./data:/data \
   ghcr.io/myk-org/jenkins-job-insight:latest
 ```
 
+### Analysis Tuning
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_CONCURRENT_AI_CALLS` | `3` | Maximum concurrent AI CLI processes. Prevents OOM with heavy models. |
+
 ## Features
 
 - **AI-Powered Failure Analysis** — Classifies test failures as code issues or product bugs
