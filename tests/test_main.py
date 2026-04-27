@@ -3196,8 +3196,10 @@ class TestPeerAnalysisParams:
         merged = _merge_settings(body, settings)
         assert merged.max_concurrent_ai_calls == 7
 
-    def test_merge_settings_max_concurrent_ai_calls_preserves_default(self) -> None:
-        """Omitted max_concurrent_ai_calls preserves the server default."""
+    def test_merge_settings_max_concurrent_ai_calls_preserves_server_setting_when_omitted(
+        self,
+    ) -> None:
+        """Omitted max_concurrent_ai_calls preserves the existing server setting."""
         from jenkins_job_insight.main import _merge_settings
         from jenkins_job_insight.models import AnalyzeRequest
 
@@ -3207,9 +3209,9 @@ class TestPeerAnalysisParams:
             ai_provider="claude",
             ai_model="test-model",
         )
-        settings = Settings()
+        settings = Settings(max_concurrent_ai_calls=9)
         merged = _merge_settings(body, settings)
-        assert merged.max_concurrent_ai_calls == 3
+        assert merged.max_concurrent_ai_calls == 9
 
     def test_resolve_peer_ai_configs_none_uses_env(self, test_client) -> None:
         """When peer_ai_configs is None in request, _resolve_peer_ai_configs falls back to env default."""

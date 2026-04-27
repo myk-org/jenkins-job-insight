@@ -679,7 +679,7 @@ def analyze(
     max_concurrent: int = typer.Option(
         0,
         "--max-concurrent",
-        help="Max concurrent AI CLI calls (0 = use server default).",
+        help="Max concurrent AI CLI calls (0 = no CLI override; config or server default will be used).",
     ),
     json_output: bool = _JSON_OPTION,
 ):

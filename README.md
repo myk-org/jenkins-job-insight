@@ -27,6 +27,12 @@ docker run -d -p 8000:8000 -v ./data:/data \
 |----------|---------|-------------|
 | `MAX_CONCURRENT_AI_CALLS` | `3` | Maximum concurrent AI CLI processes. Prevents OOM with heavy models. |
 
+`MAX_CONCURRENT_AI_CALLS` can be set via any of the supported interfaces:
+- Environment variable: `MAX_CONCURRENT_AI_CALLS`
+- API request field: `max_concurrent_ai_calls`
+- CLI flag: `--max-concurrent`
+- Config file (`~/.config/jji/config.toml`): `max_concurrent_ai_calls`
+
 ## Features
 
 - **AI-Powered Failure Analysis** — Classifies test failures as code issues or product bugs

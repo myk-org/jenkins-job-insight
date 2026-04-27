@@ -782,3 +782,27 @@ class TestServerConfigFromDictTypeValidation:
         data = {"url": "http://test", "peer_analysis_max_rounds": 5}
         cfg = _server_config_from_dict(data)
         assert cfg.peer_analysis_max_rounds == 5
+
+    def test_max_concurrent_ai_calls_negative_raises(self) -> None:
+        """Negative 'max_concurrent_ai_calls' raises ValueError."""
+        data = {"url": "http://test", "max_concurrent_ai_calls": -1}
+        with pytest.raises(
+            ValueError, match=r"max_concurrent_ai_calls.*non-negative integer"
+        ):
+            _server_config_from_dict(data)
+
+    def test_max_concurrent_ai_calls_bool_raises(self) -> None:
+        """Boolean 'max_concurrent_ai_calls' raises ValueError (bool is subclass of int)."""
+        data = {"url": "http://test", "max_concurrent_ai_calls": True}
+        with pytest.raises(
+            ValueError, match=r"max_concurrent_ai_calls.*must be an integer"
+        ):
+            _server_config_from_dict(data)
+
+    def test_max_concurrent_ai_calls_string_raises(self) -> None:
+        """String 'max_concurrent_ai_calls' raises ValueError."""
+        data = {"url": "http://test", "max_concurrent_ai_calls": "five"}
+        with pytest.raises(
+            ValueError, match=r"max_concurrent_ai_calls.*must be an integer"
+        ):
+            _server_config_from_dict(data)
