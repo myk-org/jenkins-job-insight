@@ -37,7 +37,7 @@ import { DateRangeFilter } from '@/components/shared/DateRangeFilter'
 import { useTableSort } from '@/lib/useTableSort'
 import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle, Github } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
-import { MetadataFilterBar } from '@/components/shared/MetadataFilterBar'
+import { useMetadataOptions, MetadataDropdowns, MetadataLabelChips, MetadataClearButton } from '@/components/shared/MetadataFilterBar'
 import { MetadataBadges } from '@/components/shared/MetadataBadges'
 import { NotificationPrompt } from '@/components/shared/NotificationPrompt'
 import { WhatsNewDialog } from '@/components/shared/WhatsNewDialog'
@@ -152,6 +152,7 @@ export function DashboardPage() {
     }, { replace: true })
   }, [setSearchParams])
   const hasMetadataFilters = !!(metaTeam || metaTier || metaVersion || metaLabels.length > 0)
+  const metadataOptions = useMetadataOptions()
   const setDateFrom = useCallback((value: string) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
@@ -410,8 +411,17 @@ export function DashboardPage() {
               </a>
             </div>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap gap-3 items-center">
             <SearchInput value={search} onChange={setSearch} placeholder="Filter jobs..." className="w-full sm:w-64" />
+            <MetadataDropdowns
+              options={metadataOptions}
+              team={metaTeam}
+              tier={metaTier}
+              version={metaVersion}
+              onTeamChange={(v) => setMetaParam('team', v)}
+              onTierChange={(v) => setMetaParam('tier', v)}
+              onVersionChange={(v) => setMetaParam('version', v)}
+            />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger aria-label="Filter by status" className="w-full sm:w-40">
                 <SelectValue />
@@ -435,21 +445,15 @@ export function DashboardPage() {
                 <SelectItem value="50">50</SelectItem>
               </SelectContent>
             </Select>
-
+            <MetadataClearButton hasFilters={hasMetadataFilters} onClearAll={clearMetadataFilters} />
           </div>
         </div>
 
-        {/* Metadata filters */}
-        <MetadataFilterBar
-          team={metaTeam}
-          tier={metaTier}
-          version={metaVersion}
+        {/* Tag filter chips — only shown when labels exist */}
+        <MetadataLabelChips
+          allLabels={metadataOptions.allLabels}
           labels={metaLabels}
-          onTeamChange={(v) => setMetaParam('team', v)}
-          onTierChange={(v) => setMetaParam('tier', v)}
-          onVersionChange={(v) => setMetaParam('version', v)}
           onLabelsChange={setMetaLabels}
-          onClearAll={clearMetadataFilters}
         />
 
         {/* Bulk result message */}
@@ -560,8 +564,8 @@ export function DashboardPage() {
                         {job.build_number !== undefined && (
                           <span className="ml-2 font-mono text-xs text-text-tertiary">#{job.build_number}</span>
                         )}
-                        <MetadataBadges metadata={job.metadata} />
                       </div>
+                      <MetadataBadges metadata={job.metadata} />
                       {failureHint && (
                         <Tooltip>
                           <TooltipTrigger asChild>

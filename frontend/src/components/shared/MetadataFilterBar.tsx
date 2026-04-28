@@ -13,35 +13,18 @@ import { X } from 'lucide-react'
 
 const ALL_VALUE = '__ALL__'
 
-interface MetadataFilterBarProps {
-  team: string
-  tier: string
-  version: string
-  labels: string[]
-  onTeamChange: (value: string) => void
-  onTierChange: (value: string) => void
-  onVersionChange: (value: string) => void
-  onLabelsChange: (value: string[]) => void
-  onClearAll?: () => void
+export interface MetadataOptions {
+  teams: string[]
+  tiers: string[]
+  versions: string[]
+  allLabels: string[]
 }
 
-export function MetadataFilterBar({
-  team,
-  tier,
-  version,
-  labels,
-  onTeamChange,
-  onTierChange,
-  onVersionChange,
-  onLabelsChange,
-  onClearAll,
-}: MetadataFilterBarProps) {
-  const [options, setOptions] = useState<{
-    teams: string[]
-    tiers: string[]
-    versions: string[]
-    allLabels: string[]
-  }>({ teams: [], tiers: [], versions: [], allLabels: [] })
+const EMPTY_OPTIONS: MetadataOptions = { teams: [], tiers: [], versions: [], allLabels: [] }
+
+/** Fetches distinct metadata values from the API. */
+export function useMetadataOptions(): MetadataOptions {
+  const [options, setOptions] = useState<MetadataOptions>(EMPTY_OPTIONS)
 
   useEffect(() => {
     let cancelled = false
@@ -67,19 +50,76 @@ export function MetadataFilterBar({
     return () => { cancelled = true }
   }, [])
 
-  const hasFilters = team || tier || version || labels.length > 0
+  return options
+}
 
-  const clearAll = useCallback(() => {
-    if (onClearAll) {
-      onClearAll()
-    } else {
-      onTeamChange('')
-      onTierChange('')
-      onVersionChange('')
-      onLabelsChange([])
-    }
-  }, [onClearAll, onTeamChange, onTierChange, onVersionChange, onLabelsChange])
+// ─── Select-based dropdowns (team / tier / version) ────────────────────────
 
+interface MetadataDropdownsProps {
+  options: MetadataOptions
+  team: string
+  tier: string
+  version: string
+  onTeamChange: (value: string) => void
+  onTierChange: (value: string) => void
+  onVersionChange: (value: string) => void
+}
+
+const SELECT_FILTERS_CONFIG = [
+  { key: 'team', allLabel: 'All teams', aria: 'Filter by team' },
+  { key: 'tier', allLabel: 'All tiers', aria: 'Filter by tier' },
+  { key: 'version', allLabel: 'All versions', aria: 'Filter by version' },
+] as const
+
+/** Renders team/tier/version select dropdowns. Renders nothing if no options exist. */
+export function MetadataDropdowns({
+  options,
+  team,
+  tier,
+  version,
+  onTeamChange,
+  onTierChange,
+  onVersionChange,
+}: MetadataDropdownsProps) {
+  const values: Record<string, string> = { team, tier, version }
+  const optionsMap: Record<string, string[]> = { team: options.teams, tier: options.tiers, version: options.versions }
+  const handlers: Record<string, (v: string) => void> = { team: onTeamChange, tier: onTierChange, version: onVersionChange }
+
+  return (
+    <>
+      {SELECT_FILTERS_CONFIG
+        .filter((f) => optionsMap[f.key].length > 0)
+        .map((f) => (
+          <Select
+            key={f.key}
+            value={values[f.key] || ALL_VALUE}
+            onValueChange={(v) => handlers[f.key](v === ALL_VALUE ? '' : v)}
+          >
+            <SelectTrigger aria-label={f.aria} className="w-full sm:w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_VALUE}>{f.allLabel}</SelectItem>
+              {optionsMap[f.key].map((option) => (
+                <SelectItem key={option} value={option}>{option}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ))}
+    </>
+  )
+}
+
+// ─── Label chip buttons ────────────────────────────────────────────────────
+
+interface MetadataLabelChipsProps {
+  allLabels: string[]
+  labels: string[]
+  onLabelsChange: (value: string[]) => void
+}
+
+/** Renders a row of toggle-able label chips. Renders nothing if no labels exist. */
+export function MetadataLabelChips({ allLabels, labels, onLabelsChange }: MetadataLabelChipsProps) {
   const toggleLabel = useCallback((label: string) => {
     if (labels.includes(label)) {
       onLabelsChange(labels.filter((l) => l !== label))
@@ -88,65 +128,113 @@ export function MetadataFilterBar({
     }
   }, [labels, onLabelsChange])
 
-  // Don't render if no metadata options exist
+  if (allLabels.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-text-tertiary">Filter by tag:</span>
+      {allLabels.map((label) => (
+        <button
+          type="button"
+          key={label}
+          aria-pressed={labels.includes(label)}
+          className={`cursor-pointer text-xs px-2 py-0.5 rounded-md border transition-colors ${
+            labels.includes(label)
+              ? 'bg-signal-green/20 text-signal-green border-signal-green/40 hover:bg-signal-green/30'
+              : 'border-border-muted text-text-tertiary hover:bg-surface-hover hover:text-text-secondary'
+          }`}
+          onClick={() => toggleLabel(label)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Combined clear-filters button ─────────────────────────────────────────
+
+interface MetadataClearButtonProps {
+  hasFilters: boolean
+  onClearAll: () => void
+}
+
+/** Renders a "Clear filters" button when metadata filters are active. */
+export function MetadataClearButton({ hasFilters, onClearAll }: MetadataClearButtonProps) {
+  if (!hasFilters) return null
+  return (
+    <Button variant="ghost" size="sm" onClick={onClearAll} className="h-7 px-2 text-xs text-text-tertiary hover:text-text-secondary">
+      <X className="h-3 w-3 mr-1" />
+      Clear filters
+    </Button>
+  )
+}
+
+// ─── Legacy composite (kept for backward compat if needed) ─────────────────
+
+interface MetadataFilterBarProps {
+  team: string
+  tier: string
+  version: string
+  labels: string[]
+  onTeamChange: (value: string) => void
+  onTierChange: (value: string) => void
+  onVersionChange: (value: string) => void
+  onLabelsChange: (value: string[]) => void
+  onClearAll?: () => void
+}
+
+export function MetadataFilterBar({
+  team,
+  tier,
+  version,
+  labels,
+  onTeamChange,
+  onTierChange,
+  onVersionChange,
+  onLabelsChange,
+  onClearAll,
+}: MetadataFilterBarProps) {
+  const options = useMetadataOptions()
+
+  const hasFilters = !!(team || tier || version || labels.length > 0)
+
   const noMetadataOptions =
     options.teams.length === 0 &&
     options.tiers.length === 0 &&
     options.versions.length === 0 &&
     options.allLabels.length === 0
 
-  if (!hasFilters && noMetadataOptions) {
-    return null
-  }
+  if (!hasFilters && noMetadataOptions) return null
 
-  const selectFilters = [
-    { key: 'team', value: team, options: options.teams, allLabel: 'All teams', aria: 'Filter by team', onChange: onTeamChange },
-    { key: 'tier', value: tier, options: options.tiers, allLabel: 'All tiers', aria: 'Filter by tier', onChange: onTierChange },
-    { key: 'version', value: version, options: options.versions, allLabel: 'All versions', aria: 'Filter by version', onChange: onVersionChange },
-  ]
+  const clearAll = () => {
+    if (onClearAll) {
+      onClearAll()
+    } else {
+      onTeamChange('')
+      onTierChange('')
+      onVersionChange('')
+      onLabelsChange([])
+    }
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {selectFilters.filter((f) => f.options.length > 0).map((f) => (
-        <Select key={f.key} value={f.value || ALL_VALUE} onValueChange={(v) => f.onChange(v === ALL_VALUE ? '' : v)}>
-          <SelectTrigger aria-label={f.aria} className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_VALUE}>{f.allLabel}</SelectItem>
-            {f.options.map((option) => (
-              <SelectItem key={option} value={option}>{option}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ))}
-
-      {options.allLabels.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1">
-          {options.allLabels.map((label) => (
-            <button
-              type="button"
-              key={label}
-              aria-pressed={labels.includes(label)}
-              className={`cursor-pointer text-xs px-2 py-0.5 rounded-md border transition-colors ${
-                labels.includes(label)
-                  ? 'bg-signal-green/20 text-signal-green border-signal-green/40 hover:bg-signal-green/30'
-                  : 'border-border-muted text-text-tertiary hover:bg-surface-hover hover:text-text-secondary'
-              }`}
-              onClick={() => toggleLabel(label)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {hasFilters && (
-        <Button variant="ghost" size="sm" onClick={clearAll} className="h-7 px-2 text-xs text-text-tertiary hover:text-text-secondary">
-          <X className="h-3 w-3 mr-1" />
-          Clear filters
-        </Button>
-      )}
+      <MetadataDropdowns
+        options={options}
+        team={team}
+        tier={tier}
+        version={version}
+        onTeamChange={onTeamChange}
+        onTierChange={onTierChange}
+        onVersionChange={onVersionChange}
+      />
+      <MetadataLabelChips
+        allLabels={options.allLabels}
+        labels={labels}
+        onLabelsChange={onLabelsChange}
+      />
+      <MetadataClearButton hasFilters={hasFilters} onClearAll={clearAll} />
     </div>
   )
 }
