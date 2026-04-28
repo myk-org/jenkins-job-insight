@@ -152,7 +152,7 @@ export function DashboardPage() {
     }, { replace: true })
   }, [setSearchParams])
   const hasMetadataFilters = !!(metaTeam || metaTier || metaVersion || metaLabels.length > 0)
-  const metadataOptions = useMetadataOptions()
+  const { options: metadataOptions } = useMetadataOptions()
   const setDateFrom = useCallback((value: string) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)

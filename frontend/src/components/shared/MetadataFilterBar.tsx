@@ -23,13 +23,15 @@ export interface MetadataOptions {
 const EMPTY_OPTIONS: MetadataOptions = { teams: [], tiers: [], versions: [], allLabels: [] }
 
 /** Fetches distinct metadata values from the API. */
-export function useMetadataOptions(): MetadataOptions {
+export function useMetadataOptions(): { options: MetadataOptions; loadError: boolean } {
   const [options, setOptions] = useState<MetadataOptions>(EMPTY_OPTIONS)
+  const [loadError, setLoadError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     api.get<JobMetadata[]>('/api/jobs/metadata').then((data) => {
       if (cancelled) return
+      setLoadError(false)
       const teams = new Set<string>()
       const tiers = new Set<string>()
       const versions = new Set<string>()
@@ -46,11 +48,13 @@ export function useMetadataOptions(): MetadataOptions {
         versions: [...versions].sort(),
         allLabels: [...allLabels].sort(),
       })
-    }).catch(() => { /* swallow - filter options are best-effort */ })
+    }).catch(() => {
+      if (!cancelled) setLoadError(true)
+    })
     return () => { cancelled = true }
   }, [])
 
-  return options
+  return { options, loadError }
 }
 
 // ─── Select-based dropdowns (team / tier / version) ────────────────────────
@@ -88,24 +92,29 @@ export function MetadataDropdowns({
   return (
     <>
       {SELECT_FILTERS_CONFIG
-        .filter((f) => optionsMap[f.key].length > 0)
-        .map((f) => (
-          <Select
-            key={f.key}
-            value={values[f.key] || ALL_VALUE}
-            onValueChange={(v) => handlers[f.key](v === ALL_VALUE ? '' : v)}
-          >
-            <SelectTrigger aria-label={f.aria} className="w-full sm:w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_VALUE}>{f.allLabel}</SelectItem>
-              {optionsMap[f.key].map((option) => (
-                <SelectItem key={option} value={option}>{option}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ))}
+        .filter((f) => optionsMap[f.key].length > 0 || !!values[f.key])
+        .map((f) => {
+          const items = optionsMap[f.key].length > 0
+            ? optionsMap[f.key]
+            : values[f.key] ? [values[f.key]] : []
+          return (
+            <Select
+              key={f.key}
+              value={values[f.key] || ALL_VALUE}
+              onValueChange={(v) => handlers[f.key](v === ALL_VALUE ? '' : v)}
+            >
+              <SelectTrigger aria-label={f.aria} className="w-full sm:w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_VALUE}>{f.allLabel}</SelectItem>
+                {items.map((option) => (
+                  <SelectItem key={option} value={option}>{option}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )
+        })}
     </>
   )
 }
@@ -128,12 +137,14 @@ export function MetadataLabelChips({ allLabels, labels, onLabelsChange }: Metada
     }
   }, [labels, onLabelsChange])
 
-  if (allLabels.length === 0) return null
+  if (allLabels.length === 0 && labels.length === 0) return null
+
+  const displayLabels = allLabels.length > 0 ? allLabels : labels
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs text-text-tertiary">Filter by tag:</span>
-      {allLabels.map((label) => (
+      {displayLabels.map((label) => (
         <button
           type="button"
           key={label}
@@ -165,7 +176,7 @@ export function MetadataClearButton({ hasFilters, onClearAll }: MetadataClearBut
   return (
     <Button variant="ghost" size="sm" onClick={onClearAll} className="h-7 px-2 text-xs text-text-tertiary hover:text-text-secondary">
       <X className="h-3 w-3 mr-1" />
-      Clear filters
+      Clear metadata
     </Button>
   )
 }
@@ -195,7 +206,7 @@ export function MetadataFilterBar({
   onLabelsChange,
   onClearAll,
 }: MetadataFilterBarProps) {
-  const options = useMetadataOptions()
+  const { options } = useMetadataOptions()
 
   const hasFilters = !!(team || tier || version || labels.length > 0)
 
