@@ -12,6 +12,16 @@ import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
 
 const ALL_VALUE = '__ALL__'
+const OPTION_PREFIX = 'value:'
+
+function encodeSelectValue(value: string): string {
+  return `${OPTION_PREFIX}${encodeURIComponent(value)}`
+}
+
+function decodeSelectValue(value: string): string {
+  if (value === ALL_VALUE) return ''
+  return decodeURIComponent(value.slice(OPTION_PREFIX.length))
+}
 
 export interface MetadataOptions {
   teams: string[]
@@ -106,8 +116,8 @@ export function MetadataDropdowns({
           return (
             <Select
               key={f.key}
-              value={values[f.key] || ALL_VALUE}
-              onValueChange={(v) => handlers[f.key](v === ALL_VALUE ? '' : v)}
+              value={values[f.key] ? encodeSelectValue(values[f.key]) : ALL_VALUE}
+              onValueChange={(v) => handlers[f.key](decodeSelectValue(v))}
             >
               <SelectTrigger aria-label={f.aria} className="w-full sm:w-32">
                 <SelectValue />
@@ -115,7 +125,7 @@ export function MetadataDropdowns({
               <SelectContent>
                 <SelectItem value={ALL_VALUE}>{f.allLabel}</SelectItem>
                 {items.map((option) => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
+                  <SelectItem key={option} value={encodeSelectValue(option)}>{option}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
