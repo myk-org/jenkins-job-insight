@@ -44,7 +44,13 @@ export function useMetadataOptions(): { options: MetadataOptions; loadError: boo
       }
       setOptions({
         teams: [...teams].sort(),
-        tiers: [...tiers].sort(),
+        tiers: [...tiers].sort((a, b) => {
+          const na = Number(a), nb = Number(b)
+          if (!isNaN(na) && !isNaN(nb)) return na - nb
+          if (!isNaN(na)) return -1
+          if (!isNaN(nb)) return 1
+          return a.localeCompare(b)
+        }),
         versions: [...versions].sort(),
         allLabels: [...allLabels].sort(),
       })
@@ -139,7 +145,9 @@ export function MetadataLabelChips({ allLabels, labels, onLabelsChange }: Metada
 
   if (allLabels.length === 0 && labels.length === 0) return null
 
-  const displayLabels = allLabels.length > 0 ? allLabels : labels
+  const displayLabels = allLabels.length > 0
+    ? [...new Set([...allLabels, ...labels])].sort()
+    : labels
 
   return (
     <div className="flex flex-wrap items-center gap-2">
