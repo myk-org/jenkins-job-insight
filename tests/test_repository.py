@@ -6,7 +6,11 @@ import git.exc
 import pytest
 from git.exc import GitCommandError
 
-from jenkins_job_insight.repository import RepositoryManager, repo_name_from_url
+from jenkins_job_insight.repository import (
+    RepositoryManager,
+    _is_commit_sha,
+    repo_name_from_url,
+)
 
 
 class TestRepositoryManager:
@@ -730,6 +734,200 @@ class TestInjectTokenIntoUrl:
         )
         expected = "https://x-token-auth:tok@github.com/org/repo.git"  # pragma: allowlist secret
         assert result == expected
+
+
+class TestIsCommitSha:
+    """Tests for _is_commit_sha utility function."""
+
+    def test_full_40_char_sha(self) -> None:
+        assert _is_commit_sha("a" * 40) is True
+
+    def test_short_7_char_sha(self) -> None:
+        assert _is_commit_sha("abc1234") is True
+
+    def test_mixed_case_sha(self) -> None:
+        assert (
+            _is_commit_sha(
+                "aBcDeF1234567890aBcDeF1234567890aBcDeF12"  # pragma: allowlist secret
+            )
+            is True
+        )
+
+    def test_20_char_sha(self) -> None:
+        assert (
+            _is_commit_sha("1234567890abcdef1234") is True  # pragma: allowlist secret
+        )
+
+    def test_too_short_6_chars(self) -> None:
+        assert _is_commit_sha("abc123") is False
+
+    def test_too_long_41_chars(self) -> None:
+        assert _is_commit_sha("a" * 41) is False
+
+    def test_non_hex_chars(self) -> None:
+        assert _is_commit_sha("xyz1234") is False
+
+    def test_branch_name(self) -> None:
+        assert _is_commit_sha("main") is False
+
+    def test_branch_with_slash(self) -> None:
+        assert _is_commit_sha("feature/my-branch") is False
+
+    def test_tag_name(self) -> None:
+        assert _is_commit_sha("v1.2.3") is False
+
+    def test_empty_string(self) -> None:
+        assert _is_commit_sha("") is False
+
+    def test_release_branch(self) -> None:
+        assert _is_commit_sha("release-1.8") is False
+
+
+class TestCloneShaFlow:
+    """Tests for SHA-based clone flow (full clone + checkout)."""
+
+    @patch("jenkins_job_insight.repository.Repo")
+    def test_clone_with_sha_uses_full_clone_and_checkout(
+        self, mock_repo_cls: MagicMock
+    ) -> None:
+        """clone() with a SHA ref does full clone (no depth/branch) then checkout."""
+        manager = RepositoryManager()
+        sha = "abc1234def5678"  # pragma: allowlist secret
+        mock_instance = MagicMock()
+        mock_repo_cls.return_value = mock_instance
+
+        manager.clone("https://github.com/org/repo", depth=50, branch=sha)
+
+        # clone_from should be called WITHOUT depth and branch
+        mock_repo_cls.clone_from.assert_called_once()
+        call_kwargs = mock_repo_cls.clone_from.call_args[1]
+        assert "depth" not in call_kwargs
+        assert "branch" not in call_kwargs
+        # checkout should be called on the repo instance
+        mock_instance.git.checkout.assert_called_once_with(sha)
+        manager.cleanup()
+
+    @patch("jenkins_job_insight.repository.Repo")
+    def test_clone_with_branch_uses_depth_and_branch(
+        self, mock_repo_cls: MagicMock
+    ) -> None:
+        """clone() with a branch name uses --depth and --branch as before."""
+        manager = RepositoryManager()
+        manager.clone("https://github.com/org/repo", depth=50, branch="release-1.8")
+
+        mock_repo_cls.clone_from.assert_called_once()
+        call_kwargs = mock_repo_cls.clone_from.call_args[1]
+        assert call_kwargs["depth"] == 50
+        assert call_kwargs["branch"] == "release-1.8"
+        # No checkout call (Repo() not instantiated for checkout)
+        mock_repo_cls.return_value.git.checkout.assert_not_called()
+        manager.cleanup()
+
+    @patch("jenkins_job_insight.repository.Repo")
+    def test_clone_into_with_sha_uses_full_clone_and_checkout(
+        self, mock_repo_cls: MagicMock, tmp_path
+    ) -> None:
+        """clone_into() with a SHA does full clone then checkout."""
+        manager = RepositoryManager()
+        sha = "deadbeef1234567"  # pragma: allowlist secret
+        target = tmp_path / "my-repo"
+        mock_instance = MagicMock()
+        mock_repo_cls.return_value = mock_instance
+
+        manager.clone_into("https://github.com/org/repo", target, depth=1, branch=sha)
+
+        # clone_from without depth/branch
+        mock_repo_cls.clone_from.assert_called_once()
+        call_kwargs = mock_repo_cls.clone_from.call_args[1]
+        assert "depth" not in call_kwargs
+        assert "branch" not in call_kwargs
+        # checkout with SHA
+        mock_instance.git.checkout.assert_called_once_with(sha)
+
+    @patch("jenkins_job_insight.repository.Repo")
+    def test_clone_into_with_branch_uses_depth_and_branch(
+        self, mock_repo_cls: MagicMock, tmp_path
+    ) -> None:
+        """clone_into() with a branch name preserves existing behavior."""
+        manager = RepositoryManager()
+        target = tmp_path / "my-repo"
+
+        manager.clone_into(
+            "https://github.com/org/repo", target, depth=1, branch="develop"
+        )
+
+        mock_repo_cls.clone_from.assert_called_once_with(
+            "https://github.com/org/repo", target, depth=1, branch="develop"
+        )
+
+    @patch("jenkins_job_insight.repository.Repo")
+    def test_clone_into_sha_with_token_scrubs_credentials(
+        self, mock_repo_cls: MagicMock, tmp_path
+    ) -> None:
+        """clone_into() with SHA + token still scrubs credentials."""
+        manager = RepositoryManager()
+        sha = "abc1234def5678"  # pragma: allowlist secret
+        target = tmp_path / "my-repo"
+        mock_instance = MagicMock()
+        mock_repo_cls.return_value = mock_instance
+
+        # Create .git directory to trigger scrubbing
+        target.mkdir(parents=True)
+        (target / ".git").mkdir()
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/git"),
+            patch("jenkins_job_insight.repository.subprocess") as mock_subprocess,
+        ):
+            mock_run = mock_subprocess.run
+            manager.clone_into(
+                "https://github.com/org/repo",
+                target,
+                depth=1,
+                branch=sha,
+                token="tok123",  # noqa: S106  # pragma: allowlist secret
+            )
+
+        # Token injected in clone URL
+        clone_url = mock_repo_cls.clone_from.call_args[0][0]
+        assert "tok123" in clone_url  # pragma: allowlist secret
+        # Credentials scrubbed
+        mock_run.assert_called_once()
+        scrub_cmd = mock_run.call_args[0][0]
+        assert scrub_cmd[-1] == "https://github.com/org/repo"
+
+    def test_clone_into_sha_with_ssl_retry(self, tmp_path) -> None:
+        """clone_into() with SHA retries on SSL error."""
+        manager = RepositoryManager()
+        sha = "abc1234def5678"  # pragma: allowlist secret
+        target = tmp_path / "repo"
+        target.mkdir()
+
+        mock_instance = MagicMock()
+        with patch("jenkins_job_insight.repository.Repo") as mock_repo_cls:
+            mock_repo_cls.return_value = mock_instance
+            mock_repo_cls.clone_from = MagicMock()
+            mock_clone = mock_repo_cls.clone_from
+            mock_clone.side_effect = [
+                GitCommandError(
+                    "git clone",
+                    128,
+                    stderr="server verification failed: certificate signer not trusted",
+                ),
+                MagicMock(),
+            ]
+            manager.clone_into("https://example.com/repo", target, branch=sha)
+
+            assert mock_clone.call_count == 2
+            # Both calls should have no depth/branch
+            for call in mock_clone.call_args_list:
+                assert "depth" not in call[1] or call[1].get("depth") is None
+                assert "branch" not in call[1]
+            # Retry should have SSL disabled
+            _, kwargs = mock_clone.call_args
+            assert kwargs.get("env", {}).get("GIT_SSL_NO_VERIFY") == "1"
+            # Checkout should still happen
+            mock_instance.git.checkout.assert_called_once_with(sha)
 
 
 class TestCloneIntoWithToken:

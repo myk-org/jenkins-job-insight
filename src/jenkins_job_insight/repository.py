@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -20,6 +22,13 @@ if TYPE_CHECKING:
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
 RESERVED_REPO_NAMES = frozenset({"build-artifacts"})
+
+_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{7,40}$")
+
+
+def _is_commit_sha(ref: str) -> bool:
+    """Check if a ref looks like a commit SHA (7-40 hex chars)."""
+    return bool(_SHA_PATTERN.match(ref))
 
 
 def _redact_url(url: str) -> str:
@@ -98,6 +107,24 @@ def derive_test_repo_name(
     return fallback
 
 
+def _scrub_credentials(target_dir: Path, repo_url: str | HttpUrl) -> None:
+    """Reset remote.origin.url to strip embedded credentials from .git/config.
+
+    Called after clone operations that inject auth tokens into the clone URL.
+    No-op if .git directory does not exist (e.g. clone failed before creating it).
+    """
+    if not (target_dir / ".git").exists():
+        return
+    git_executable = shutil.which("git")
+    if git_executable:
+        subprocess.run(  # noqa: S603
+            [git_executable, "remote", "set-url", "origin", str(repo_url)],
+            cwd=target_dir,
+            check=False,
+            capture_output=True,
+        )
+
+
 def _validate_repo_url(repo_url: str | HttpUrl) -> None:
     """Validate repository URL scheme to prevent SSRF."""
     url_str = str(repo_url).lower()
@@ -125,17 +152,19 @@ def _inject_token_into_url(url: str, token: str) -> str:
 
 
 def _clone_with_ssl_retry(
-    repo_url: str, clone_dir: Path, depth: int, branch: str = ""
+    repo_url: str, clone_dir: Path, depth: int | None = None, branch: str = ""
 ) -> None:
     """Clone a repo, retrying without SSL verification on cert errors.
 
     Args:
         repo_url: Repository URL to clone.
         clone_dir: Target directory for the clone.
-        depth: Number of commits to fetch.
+        depth: Number of commits to fetch. None means full clone (no --depth).
         branch: Git ref (branch/tag) to check out. Empty string means default branch.
     """
-    kwargs: dict[str, object] = {"depth": depth}
+    kwargs: dict[str, object] = {}
+    if depth is not None:
+        kwargs["depth"] = depth
     if branch:
         kwargs["branch"] = branch
     try:
@@ -183,6 +212,7 @@ class RepositoryManager:
             repo_url: URL of the git repository to clone (string or HttpUrl).
             depth: Number of commits to fetch for git history context.
             branch: Git ref (branch/tag) to check out. Empty string means default branch.
+                    Accepts both branch/tag names and commit SHAs (7-40 hex chars).
 
         Returns:
             Path to the cloned repository.
@@ -196,8 +226,14 @@ class RepositoryManager:
         clone_dir = self.base_path / f"{repo_name}-{clone_id}"
         clone_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dirs.append(clone_dir)
-        logger.info(f"Cloning repository to {clone_dir}")
-        _clone_with_ssl_retry(str(repo_url), clone_dir, depth, branch=branch)
+        if branch and _is_commit_sha(branch):
+            logger.info(f"Cloning repository to {clone_dir} (sha={branch})")
+            _clone_with_ssl_retry(str(repo_url), clone_dir)
+            Repo(clone_dir).git.checkout(branch)
+        else:
+            ref_msg = f" (ref={branch})" if branch else ""
+            logger.info(f"Cloning repository to {clone_dir}{ref_msg}")
+            _clone_with_ssl_retry(str(repo_url), clone_dir, depth, branch=branch)
         return clone_dir
 
     def clone_into(
@@ -233,23 +269,18 @@ class RepositoryManager:
         clone_url = str(repo_url)
         if token:
             clone_url = _inject_token_into_url(clone_url, token)
-        logger.info(f"Cloning repository into {target_dir}")
         try:
-            _clone_with_ssl_retry(clone_url, target_dir, depth, branch=branch)
+            if branch and _is_commit_sha(branch):
+                logger.info(f"Cloning repository into {target_dir} (sha={branch})")
+                _clone_with_ssl_retry(clone_url, target_dir)
+                Repo(target_dir).git.checkout(branch)
+            else:
+                ref_msg = f" (ref={branch})" if branch else ""
+                logger.info(f"Cloning repository into {target_dir}{ref_msg}")
+                _clone_with_ssl_retry(clone_url, target_dir, depth, branch=branch)
         finally:
-            # Scrub credentials from .git/config to prevent at-rest exposure,
-            # including partial clones that failed after writing remote.origin.url.
-            if token and (target_dir / ".git").exists():
-                import subprocess
-
-                git_executable = shutil.which("git")
-                if git_executable:
-                    subprocess.run(  # noqa: S603
-                        [git_executable, "remote", "set-url", "origin", str(repo_url)],
-                        cwd=target_dir,
-                        check=False,
-                        capture_output=True,
-                    )
+            if token:
+                _scrub_credentials(target_dir, repo_url)
         return target_dir
 
     def create_workspace(self) -> Path:
