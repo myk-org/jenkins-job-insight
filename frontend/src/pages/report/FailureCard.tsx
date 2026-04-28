@@ -19,6 +19,8 @@ import { ReviewToggle } from './ReviewToggle'
 import { CommentsSection } from './CommentsSection'
 import { ClassificationSelect } from './ClassificationSelect'
 import { BugCreationDialog } from './BugCreationDialog'
+import { useReviewSuggestion } from './useReviewSuggestion'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ChevronDown, ChevronRight, Bug, MessageSquare, CheckCircle2, Copy, Check, Clock } from 'lucide-react'
 
 function IssueButton({ disabled, tooltip, label, onClick }: {
@@ -104,6 +106,13 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
   const [selectedModel, setSelectedModel] = useState(result?.ai_model ?? '')
   const [includeLinks, setIncludeLinks] = useState(false)
   const { copiedKey: copiedSection, copy: copyToClipboard } = useClipboard()
+
+  const { showSuggestion: showBugReviewSuggestion, loading: bugReviewLoading, maybeSuggest: maybeSuggestBugReview, dismissSuggestion: dismissBugReviewSuggestion, confirmSuggestion: confirmBugReviewSuggestion } = useReviewSuggestion({
+    jobId,
+    testName: rep.test_name,
+    childJobName,
+    childBuildNumber,
+  })
 
   const repoUrls = useMemo<RepoUrl[]>(
     () => buildRepoUrls(result?.request_params),
@@ -509,8 +518,20 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
               ? repoUrls.map(({ name, url }) => ({ name, url }))
               : undefined
           }
+          onIssueCreated={(url) => maybeSuggestBugReview(url)}
         />
       )}
+
+      <ConfirmDialog
+        open={showBugReviewSuggestion}
+        onOpenChange={(open) => { if (!open) dismissBugReviewSuggestion() }}
+        title="Mark as reviewed?"
+        description="A bug issue was linked to this failure. Would you like to mark it as reviewed?"
+        confirmLabel="Yes"
+        cancelLabel="No"
+        onConfirm={confirmBugReviewSuggestion}
+        loading={bugReviewLoading}
+      />
     </>
   )
 }

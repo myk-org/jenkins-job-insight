@@ -35,6 +35,8 @@ interface BugCreationDialogProps {
   includeLinks?: boolean
   availableRepos?: Array<{ name: string; url: string }>
   defaultProjectKey?: string
+  /** Called after a bug issue is successfully created (with the issue URL). */
+  onIssueCreated?: (url: string) => void
 }
 
 export function BugCreationDialog({
@@ -50,6 +52,7 @@ export function BugCreationDialog({
   aiModel,
   availableRepos,
   defaultProjectKey,
+  onIssueCreated,
 }: BugCreationDialogProps) {
   const dispatch = useReportDispatch()
   const refreshEnrichments = useRefreshEnrichments()
@@ -166,6 +169,7 @@ export function BugCreationDialog({
       })
       setCreatedUrl(res.url)
       setPhase('success')
+      onIssueCreated?.(res.url)
 
       // After successful creation, refresh comments to get the server-added comment
       api.get<CommentsAndReviews>(`/results/${jobId}/comments`)

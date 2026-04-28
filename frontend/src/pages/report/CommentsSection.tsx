@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { LinkedText } from '@/components/shared/LinkedText'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { MentionTextarea } from './MentionTextarea'
+import { useReviewSuggestion } from './useReviewSuggestion'
 import { Trash2, MessageSquare } from 'lucide-react'
 import type { Comment } from '@/types'
 
@@ -69,6 +70,13 @@ interface CommentsSectionProps {
 export function CommentsSection({ jobId, testNames, childJobName, childBuildNumber }: CommentsSectionProps) {
   const scopedChildJobName = childJobName ?? ''
   const scopedChildBuildNumber = childBuildNumber ?? 0
+
+  const { showSuggestion, loading: reviewLoading, maybeSuggest, dismissSuggestion, confirmSuggestion } = useReviewSuggestion({
+    jobId,
+    testName: testNames[0],
+    childJobName,
+    childBuildNumber,
+  })
 
   const { comments, enrichments } = useReportState()
   const dispatch = useReportDispatch()
@@ -136,6 +144,7 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
       }
       dispatch({ type: 'ADD_COMMENT', payload: fresh })
       refreshEnrichments(jobId)
+      maybeSuggest(submittedText)
       // Clear text
       setText('')
     } catch (err) {
@@ -262,6 +271,17 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
         variant="destructive"
         onConfirm={() => { if (deleteTarget !== null) handleDelete(deleteTarget) }}
         loading={deleteTarget !== null && deletingIds.has(deleteTarget)}
+      />
+
+      <ConfirmDialog
+        open={showSuggestion}
+        onOpenChange={(open) => { if (!open) dismissSuggestion() }}
+        title="Mark as reviewed?"
+        description="Your comment suggests this failure has been reviewed. Would you like to mark it as reviewed?"
+        confirmLabel="Yes"
+        cancelLabel="No"
+        onConfirm={confirmSuggestion}
+        loading={reviewLoading}
       />
     </div>
   )
