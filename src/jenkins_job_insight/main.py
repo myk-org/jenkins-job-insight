@@ -2661,9 +2661,7 @@ def _build_capabilities(settings: Settings) -> dict[str, bool | str]:
         "server_jira_project_key": settings.jira_project_key or "",
         "reportportal": settings.reportportal_enabled,
         "reportportal_project": settings.reportportal_project or "",
-        "feedback_enabled": bool(
-            settings.github_token and settings.github_token.get_secret_value()
-        ),
+        "feedback_enabled": settings.feedback_enabled,
     }
 
 
@@ -4796,11 +4794,32 @@ async def submit_feedback(request: Request, body: FeedbackRequest):
     """
     _check_allow_list(request)
     settings = get_settings()
-    if not settings.github_token or not settings.github_token.get_secret_value():
+    if not settings.feedback_enabled:
         raise HTTPException(
-            status_code=503, detail="GitHub token not configured on server"
+            status_code=503, detail="Feedback submission is disabled on this server"
         )
-    return await create_feedback_issue(body, settings)
+    try:
+        return await create_feedback_issue(body, settings)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (401, 403):
+            raise HTTPException(
+                status_code=502,
+                detail="GitHub token is invalid or expired",
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"GitHub API error: {exc.response.status_code}",
+        ) from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"GitHub API unreachable: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to submit feedback: {exc}",
+        ) from exc
 
 
 # SPA catch-all routes — must be AFTER all API routes

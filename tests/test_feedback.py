@@ -382,7 +382,12 @@ class TestFeedbackEndpoint:
             asyncio.run(storage.init_db())
             yield
 
-    def _make_client(self, temp_db_path, github_token: str = ""):
+    def _make_client(
+        self,
+        temp_db_path,
+        github_token: str = "",
+        enable_github_issues: str = "",
+    ):
         """Create a TestClient with optional GITHUB_TOKEN."""
         env = {
             k: v
@@ -393,12 +398,15 @@ class TestFeedbackEndpoint:
                 "ADMIN_KEY",
                 "JJI_ENCRYPTION_KEY",
                 "ALLOWED_USERS",
+                "ENABLE_GITHUB_ISSUES",
             }
         }
         env["SECURE_COOKIES"] = "false"
         env["DB_PATH"] = str(temp_db_path)
         if github_token:
             env["GITHUB_TOKEN"] = github_token
+        if enable_github_issues:
+            env["ENABLE_GITHUB_ISSUES"] = enable_github_issues
         with patch.dict(os.environ, env, clear=True):
             get_settings.cache_clear()
             with patch.object(storage, "DB_PATH", temp_db_path):
@@ -418,7 +426,7 @@ class TestFeedbackEndpoint:
                 },
             )
             assert resp.status_code == 503
-            assert "GitHub token not configured" in resp.json()["detail"]
+            assert "disabled" in resp.json()["detail"]
 
     def test_successful_feedback_submission(self, _init_db, temp_db_path):
         for client in self._make_client(
@@ -481,3 +489,33 @@ class TestFeedbackEndpoint:
             assert resp.status_code == 200
             data = resp.json()
             assert data["feedback_enabled"] is False
+
+    def test_feedback_disabled_when_enable_github_issues_false(
+        self, _init_db, temp_db_path
+    ):
+        for client in self._make_client(
+            temp_db_path,
+            github_token="ghp_test",  # pragma: allowlist secret
+            enable_github_issues="false",
+        ):
+            resp = client.post(
+                "/api/feedback",
+                json={
+                    "feedback_type": "bug",
+                    "description": "Something broke",
+                },
+            )
+            assert resp.status_code == 503
+            assert "disabled" in resp.json()["detail"]
+
+    def test_capabilities_feedback_disabled_when_github_issues_false(
+        self, _init_db, temp_db_path
+    ):
+        for client in self._make_client(
+            temp_db_path,
+            github_token="ghp_test",  # pragma: allowlist secret
+            enable_github_issues="false",
+        ):
+            resp = client.get("/api/capabilities")
+            assert resp.status_code == 200
+            assert resp.json()["feedback_enabled"] is False
