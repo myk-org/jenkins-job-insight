@@ -11,7 +11,9 @@ import { ReportProvider, useReportState, useReportDispatch, useRefreshEnrichment
 import { FailureCard } from './report/FailureCard'
 import { ChildJobSection } from './report/ChildJobSection'
 import { PeerAnalysisSummary } from './report/PeerAnalysisSummary'
+import { AllReviewedPrompt } from './report/AllReviewedPrompt'
 import { collectChildExpandKeys } from '@/lib/childJobHash'
+import { collectAllTestKeys, countAllFailures } from '@/lib/failureKeys'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -31,46 +33,6 @@ import type { ChildJobAnalysis } from '@/types'
 const COMMENT_POLL_MS = Math.max(5_000, Math.min(300_000,
   Number(import.meta.env.VITE_COMMENT_POLL_MS) || 30_000,
 ))
-
-/** Walk the child-job tree once, calling `visitor` at each node.
- *  Centralises the recursion so every consumer stays in sync. */
-function walkChildTree(
-  failures: { test_name: string }[],
-  children: ChildJobAnalysis[],
-  visitor: (failures: { test_name: string }[], parentJobName?: string, parentBuildNumber?: number) => void,
-  parentJobName?: string,
-  parentBuildNumber?: number,
-): void {
-  visitor(failures ?? [], parentJobName, parentBuildNumber)
-  for (const child of children ?? []) {
-    walkChildTree(child.failures ?? [], child.failed_children ?? [], visitor, child.job_name, child.build_number)
-  }
-}
-
-/** Recursively collect all review keys from failures + nested children. */
-function collectAllTestKeys(
-  failures: { test_name: string }[],
-  children: ChildJobAnalysis[],
-  parentJobName?: string,
-  parentBuildNumber?: number,
-): string[] {
-  const keys: string[] = []
-  walkChildTree(failures, children, (nodeFailures, jobName, buildNumber) => {
-    for (const f of nodeFailures) {
-      keys.push(reviewKey(f.test_name, jobName, buildNumber))
-    }
-  }, parentJobName, parentBuildNumber)
-  return keys
-}
-
-/** Recursively count all failures including nested children. */
-function countAllFailures(failures: { test_name: string }[], children: ChildJobAnalysis[]): number {
-  let count = 0
-  walkChildTree(failures, children, (nodeFailures) => {
-    count += nodeFailures.length
-  })
-  return count
-}
 
 export function ReportPage() {
   const { jobId } = useParams<{ jobId: string }>()
@@ -604,6 +566,7 @@ function ReportContent() {
         )}
       </footer>
     </div>
+      <AllReviewedPrompt jobId={result.job_id} />
       {result.request_params && (
         <ReAnalyzeDialog
           open={state.reAnalyzeOpen}
