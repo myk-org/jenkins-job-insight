@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { api, ApiError } from '../api'
+import { api, ApiError, getRecentFailedCalls } from '../api'
 
 describe('api', () => {
   beforeEach(() => {
@@ -47,5 +47,30 @@ describe('api', () => {
     const [, options] = fetchSpy.mock.calls[0]
     expect(options?.method).toBe('POST')
     expect(options?.body).toBe(JSON.stringify({ name: 'test' }))
+  })
+
+  it('tracks failed API calls (status >= 400)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'bad request' }), {
+        status: 400,
+        statusText: 'Bad Request',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    const beforeCount = getRecentFailedCalls().length
+    await expect(api.get('/bad-endpoint')).rejects.toThrow(ApiError)
+    const after = getRecentFailedCalls()
+    expect(after.length).toBe(beforeCount + 1)
+    const last = after[after.length - 1]
+    expect(last.status).toBe(400)
+    expect(last.endpoint).toBe('/bad-endpoint')
+    expect(last.timestamp).toBeGreaterThan(0)
+  })
+
+  it('getRecentFailedCalls returns a copy', () => {
+    const a = getRecentFailedCalls()
+    const b = getRecentFailedCalls()
+    expect(a).not.toBe(b)
+    expect(a).toEqual(b)
   })
 })

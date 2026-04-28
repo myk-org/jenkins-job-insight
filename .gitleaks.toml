@@ -8,6 +8,7 @@ useDefault = true
 [allowlist]
 # Allowlist test files that contain fake/mock credentials for unit tests
 paths = [
+    '''\.secrets\.baseline''',
     '''tests/test_config\.py''',
     '''tests/test_main\.py''',
     '''tests/conftest\.py''',
@@ -15,4 +16,5 @@ paths = [
     '''tests/test_cli_client\.py''',
     '''tests/test_auth\.py''',
     '''tests/test_debug_request_logging\.py''',
+    '''tests/test_feedback\.py''',
 ]

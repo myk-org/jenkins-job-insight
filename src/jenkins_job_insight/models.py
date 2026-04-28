@@ -837,3 +837,32 @@ class AnalyzeCommentResponse(BaseModel):
 
     suggests_reviewed: bool
     reason: str = ""
+
+
+class FeedbackRequest(BaseModel):
+    """User feedback submission (bug or feature request)."""
+
+    feedback_type: Literal["bug", "feature"] = Field(
+        description="Type of feedback: 'bug' or 'feature'"
+    )
+    description: str = Field(description="Natural language description")
+    console_errors: list[str] = Field(
+        default_factory=list, description="Browser console errors"
+    )
+    failed_api_calls: list[dict] = Field(
+        default_factory=list,
+        description="Recent failed API responses: {status, endpoint, error}",
+    )
+    page_state: dict = Field(
+        default_factory=dict,
+        description="Current page state: {url, active_filters, report_id}",
+    )
+    user_agent: str = Field(default="", description="Browser user agent string")
+
+
+class FeedbackResponse(BaseModel):
+    """Response from feedback submission."""
+
+    issue_url: str = Field(description="URL to the created GitHub issue")
+    issue_number: int = Field(description="GitHub issue number")
+    title: str = Field(description="Issue title as created")

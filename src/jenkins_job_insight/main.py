@@ -65,6 +65,7 @@ from jenkins_job_insight.bug_creation import (
     search_github_duplicates,
     search_jira_duplicates,
 )
+from jenkins_job_insight.feedback import create_feedback_issue
 from jenkins_job_insight.comment_enrichment import detect_mentions
 from jenkins_job_insight.notifications import send_mention_notifications
 from jenkins_job_insight.vapid import get_vapid_config
@@ -82,6 +83,8 @@ from jenkins_job_insight.models import (
     CreateIssueRequest,
     FailureAnalysis,
     FailureAnalysisResult,
+    FeedbackRequest,
+    FeedbackResponse,
     JobMetadataInput,
     OverrideClassificationRequest,
     PreviewIssueRequest,
@@ -2654,6 +2657,9 @@ def _build_capabilities(settings: Settings) -> dict[str, bool | str]:
         "server_jira_project_key": settings.jira_project_key or "",
         "reportportal": settings.reportportal_enabled,
         "reportportal_project": settings.reportportal_project or "",
+        "feedback_enabled": bool(
+            settings.github_token and settings.github_token.get_secret_value()
+        ),
     }
 
 
@@ -4774,6 +4780,22 @@ Respond with ONLY a JSON object:
     except (json.JSONDecodeError, AttributeError):
         logger.debug("Failed to parse AI response for comment intent: %s", result.text)
         return AnalyzeCommentResponse(suggests_reviewed=False)
+
+
+@app.post("/api/feedback", status_code=201, response_model=FeedbackResponse)
+async def submit_feedback(body: FeedbackRequest):
+    """Submit user feedback as a GitHub issue.
+
+    Accepts bug reports or feature requests, uses AI to format them
+    into well-structured GitHub issues, scrubs sensitive data from
+    attached logs, and creates the issue in myk-org/jenkins-job-insight.
+    """
+    settings = get_settings()
+    if not settings.github_token or not settings.github_token.get_secret_value():
+        raise HTTPException(
+            status_code=503, detail="GitHub token not configured on server"
+        )
+    return await create_feedback_issue(body, settings)
 
 
 # SPA catch-all routes — must be AFTER all API routes
