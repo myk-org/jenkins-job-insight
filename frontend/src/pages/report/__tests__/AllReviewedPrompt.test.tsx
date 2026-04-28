@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { useEffect } from 'react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { useEffect, useImperativeHandle, forwardRef, createRef } from 'react'
 import { AllReviewedPrompt } from '../AllReviewedPrompt'
 import { ReportProvider, useReportDispatch } from '../ReportContext'
 import type { AnalysisResult, ReviewState } from '@/types'
@@ -79,12 +79,16 @@ function Injector({
     dispatch({ type: 'SET_COMMENTS_AND_REVIEWS', payload: { comments: [], reviews } })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Dispatch additional reviews on second render cycle to simulate user action
+  // Dispatch additional reviews after a tick to simulate a real user action
+  // (must happen in a separate render cycle from the initial data load)
   useEffect(() => {
     if (additionalReviews) {
-      for (const [key, state] of Object.entries(additionalReviews)) {
-        dispatch({ type: 'SET_REVIEW', payload: { key, state } })
-      }
+      const id = setTimeout(() => {
+        for (const [key, state] of Object.entries(additionalReviews)) {
+          dispatch({ type: 'SET_REVIEW', payload: { key, state } })
+        }
+      }, 0)
+      return () => clearTimeout(id)
     }
   }, [additionalReviews]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -108,6 +112,37 @@ function renderPrompt(opts: {
     </ReportProvider>,
   )
 }
+
+/** Imperative handle exposed by DynamicInjector for dispatching reviews on demand. */
+interface DynamicInjectorHandle {
+  setReviews: (reviews: Record<string, ReviewState>) => void
+}
+
+const DynamicInjector = forwardRef<DynamicInjectorHandle, {
+  result: AnalysisResult
+  reviews: Record<string, ReviewState>
+  reportportalAvailable: boolean
+}>(function DynamicInjector({ result, reviews, reportportalAvailable }, ref) {
+  const dispatch = useReportDispatch()
+  useEffect(() => {
+    dispatch({
+      type: 'SET_RESULT',
+      payload: { result, createdAt: '', completedAt: '', analysisStartedAt: '' },
+    })
+    dispatch({ type: 'SET_REPORTPORTAL_AVAILABLE', payload: reportportalAvailable })
+    dispatch({ type: 'SET_COMMENTS_AND_REVIEWS', payload: { comments: [], reviews } })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useImperativeHandle(ref, () => ({
+    setReviews(newReviews: Record<string, ReviewState>) {
+      for (const [key, state] of Object.entries(newReviews)) {
+        dispatch({ type: 'SET_REVIEW', payload: { key, state } })
+      }
+    },
+  }))
+
+  return <AllReviewedPrompt jobId="job-1" />
+})
 
 /* ------------------------------------------------------------------ */
 /*  Tests                                                              */
@@ -256,6 +291,73 @@ describe('AllReviewedPrompt', () => {
         'parent-test': makeReview(true),
         'child-job#42::child-test': makeReview(true),
       },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('All failures reviewed. Update Report Portal?')).toBeDefined()
+    })
+  })
+
+  it('does not show dialog when report loads with all failures already reviewed', async () => {
+    renderPrompt({
+      reviews: {
+        'test-a': makeReview(true),
+        'test-b': makeReview(true),
+      },
+    })
+
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByText('All failures reviewed. Update Report Portal?')).toBeNull()
+  })
+
+  it('re-triggers dialog after cycle: all-reviewed → one unreviewed → all-reviewed', async () => {
+    const injectorRef = createRef<DynamicInjectorHandle>()
+
+    render(
+      <ReportProvider>
+        <DynamicInjector
+          ref={injectorRef}
+          result={makeResult()}
+          reviews={{}}
+          reportportalAvailable={true}
+        />
+      </ReportProvider>,
+    )
+
+    // Step 1: Mark all as reviewed → dialog should open
+    await act(async () => {
+      injectorRef.current!.setReviews({
+        'test-a': makeReview(true),
+        'test-b': makeReview(true),
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('All failures reviewed. Update Report Portal?')).toBeDefined()
+    })
+
+    // Dismiss dialog
+    fireEvent.click(screen.getByRole('button', { name: 'No' }))
+    await waitFor(() => {
+      expect(screen.queryByText('All failures reviewed. Update Report Portal?')).toBeNull()
+    })
+
+    // Step 2: Un-review one failure
+    await act(async () => {
+      injectorRef.current!.setReviews({
+        'test-a': makeReview(false),
+      })
+    })
+
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByText('All failures reviewed. Update Report Portal?')).toBeNull()
+
+    // Step 3: Mark all reviewed again → dialog should re-open
+    await act(async () => {
+      injectorRef.current!.setReviews({
+        'test-a': makeReview(true),
+        'test-b': makeReview(true),
+      })
     })
 
     await waitFor(() => {

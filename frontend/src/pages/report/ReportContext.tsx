@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, useRef, useCallback, type Dispatch, type ReactNode } from 'react'
 import { api } from '@/lib/api'
+import { reviewKey } from '@/lib/reviewKey'
 import type { AnalysisResult, Comment, ReviewState, CommentsAndReviews, AiConfig, CommentEnrichment } from '@/types'
 
 interface ReportState {
@@ -239,8 +240,5 @@ export const useReportState = () => useContext(StateCtx)
 export const useReportDispatch = () => useContext(DispatchCtx)
 export const useRefreshEnrichments = () => useContext(RefreshEnrichmentsCtx)
 
-/** Build the review lookup key matching the backend format. */
-export function reviewKey(testName: string, childJobName?: string, childBuildNumber?: number): string {
-  if (childJobName) return `${childJobName}#${childBuildNumber ?? 0}::${testName}`
-  return testName
-}
+// Re-export for backward compatibility
+export { reviewKey } from '@/lib/reviewKey'

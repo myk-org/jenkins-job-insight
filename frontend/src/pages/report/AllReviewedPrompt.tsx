@@ -13,6 +13,7 @@ export function AllReviewedPrompt({ jobId }: AllReviewedPromptProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [pushing, setPushing] = useState(false)
   const prevAllReviewedRef = useRef(false)
+  const hasSettledRef = useRef(false)
 
   const allKeys = useMemo(
     () =>
@@ -32,11 +33,31 @@ export function AllReviewedPrompt({ jobId }: AllReviewedPromptProps) {
 
   // Detect transition from not-all-reviewed → all-reviewed
   useEffect(() => {
+    // Don't track transitions until result data has loaded
+    if (!result) return
+
+    // First render with data — just record current state, don't trigger.
+    // This prevents a false positive when all failures are already reviewed
+    // on load, even if result and reviews arrive in separate render batches.
+    if (!hasSettledRef.current) {
+      hasSettledRef.current = true
+      prevAllReviewedRef.current = allReviewed
+      return
+    }
+
     if (allReviewed && !prevAllReviewedRef.current && reportportalAvailable) {
       setDialogOpen(true)
     }
     prevAllReviewedRef.current = allReviewed
-  }, [allReviewed, reportportalAvailable])
+  }, [allReviewed, reportportalAvailable, result])
+
+  // Reset state when navigating to a different report
+  useEffect(() => {
+    prevAllReviewedRef.current = false
+    hasSettledRef.current = false
+    setDialogOpen(false)
+    setPushing(false)
+  }, [jobId])
 
   const handleConfirm = async () => {
     setPushing(true)
