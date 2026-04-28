@@ -65,7 +65,7 @@ describe('suggestsReviewed', () => {
 /** Test harness that exposes hook state and actions via rendered UI. */
 function HookHarness({ setReviewed }: { setReviewed?: boolean }) {
   const dispatch = useReportDispatch()
-  const { showSuggestion, loading, maybeSuggest, dismissSuggestion, confirmSuggestion } = useReviewSuggestion({
+  const { showSuggestion, loading, error, maybeSuggest, dismissSuggestion, confirmSuggestion } = useReviewSuggestion({
     jobId: 'job-1',
     testName: 'test-a',
   })
@@ -84,6 +84,7 @@ function HookHarness({ setReviewed }: { setReviewed?: boolean }) {
     <>
       <span data-testid="show">{String(showSuggestion)}</span>
       <span data-testid="loading">{String(loading)}</span>
+      <span data-testid="error">{error ?? ''}</span>
       <button data-testid="suggest-url" onClick={() => maybeSuggest('See https://jira.example.com/BUG-1')}>Suggest URL</button>
       <button data-testid="suggest-keyword" onClick={() => maybeSuggest('This is a known issue')}>Suggest Keyword</button>
       <button data-testid="suggest-generic" onClick={() => maybeSuggest('Looking into it')}>Suggest Generic</button>
@@ -142,7 +143,9 @@ describe('useReviewSuggestion hook', () => {
   it('does not show suggestion when already reviewed', async () => {
     renderHarness({ setReviewed: true })
     // Wait for the SET_REVIEW dispatch to take effect
-    await waitFor(() => {})
+    await waitFor(() => {
+      expect(screen.getByTestId('show').textContent).toBe('false')
+    })
     fireEvent.click(screen.getByTestId('suggest-url'))
     expect(screen.getByTestId('show').textContent).toBe('false')
   })
@@ -173,6 +176,21 @@ describe('useReviewSuggestion hook', () => {
       })
     })
 
+    expect(screen.getByTestId('show').textContent).toBe('false')
+  })
+
+  it('sets error when review API call fails', async () => {
+    mockPut.mockRejectedValueOnce(new Error('Network error'))
+    renderHarness()
+    fireEvent.click(screen.getByTestId('suggest-url'))
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error').textContent).toBe('Network error')
+    })
     expect(screen.getByTestId('show').textContent).toBe('false')
   })
 })

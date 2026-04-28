@@ -107,7 +107,10 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
   const [includeLinks, setIncludeLinks] = useState(false)
   const { copiedKey: copiedSection, copy: copyToClipboard } = useClipboard()
 
-  const { showSuggestion: showBugReviewSuggestion, loading: bugReviewLoading, maybeSuggest: maybeSuggestBugReview, dismissSuggestion: dismissBugReviewSuggestion, confirmSuggestion: confirmBugReviewSuggestion } = useReviewSuggestion({
+  const rep = group.tests[0]
+  const analysis = rep.analysis
+
+  const { showSuggestion: showBugReviewSuggestion, loading: bugReviewLoading, error: bugReviewError, maybeSuggest: maybeSuggestBugReview, dismissSuggestion: dismissBugReviewSuggestion, confirmSuggestion: confirmBugReviewSuggestion } = useReviewSuggestion({
     jobId,
     testName: rep.test_name,
     childJobName,
@@ -139,8 +142,6 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
   const scopedReviewKey = (testName: string) =>
     reviewKey(testName, scopedChildJobName, scopedChildBuildNumber)
 
-  const rep = group.tests[0]
-  const analysis = rep.analysis
   const repKey = scopedReviewKey(rep.test_name)
   const classification = classifications[repKey] ?? analysis.classification
   const borderColor = classification === 'PRODUCT BUG' ? 'border-l-signal-orange' : 'border-l-signal-blue'
@@ -532,6 +533,9 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
         onConfirm={confirmBugReviewSuggestion}
         loading={bugReviewLoading}
       />
+      {bugReviewError && (
+        <span className="text-sm text-destructive">{bugReviewError}</span>
+      )}
     </>
   )
 }

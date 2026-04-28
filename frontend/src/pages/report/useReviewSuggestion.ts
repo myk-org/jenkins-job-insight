@@ -32,6 +32,7 @@ export function useReviewSuggestion({ jobId, testName, childJobName, childBuildN
   const dispatch = useReportDispatch()
   const [showSuggestion, setShowSuggestion] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const key = reviewKey(testName, childJobName, childBuildNumber)
   const isAlreadyReviewed = reviews[key]?.reviewed ?? false
@@ -53,6 +54,7 @@ export function useReviewSuggestion({ jobId, testName, childJobName, childBuildN
 
   const confirmSuggestion = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const res = await api.put<{ status: string; reviewed_by: string }>(`/results/${jobId}/reviewed`, {
         test_name: testName,
@@ -65,11 +67,13 @@ export function useReviewSuggestion({ jobId, testName, childJobName, childBuildN
         type: 'SET_REVIEW',
         payload: { key, state: { reviewed: true, username, updated_at: new Date().toISOString() } },
       })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark as reviewed')
     } finally {
       setLoading(false)
       setShowSuggestion(false)
     }
   }, [jobId, testName, childJobName, childBuildNumber, key, dispatch])
 
-  return { showSuggestion, loading, maybeSuggest, dismissSuggestion, confirmSuggestion }
+  return { showSuggestion, loading, error, maybeSuggest, dismissSuggestion, confirmSuggestion }
 }

@@ -71,7 +71,7 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
   const scopedChildJobName = childJobName ?? ''
   const scopedChildBuildNumber = childBuildNumber ?? 0
 
-  const { showSuggestion, loading: reviewLoading, maybeSuggest, dismissSuggestion, confirmSuggestion } = useReviewSuggestion({
+  const { showSuggestion, loading: reviewLoading, error: reviewError, maybeSuggest, dismissSuggestion, confirmSuggestion } = useReviewSuggestion({
     jobId,
     testName: testNames[0],
     childJobName,
@@ -283,6 +283,9 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
         onConfirm={confirmSuggestion}
         loading={reviewLoading}
       />
+      {reviewError && (
+        <span className="text-sm text-destructive">{reviewError}</span>
+      )}
     </div>
   )
 }
