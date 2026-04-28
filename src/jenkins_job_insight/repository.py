@@ -194,6 +194,37 @@ def _clone_with_ssl_retry(
             raise
 
 
+def _clone_by_ref_type(
+    repo_url: str,
+    target_dir: Path,
+    *,
+    branch: str = "",
+    depth: int | None = None,
+    log_prefix: str = "Cloning repository",
+) -> None:
+    """Clone a repository, choosing strategy based on whether *branch* is a commit SHA.
+
+    For commit SHAs a full (unshallow) clone is performed followed by an explicit
+    checkout, because ``git clone --branch`` does not accept raw SHAs.  For
+    regular refs (branches / tags) the standard shallow-clone path is used.
+
+    Args:
+        repo_url: URL of the git repository to clone.
+        target_dir: Directory to clone into.
+        branch: Git ref or commit SHA.  Empty string means default branch.
+        depth: Shallow-clone depth (ignored for SHA clones).
+        log_prefix: Human-readable prefix for the log message.
+    """
+    if branch and _is_commit_sha(branch):
+        logger.info(f"{log_prefix} to {target_dir} (sha={branch})")
+        _clone_with_ssl_retry(repo_url, target_dir)
+        Repo(target_dir).git.checkout(branch)
+    else:
+        ref_msg = f" (ref={branch})" if branch else ""
+        logger.info(f"{log_prefix} to {target_dir}{ref_msg}")
+        _clone_with_ssl_retry(repo_url, target_dir, depth, branch=branch)
+
+
 class RepositoryManager:
     """Manages temporary git repository clones."""
 
@@ -226,14 +257,13 @@ class RepositoryManager:
         clone_dir = self.base_path / f"{repo_name}-{clone_id}"
         clone_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dirs.append(clone_dir)
-        if branch and _is_commit_sha(branch):
-            logger.info(f"Cloning repository to {clone_dir} (sha={branch})")
-            _clone_with_ssl_retry(str(repo_url), clone_dir)
-            Repo(clone_dir).git.checkout(branch)
-        else:
-            ref_msg = f" (ref={branch})" if branch else ""
-            logger.info(f"Cloning repository to {clone_dir}{ref_msg}")
-            _clone_with_ssl_retry(str(repo_url), clone_dir, depth, branch=branch)
+        _clone_by_ref_type(
+            str(repo_url),
+            clone_dir,
+            branch=branch,
+            depth=depth,
+            log_prefix="Cloning repository",
+        )
         return clone_dir
 
     def clone_into(
@@ -270,14 +300,13 @@ class RepositoryManager:
         if token:
             clone_url = _inject_token_into_url(clone_url, token)
         try:
-            if branch and _is_commit_sha(branch):
-                logger.info(f"Cloning repository into {target_dir} (sha={branch})")
-                _clone_with_ssl_retry(clone_url, target_dir)
-                Repo(target_dir).git.checkout(branch)
-            else:
-                ref_msg = f" (ref={branch})" if branch else ""
-                logger.info(f"Cloning repository into {target_dir}{ref_msg}")
-                _clone_with_ssl_retry(clone_url, target_dir, depth, branch=branch)
+            _clone_by_ref_type(
+                clone_url,
+                target_dir,
+                branch=branch,
+                depth=depth,
+                log_prefix="Cloning repository into",
+            )
         finally:
             if token:
                 _scrub_credentials(target_dir, repo_url)

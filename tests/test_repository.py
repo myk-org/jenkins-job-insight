@@ -921,7 +921,7 @@ class TestCloneShaFlow:
             assert mock_clone.call_count == 2
             # Both calls should have no depth/branch
             for call in mock_clone.call_args_list:
-                assert "depth" not in call[1] or call[1].get("depth") is None
+                assert "depth" not in call[1]
                 assert "branch" not in call[1]
             # Retry should have SSL disabled
             _, kwargs = mock_clone.call_args
