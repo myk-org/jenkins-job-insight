@@ -7,6 +7,7 @@ import { isCommentInScope } from '@/lib/grouping'
 import { api } from '@/lib/api'
 import { getUsername } from '@/lib/cookies'
 import { useSessionState } from '@/lib/useSessionState'
+import { unescapeCodeContent } from '@/lib/format'
 import { useReportState, useReportDispatch, reviewKey } from './ReportContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -61,7 +62,7 @@ function CopyableSectionHeader({ title, content, sectionId, copiedSection, onCop
   )
 }
 
-function CodeFixLiteralBlock({
+export function CodeFixLiteralBlock({
   title,
   content,
   className,
@@ -70,11 +71,12 @@ function CodeFixLiteralBlock({
   content: string
   className: string
 }) {
+  const unescaped = unescapeCodeContent(content)
   return (
     <div className="mt-2">
       <p className="text-xs font-display uppercase tracking-widest text-text-tertiary mb-1">{title}</p>
       <pre className={`overflow-x-auto max-h-96 overflow-y-auto rounded bg-surface-elevated p-2 text-xs font-mono whitespace-pre-wrap ${className}`}>
-        {content}
+        {unescaped}
       </pre>
     </div>
   )
@@ -340,8 +342,8 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
                   content={[
                     analysis.code_fix?.file ? `${analysis.code_fix.file}${analysis.code_fix.line ? `:${analysis.code_fix.line}` : ''}` : '',
                     analysis.code_fix?.change ?? '',
-                    analysis.code_fix.original_code != null ? `Original Code:\n${analysis.code_fix.original_code}` : '',
-                    analysis.code_fix.suggested_code != null ? `Suggested Code:\n${analysis.code_fix.suggested_code}` : '',
+                    analysis.code_fix.original_code != null ? `Original Code:\n${unescapeCodeContent(analysis.code_fix.original_code)}` : '',
+                    analysis.code_fix.suggested_code != null ? `Suggested Code:\n${unescapeCodeContent(analysis.code_fix.suggested_code)}` : '',
                   ].filter(Boolean).join('\n\n')}
                   sectionId="suggested_fix"
                   copiedSection={copiedSection}

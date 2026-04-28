@@ -11,6 +11,14 @@ export function formatCompactNumber(n: number): string {
   return String(n)
 }
 
+/**
+ * Unescape literal `\n` and `\t` sequences that backends sometimes embed
+ * in code-snippet strings, turning them into real newline / tab characters.
+ */
+export function unescapeCodeContent(text: string): string {
+  return text.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+}
+
 /** Format USD cost for display. Returns '$0.00' for null/zero/undefined. */
 export function formatCost(value: number | null | undefined): string {
   if (value == null || value === 0) return '$0.00'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatCompactNumber, formatCost } from '../format'
+import { formatCompactNumber, formatCost, unescapeCodeContent } from '../format'
 
 describe('formatCompactNumber', () => {
   it('returns plain number below 1000', () => {
@@ -17,6 +17,29 @@ describe('formatCompactNumber', () => {
     expect(formatCompactNumber(1_000_000)).toBe('1M')
     expect(formatCompactNumber(1_500_000)).toBe('1.5M')
     expect(formatCompactNumber(10_000_000)).toBe('10M')
+  })
+})
+
+describe('unescapeCodeContent', () => {
+  it('replaces literal \\n with actual newlines', () => {
+    expect(unescapeCodeContent('line1\\nline2\\nline3')).toBe('line1\nline2\nline3')
+  })
+
+  it('replaces literal \\t with actual tabs', () => {
+    expect(unescapeCodeContent('col1\\tcol2')).toBe('col1\tcol2')
+  })
+
+  it('handles mixed \\n and \\t', () => {
+    expect(unescapeCodeContent('if x:\\n\\treturn y')).toBe('if x:\n\treturn y')
+  })
+
+  it('returns unchanged text when no escape sequences present', () => {
+    const text = 'normal text with\nreal newlines'
+    expect(unescapeCodeContent(text)).toBe(text)
+  })
+
+  it('handles empty string', () => {
+    expect(unescapeCodeContent('')).toBe('')
   })
 })
 
