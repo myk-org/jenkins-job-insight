@@ -84,14 +84,16 @@ async def format_feedback_with_ai(
     Returns:
         Tuple of (title, body) for the GitHub issue.
     """
-    ai_provider = settings.ai_provider if hasattr(settings, "ai_provider") else ""
-    ai_model = settings.ai_model if hasattr(settings, "ai_model") else ""
+    ai_provider = os.getenv("AI_PROVIDER", "").lower()
+    ai_model = os.getenv("AI_MODEL", "")
     ai_cli_timeout = settings.ai_cli_timeout
 
     context_parts: list[str] = []
     if request.feedback_type == "bug":
         context_parts.append("Feedback type: Bug Report")
-        context_parts.append(f"Description: {request.description}")
+        context_parts.append(
+            f"Description: {scrub_sensitive_data(request.description)}"
+        )
         if request.console_errors:
             scrubbed_errors = [scrub_sensitive_data(e) for e in request.console_errors]
             context_parts.append(
@@ -106,14 +108,17 @@ async def format_feedback_with_ai(
                 f"Failed API calls:\n{json.dumps(scrubbed_calls, indent=2)}"
             )
         if request.page_state:
-            context_parts.append(
-                f"Page state:\n{json.dumps(request.page_state, indent=2)}"
-            )
+            scrubbed_state = {
+                k: scrub_sensitive_data(str(v)) for k, v in request.page_state.items()
+            }
+            context_parts.append(f"Page state:\n{json.dumps(scrubbed_state, indent=2)}")
         if request.user_agent:
             context_parts.append(f"User agent: {request.user_agent}")
     else:
         context_parts.append("Feedback type: Feature Request")
-        context_parts.append(f"Description: {request.description}")
+        context_parts.append(
+            f"Description: {scrub_sensitive_data(request.description)}"
+        )
 
     context = "\n\n".join(context_parts)
 
@@ -209,11 +214,12 @@ def _parse_json_response(text: str) -> dict | None:
 def _build_fallback_feedback(request: FeedbackRequest) -> tuple[str, str]:
     """Build fallback title and body when AI formatting fails."""
     if request.feedback_type == "bug":
-        title = f"Bug report: {request.description[:100]}"
+        scrubbed_desc = scrub_sensitive_data(request.description)
+        title = f"Bug report: {scrubbed_desc}"
         parts = [
             "## Bug Report",
             "",
-            f"**Description:** {request.description}",
+            f"**Description:** {scrubbed_desc}",
         ]
         if request.console_errors:
             parts.extend(["", "## Console Errors", "```"])
@@ -232,19 +238,23 @@ def _build_fallback_feedback(request: FeedbackRequest) -> tuple[str, str]:
                 ]
             )
         if request.page_state:
+            scrubbed_state = {
+                k: scrub_sensitive_data(str(v)) for k, v in request.page_state.items()
+            }
             parts.extend(
                 [
                     "",
                     "## Page State",
-                    f"```json\n{json.dumps(request.page_state, indent=2)}\n```",
+                    f"```json\n{json.dumps(scrubbed_state, indent=2)}\n```",
                 ]
             )
         if request.user_agent:
             parts.extend(["", f"**User Agent:** {request.user_agent}"])
         body = "\n".join(parts)
     else:
-        title = f"Feature request: {request.description[:100]}"
-        body = f"## Feature Request\n\n**Description:** {request.description}"
+        scrubbed_desc = scrub_sensitive_data(request.description)
+        title = f"Feature request: {scrubbed_desc}"
+        body = f"## Feature Request\n\n**Description:** {scrubbed_desc}"
     return title, body
 
 

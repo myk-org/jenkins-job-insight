@@ -78,10 +78,20 @@ export function NavBar() {
 
   // Fetch server capabilities to check if feedback is enabled
   useEffect(() => {
-    api.get<{ feedback_enabled?: boolean }>('/api/capabilities')
-      .then((caps) => setFeedbackEnabled(caps.feedback_enabled ?? false))
-      .catch(() => {})
-  }, [])
+    let cancelled = false
+    async function loadCapabilities() {
+      try {
+        const caps = await api.get<{ feedback_enabled?: boolean }>('/api/capabilities')
+        if (!cancelled) setFeedbackEnabled(caps.feedback_enabled ?? false)
+      } catch {
+        if (!cancelled) setFeedbackEnabled(false)
+      }
+    }
+    void loadCapabilities()
+    return () => {
+      cancelled = true
+    }
+  }, [username])
 
   const baseNavLinks = username
     ? [...BASE_NAV_LINKS, { to: '/mentions', label: 'Mentions' }]

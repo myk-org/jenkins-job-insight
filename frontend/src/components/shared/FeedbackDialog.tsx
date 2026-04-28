@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { api } from '@/lib/api'
 import { getRecentFailedCalls } from '@/lib/api'
 import { getRecentErrors } from '@/lib/errorCapture'
@@ -30,6 +30,16 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   const [phase, setPhase] = useState<Phase>('form')
   const [issueUrl, setIssueUrl] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+  const cancelledRef = useRef(false)
+
+  // Track dialog open/close to guard async setState
+  useEffect(() => {
+    if (open) {
+      cancelledRef.current = false
+    } else {
+      cancelledRef.current = true
+    }
+  }, [open])
 
   function collectPageState(): FeedbackRequest['page_state'] {
     const state: FeedbackRequest['page_state'] = {
@@ -69,11 +79,15 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
       }
 
       const res = await api.post<FeedbackResponse>('/api/feedback', payload)
-      setIssueUrl(res.issue_url)
-      setPhase('success')
+      if (!cancelledRef.current) {
+        setIssueUrl(res.issue_url)
+        setPhase('success')
+      }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to submit feedback')
-      setPhase('error')
+      if (!cancelledRef.current) {
+        setErrorMsg(err instanceof Error ? err.message : 'Failed to submit feedback')
+        setPhase('error')
+      }
     }
   }
 

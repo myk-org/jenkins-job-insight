@@ -4783,13 +4783,14 @@ Respond with ONLY a JSON object:
 
 
 @app.post("/api/feedback", status_code=201, response_model=FeedbackResponse)
-async def submit_feedback(body: FeedbackRequest):
+async def submit_feedback(request: Request, body: FeedbackRequest):
     """Submit user feedback as a GitHub issue.
 
     Accepts bug reports or feature requests, uses AI to format them
     into well-structured GitHub issues, scrubs sensitive data from
     attached logs, and creates the issue in myk-org/jenkins-job-insight.
     """
+    _check_allow_list(request)
     settings = get_settings()
     if not settings.github_token or not settings.github_token.get_secret_value():
         raise HTTPException(
