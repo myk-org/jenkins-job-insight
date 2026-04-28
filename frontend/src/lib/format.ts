@@ -16,7 +16,13 @@ export function formatCompactNumber(n: number): string {
  * in code-snippet strings, turning them into real newline / tab characters.
  */
 export function unescapeCodeContent(text: string): string {
-  return text.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+  return text.replace(/\\\\[nt]|\\[nt]/g, (match) => {
+    if (match === '\\n') return '\n'
+    if (match === '\\t') return '\t'
+    if (match === '\\\\n') return '\\n'
+    if (match === '\\\\t') return '\\t'
+    return match
+  })
 }
 
 /** Format USD cost for display. Returns '$0.00' for null/zero/undefined. */

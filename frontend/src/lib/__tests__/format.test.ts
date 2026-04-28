@@ -41,6 +41,18 @@ describe('unescapeCodeContent', () => {
   it('handles empty string', () => {
     expect(unescapeCodeContent('')).toBe('')
   })
+
+  it('preserves double-escaped \\\\n as literal backslash-n', () => {
+    expect(unescapeCodeContent('\\\\n')).toBe('\\n')
+  })
+
+  it('preserves double-escaped \\\\t as literal backslash-t', () => {
+    expect(unescapeCodeContent('\\\\t')).toBe('\\t')
+  })
+
+  it('handles mixed single and double-escaped sequences', () => {
+    expect(unescapeCodeContent('line1\\nline2\\\\nstill-line2')).toBe('line1\nline2\\nstill-line2')
+  })
 })
 
 describe('formatCost', () => {
