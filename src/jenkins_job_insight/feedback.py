@@ -129,7 +129,9 @@ async def format_feedback_with_ai(
             }
             context_parts.append(f"Page state:\n{json.dumps(scrubbed_state, indent=2)}")
         if request.user_agent:
-            context_parts.append(f"User agent: {request.user_agent}")
+            context_parts.append(
+                f"User agent: {scrub_sensitive_data(request.user_agent)}"
+            )
     else:
         context_parts.append("Feedback type: Feature Request")
         context_parts.append(
@@ -182,14 +184,18 @@ The body should include:
 
 Do NOT include any sensitive data in the output."""
 
-    result = await call_ai_cli(
-        prompt,
-        ai_provider=ai_provider,
-        ai_model=ai_model,
-        ai_cli_timeout=ai_cli_timeout,
-        cli_flags=PROVIDER_CLI_FLAGS.get(ai_provider, []),
-        output_format="json",
-    )
+    try:
+        result = await call_ai_cli(
+            prompt,
+            ai_provider=ai_provider,
+            ai_model=ai_model,
+            ai_cli_timeout=ai_cli_timeout,
+            cli_flags=PROVIDER_CLI_FLAGS.get(ai_provider, []),
+            output_format="json",
+        )
+    except Exception as exc:  # noqa: BLE001 - feedback formatting should fall back
+        logger.warning("AI CLI call failed for feedback formatting: %s", exc)
+        return _build_fallback_feedback(request)
 
     if result.success:
         parsed = _parse_json_response(result.text)
@@ -278,7 +284,9 @@ def _build_fallback_feedback(request: FeedbackRequest) -> tuple[str, str]:
                 ]
             )
         if request.user_agent:
-            parts.extend(["", f"**User Agent:** {request.user_agent}"])
+            parts.extend(
+                ["", f"**User Agent:** {scrub_sensitive_data(request.user_agent)}"]
+            )
         body = "\n".join(parts)
     else:
         scrubbed_desc = scrub_sensitive_data(request.description)

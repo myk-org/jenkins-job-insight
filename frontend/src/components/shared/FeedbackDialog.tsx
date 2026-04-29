@@ -319,7 +319,10 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
           {phase === 'preview' && (
             <div className="flex gap-2 sm:ml-auto">
               <Button variant="ghost" onClick={handleBack}>Back</Button>
-              <Button onClick={handleCreate} disabled={!previewTitle.trim()}>Create Issue</Button>
+              <Button
+                onClick={handleCreate}
+                disabled={!previewTitle.trim() || !previewBody.trim()}
+              >Create Issue</Button>
             </div>
           )}
           {phase === 'error' && (
