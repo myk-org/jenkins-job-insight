@@ -393,7 +393,7 @@ export interface FeedbackRequest {
   description: string
   console_errors: string[]
   failed_api_calls: { status: number; endpoint: string; error: string }[]
-  page_state: { url: string; active_filters?: string; report_id?: string }
+  page_state: { url?: string; active_filters?: string; report_id?: string }
   user_agent: string
 }
 

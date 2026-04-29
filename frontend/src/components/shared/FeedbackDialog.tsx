@@ -66,9 +66,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   }, [])
 
   function collectPageState(): FeedbackRequest['page_state'] {
-    const state: FeedbackRequest['page_state'] = {
-      url: window.location.href,
-    }
+    const state: FeedbackRequest['page_state'] = {}
     // Extract report_id from URL if on a report page
     const reportMatch = window.location.pathname.match(/\/results\/([^/]+)/)
     if (reportMatch) {
