@@ -19,70 +19,16 @@ import {
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
 import type { AnalysisResult, AiConfig } from '@/types'
-import { ChevronRight, Plus, Trash2, RotateCw } from 'lucide-react'
+import { Section } from '@/components/shared/Section'
+import { Toggle } from '@/components/shared/Toggle'
+import { FieldLabel } from '@/components/shared/FieldLabel'
+import { Plus, Trash2, RotateCw } from 'lucide-react'
 
 interface ReAnalyzeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   result: AnalysisResult
   jobId: string
-}
-
-function Section({
-  title,
-  dotColor,
-  defaultOpen = false,
-  children,
-}: {
-  title: string
-  dotColor: string
-  defaultOpen?: boolean
-  children: React.ReactNode
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 py-2 text-left group"
-      >
-        <ChevronRight
-          className={`h-3 w-3 text-text-tertiary transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
-        />
-        <span className={`w-1.5 h-1.5 rounded-full ${dotColor} flex-shrink-0`} />
-        <span className="font-display text-[11px] font-semibold tracking-widest text-text-secondary uppercase">
-          {title}
-        </span>
-      </button>
-      {open && <div className="pl-5 space-y-4 pb-4">{children}</div>}
-    </div>
-  )
-}
-
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={`relative w-11 h-6 rounded-full transition-colors ${
-        checked ? 'bg-signal-blue' : 'bg-surface-hover'
-      }`}
-    >
-      <span
-        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-          checked ? 'translate-x-5' : ''
-        }`}
-      />
-    </button>
-  )
-}
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="text-xs text-text-tertiary">{children}</label>
 }
 
 function initFormState(p: AnalysisResult['request_params']) {

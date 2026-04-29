@@ -14,6 +14,7 @@ import { TestHistoryPage } from '@/pages/TestHistoryPage'
 import { UsersPage } from '@/pages/UsersPage'
 import { TokenUsagePage } from '@/pages/TokenUsagePage'
 import { MentionsPage } from '@/pages/MentionsPage'
+import { NewAnalysisPage } from '@/pages/NewAnalysisPage'
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route index element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/new-analysis" element={<ProtectedRoute><NewAnalysisPage /></ProtectedRoute>} />
             <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
             <Route path="/history/test/:testName" element={<ProtectedRoute><TestHistoryPage /></ProtectedRoute>} />
             <Route path="/mentions" element={<ProtectedRoute><MentionsPage /></ProtectedRoute>} />
