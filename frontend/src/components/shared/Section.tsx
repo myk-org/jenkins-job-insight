@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 
 export function Section({
@@ -13,11 +13,15 @@ export function Section({
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const id = useId()
+  const contentId = `${id}-content`
   return (
     <div>
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-controls={contentId}
         className="w-full flex items-center gap-2 py-2 text-left group"
       >
         <ChevronRight
@@ -28,7 +32,7 @@ export function Section({
           {title}
         </span>
       </button>
-      {open && <div className="pl-5 space-y-4 pb-4">{children}</div>}
+      {open && <div id={contentId} className="pl-5 space-y-4 pb-4">{children}</div>}
     </div>
   )
 }

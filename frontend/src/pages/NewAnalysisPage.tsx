@@ -16,6 +16,12 @@ import { Toggle } from '@/components/shared/Toggle'
 import { FieldLabel } from '@/components/shared/FieldLabel'
 import { Plus, Trash2, Send, Upload } from 'lucide-react'
 
+function toIntInRange(value: string, min: number, max: number, fallback: number): number {
+  const n = Number(value)
+  if (!value || Number.isNaN(n)) return fallback
+  return Math.max(min, Math.min(max, Math.floor(n)))
+}
+
 export function NewAnalysisPage() {
   const navigate = useNavigate()
 
@@ -222,7 +228,7 @@ export function NewAnalysisPage() {
                   min={1}
                   placeholder="123"
                   value={buildNumber}
-                  onChange={(e) => setBuildNumber(e.target.value ? Number(e.target.value) : '')}
+                  onChange={(e) => setBuildNumber(e.target.value ? toIntInRange(e.target.value, 1, Number.MAX_SAFE_INTEGER, 1) : '')}
                   required
                 />
               </div>
@@ -266,7 +272,7 @@ export function NewAnalysisPage() {
                     type="number"
                     min={1}
                     value={pollInterval}
-                    onChange={(e) => setPollInterval(Number(e.target.value) || 1)}
+                    onChange={(e) => setPollInterval(toIntInRange(e.target.value, 1, 1440, 1))}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -275,7 +281,7 @@ export function NewAnalysisPage() {
                     type="number"
                     min={0}
                     value={maxWait}
-                    onChange={(e) => setMaxWait(Number(e.target.value) || 0)}
+                    onChange={(e) => setMaxWait(toIntInRange(e.target.value, 0, 1440, 0))}
                   />
                 </div>
               </div>
