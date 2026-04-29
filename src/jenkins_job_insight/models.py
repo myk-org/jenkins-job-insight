@@ -827,6 +827,7 @@ class AnalyzeCommentRequest(BaseModel):
     """Request body for AI-driven comment intent analysis."""
 
     comment: str
+    job_id: str = ""  # Used to resolve AI config from the analyzed job
     ai_provider: str | None = None
     ai_model: str | None = None
 

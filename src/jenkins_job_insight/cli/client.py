@@ -820,10 +820,17 @@ class JJIClient:
         )
 
     def analyze_comment_intent(
-        self, comment: str, *, ai_provider: str = "", ai_model: str = ""
+        self,
+        comment: str,
+        *,
+        job_id: str = "",
+        ai_provider: str = "",
+        ai_model: str = "",
     ) -> dict:
         """Analyze whether a comment suggests a failure is reviewed. POST /api/analyze-comment-intent"""
         payload: dict = {"comment": comment}
+        if job_id:
+            payload["job_id"] = job_id
         if ai_provider:
             payload["ai_provider"] = ai_provider
         if ai_model:

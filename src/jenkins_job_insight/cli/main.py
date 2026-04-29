@@ -1820,6 +1820,9 @@ def override_classification_cmd(
 @app.command("analyze-comment-intent")
 def analyze_comment_intent_cmd(
     comment: str = typer.Argument(help="Comment text to analyze."),
+    job_id: str = typer.Option(
+        "", "--job-id", help="Job ID to resolve AI config from the analyzed job."
+    ),
     ai_provider: str = typer.Option(
         "", "--ai-provider", help="AI provider for content generation."
     ),
@@ -1833,7 +1836,7 @@ def analyze_comment_intent_cmd(
     try:
         client = _get_client()
         data = client.analyze_comment_intent(
-            comment=comment, ai_provider=ai_provider, ai_model=ai_model
+            comment=comment, job_id=job_id, ai_provider=ai_provider, ai_model=ai_model
         )
     except JJIError as err:
         _handle_error(err)

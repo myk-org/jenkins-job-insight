@@ -31,7 +31,7 @@ export function useReviewSuggestion({ jobId, testName, childJobName, childBuildN
       try {
         const res = await api.post<{ suggests_reviewed: boolean; reason: string }>(
           '/api/analyze-comment-intent',
-          { comment: commentText },
+          { comment: commentText, job_id: jobId },
         )
         if (res.suggests_reviewed) {
           setShowSuggestion(true)

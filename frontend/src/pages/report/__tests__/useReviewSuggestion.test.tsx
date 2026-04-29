@@ -97,7 +97,7 @@ describe('useReviewSuggestion hook', () => {
     await waitFor(() => {
       expect(screen.getByTestId('show').textContent).toBe('true')
     })
-    expect(mockPost).toHaveBeenCalledWith('/api/analyze-comment-intent', { comment: 'This is a known issue' })
+    expect(mockPost).toHaveBeenCalledWith('/api/analyze-comment-intent', { comment: 'This is a known issue', job_id: 'job-1' })
     expect(screen.getByText('Mark as reviewed?')).toBeDefined()
   })
 
@@ -110,7 +110,7 @@ describe('useReviewSuggestion hook', () => {
     })
 
     await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('/api/analyze-comment-intent', { comment: 'Looking into it' })
+      expect(mockPost).toHaveBeenCalledWith('/api/analyze-comment-intent', { comment: 'Looking into it', job_id: 'job-1' })
     })
     expect(screen.getByTestId('show').textContent).toBe('false')
   })
@@ -124,7 +124,7 @@ describe('useReviewSuggestion hook', () => {
     })
 
     await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('/api/analyze-comment-intent', { comment: 'This is a known issue' })
+      expect(mockPost).toHaveBeenCalledWith('/api/analyze-comment-intent', { comment: 'This is a known issue', job_id: 'job-1' })
     })
     expect(screen.getByTestId('show').textContent).toBe('false')
   })

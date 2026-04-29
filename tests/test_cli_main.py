@@ -3181,6 +3181,7 @@ class TestAnalyzeCommentIntentCommand:
         assert result.exit_code == 0
         mock_client.analyze_comment_intent.assert_called_once_with(
             comment="Filed JIRA-123",
+            job_id="",
             ai_provider="claude",
             ai_model="claude-sonnet-4-20250514",
         )
