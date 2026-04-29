@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
-import { CheckCircle2, ExternalLink, Bug, Lightbulb } from 'lucide-react'
+import { CheckCircle2, ExternalLink } from 'lucide-react'
 import type {
   FeedbackRequest,
   FeedbackPreviewResponse,
@@ -22,8 +22,7 @@ import type {
   FeedbackCreateResponse,
 } from '@/types'
 
-type FeedbackType = 'bug' | 'feature'
-type Phase = 'form' | 'previewing' | 'preview' | 'creating' | 'success' | 'error'
+type Phase = 'form' | 'previewing' | 'preview' | 'creating' | 'success' | 'error' | 'ai-not-configured'
 
 interface FeedbackDialogProps {
   open: boolean
@@ -31,7 +30,6 @@ interface FeedbackDialogProps {
 }
 
 export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
-  const [feedbackType, setFeedbackType] = useState<FeedbackType>('bug')
   const [description, setDescription] = useState('')
   const [phase, setPhase] = useState<Phase>('form')
   const [issueUrl, setIssueUrl] = useState('')
@@ -93,7 +91,6 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
     try {
       const failedCalls = getRecentFailedCalls()
       const payload: FeedbackRequest = {
-        feedback_type: feedbackType,
         description: description.trim(),
         console_errors: getRecentErrors(),
         failed_api_calls: failedCalls.map(({ status, endpoint, error }) => ({
@@ -113,9 +110,14 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
       setPhase('preview')
     } catch (err) {
       if (gen !== generationRef.current) return
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to generate preview')
-      setErrorSource('preview')
-      setPhase('error')
+      const msg = err instanceof Error ? err.message : 'Failed to generate preview'
+      if (/ai\s*(is)?\s*not\s*configured/i.test(msg)) {
+        setPhase('ai-not-configured')
+      } else {
+        setErrorMsg(msg)
+        setErrorSource('preview')
+        setPhase('error')
+      }
     }
   }
 
@@ -154,7 +156,6 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
     resetTimerRef.current = setTimeout(() => {
       resetTimerRef.current = null
       setPhase('form')
-      setFeedbackType('bug')
       setDescription('')
       setIssueUrl('')
       setErrorMsg('')
@@ -163,11 +164,6 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
       setPreviewLabels([])
     }, 200)
   }
-
-  const typeOptions: { value: FeedbackType; label: string; icon: typeof Bug }[] = [
-    { value: 'bug', label: 'Bug Report', icon: Bug },
-    { value: 'feature', label: 'Feature Request', icon: Lightbulb },
-  ]
 
   const dialogTitle =
     phase === 'success'
@@ -183,7 +179,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
           <DialogTitle>{dialogTitle}</DialogTitle>
           {phase === 'form' && (
             <DialogDescription>
-              Report a bug or suggest a feature. Browser context is attached automatically.
+              Describe your issue or idea. Browser context is attached automatically.
             </DialogDescription>
           )}
           {phase === 'preview' && (
@@ -196,25 +192,6 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
         {/* Phase 1: Form */}
         {phase === 'form' && (
           <div className="space-y-4">
-            {/* Type selector */}
-            <div className="flex gap-2">
-              {typeOptions.map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setFeedbackType(value)}
-                  className={`flex flex-1 items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    feedbackType === value
-                      ? 'border-border-accent bg-surface-elevated text-text-primary'
-                      : 'border-border-default text-text-tertiary hover:bg-surface-hover hover:text-text-secondary'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </button>
-              ))}
-            </div>
-
             {/* Description */}
             <div className="space-y-2">
               <label htmlFor="feedback-description" className="text-xs font-display uppercase tracking-widest text-text-tertiary">
@@ -224,11 +201,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
                 id="feedback-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder={
-                  feedbackType === 'bug'
-                    ? 'Describe the bug: what happened vs. what you expected...'
-                    : 'Describe the feature you\'d like to see...'
-                }
+                placeholder="Describe your issue or suggestion..."
                 rows={6}
               />
             </div>
@@ -302,6 +275,21 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
           </div>
         )}
 
+        {/* AI not configured */}
+        {phase === 'ai-not-configured' && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <p className="text-sm text-text-secondary">AI is not configured on this server. You can open an issue manually:</p>
+            <a
+              href="https://github.com/myk-org/jenkins-job-insight/issues/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-sm text-text-link hover:underline"
+            >
+              Open a new issue <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        )}
+
         {/* Error */}
         {phase === 'error' && (
           <div className="flex flex-col items-center gap-4 py-8">
@@ -330,6 +318,9 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
               <Button variant="ghost" onClick={() => handleClose(false)}>Close</Button>
               <Button onClick={() => setPhase(errorSource === 'preview' ? 'form' : 'preview')}>Try Again</Button>
             </div>
+          )}
+          {phase === 'ai-not-configured' && (
+            <Button variant="ghost" onClick={() => handleClose(false)} className="sm:ml-auto">Close</Button>
           )}
           {phase === 'success' && (
             <Button variant="ghost" onClick={() => handleClose(false)} className="sm:ml-auto">Close</Button>

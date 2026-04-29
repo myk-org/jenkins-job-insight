@@ -81,68 +81,64 @@ def scrub_sensitive_data(text: str) -> str:
 
 
 async def format_feedback_with_ai(
-    request: FeedbackRequest, settings: Settings
-) -> tuple[str, str]:
-    """Format user feedback into a GitHub issue title and body using AI.
+    request: FeedbackRequest,
+    settings: Settings,
+    ai_provider: str = "",
+    ai_model: str = "",
+) -> tuple[str, str, list[str]]:
+    """Format user feedback into a GitHub issue title, body, and labels using AI.
+
+    Args:
+        request: User feedback submission.
+        settings: Application settings.
+        ai_provider: Resolved AI provider identifier.
+        ai_model: Resolved AI model identifier.
 
     Returns:
-        Tuple of (title, body) for the GitHub issue.
+        Tuple of (title, body, labels) for the GitHub issue.
     """
-    ai_provider = os.getenv("AI_PROVIDER", "").lower()
-    ai_model = os.getenv("AI_MODEL", "")
     ai_cli_timeout = settings.ai_cli_timeout
 
     context_parts: list[str] = []
-    if request.feedback_type == "bug":
-        context_parts.append("Feedback type: Bug Report")
+    context_parts.append(f"Description: {scrub_sensitive_data(request.description)}")
+    if request.console_errors:
+        scrubbed_errors = [scrub_sensitive_data(e) for e in request.console_errors]
         context_parts.append(
-            f"Description: {scrub_sensitive_data(request.description)}"
+            "Console errors:\n" + "\n".join(f"- {e}" for e in scrubbed_errors)
         )
-        if request.console_errors:
-            scrubbed_errors = [scrub_sensitive_data(e) for e in request.console_errors]
-            context_parts.append(
-                "Console errors:\n" + "\n".join(f"- {e}" for e in scrubbed_errors)
-            )
-        if request.failed_api_calls:
-            scrubbed_calls = [
-                {
-                    "status": call.status,
-                    "endpoint": scrub_sensitive_data(call.endpoint),
-                    "error": scrub_sensitive_data(call.error),
-                }
-                for call in request.failed_api_calls
-            ]
-            context_parts.append(
-                f"Failed API calls:\n{json.dumps(scrubbed_calls, indent=2)}"
-            )
-        if (
-            request.page_state.url
-            or request.page_state.active_filters
-            or request.page_state.report_id
-        ):
-            scrubbed_state = {
-                "url": scrub_sensitive_data(request.page_state.url),
-                "active_filters": scrub_sensitive_data(
-                    request.page_state.active_filters
-                ),
-                "report_id": scrub_sensitive_data(request.page_state.report_id),
+    if request.failed_api_calls:
+        scrubbed_calls = [
+            {
+                "status": call.status,
+                "endpoint": scrub_sensitive_data(call.endpoint),
+                "error": scrub_sensitive_data(call.error),
             }
-            context_parts.append(f"Page state:\n{json.dumps(scrubbed_state, indent=2)}")
-        if request.user_agent:
-            context_parts.append(
-                f"User agent: {scrub_sensitive_data(request.user_agent)}"
-            )
-    else:
-        context_parts.append("Feedback type: Feature Request")
+            for call in request.failed_api_calls
+        ]
         context_parts.append(
-            f"Description: {scrub_sensitive_data(request.description)}"
+            f"Failed API calls:\n{json.dumps(scrubbed_calls, indent=2)}"
         )
+    if (
+        request.page_state.url
+        or request.page_state.active_filters
+        or request.page_state.report_id
+    ):
+        scrubbed_state = {
+            "url": scrub_sensitive_data(request.page_state.url),
+            "active_filters": scrub_sensitive_data(request.page_state.active_filters),
+            "report_id": scrub_sensitive_data(request.page_state.report_id),
+        }
+        context_parts.append(f"Page state:\n{json.dumps(scrubbed_state, indent=2)}")
+    if request.user_agent:
+        context_parts.append(f"User agent: {scrub_sensitive_data(request.user_agent)}")
 
     context = "\n\n".join(context_parts)
 
-    if request.feedback_type == "bug":
-        prompt = f"""You are formatting a user-submitted bug report into a well-structured GitHub issue
+    prompt = f"""You are formatting user-submitted feedback into a well-structured GitHub issue
 for the jenkins-job-insight project (https://github.com/myk-org/jenkins-job-insight).
+
+First, determine whether this feedback is a BUG REPORT or a FEATURE REQUEST based on the content.
+Set the "labels" field accordingly: ["bug"] for bug reports, ["enhancement"] for feature requests.
 
 User's feedback:
 {context}
@@ -150,11 +146,12 @@ User's feedback:
 Create a GitHub issue with:
 1. A concise, descriptive title (max 120 chars)
 2. A well-formatted markdown body with appropriate sections
+3. Labels: ["bug"] or ["enhancement"] based on content analysis
 
 Respond ONLY with valid JSON (no markdown fences) in this exact format:
-{{"title": "...", "body": "..."}}
+{{"title": "...", "body": "...", "labels": ["bug"] or ["enhancement"]}}
 
-The body should include:
+For bug reports, the body should include:
 - **Description**: Clear summary of the bug
 - **Steps to Reproduce**: Inferred from the context
 - **Console Errors**: If any were provided (already scrubbed of sensitive data)
@@ -162,27 +159,12 @@ The body should include:
 - **Environment**: Browser/user agent info if available
 - **Page State**: Current page context if available
 
-Do NOT include any sensitive data (tokens, passwords, etc.) in the output."""
-    else:
-        prompt = f"""You are formatting a user-submitted feature request into a well-structured GitHub issue
-for the jenkins-job-insight project (https://github.com/myk-org/jenkins-job-insight).
-
-User's feedback:
-{context}
-
-Create a GitHub issue with:
-1. A concise, descriptive title (max 120 chars)
-2. A well-formatted markdown body
-
-Respond ONLY with valid JSON (no markdown fences) in this exact format:
-{{"title": "...", "body": "..."}}
-
-The body should include:
+For feature requests, the body should include:
 - **Description**: Clear summary of the feature request
 - **Use Case**: Why this feature would be useful
 - **Proposed Solution**: If the user suggested one
 
-Do NOT include any sensitive data in the output."""
+Do NOT include any sensitive data (tokens, passwords, etc.) in the output."""
 
     try:
         result = await call_ai_cli(
@@ -195,12 +177,19 @@ Do NOT include any sensitive data in the output."""
         )
     except Exception as exc:  # noqa: BLE001 - feedback formatting should fall back
         logger.warning("AI CLI call failed for feedback formatting: %s", exc)
-        return _build_fallback_feedback(request)
+        title, body = _build_fallback_feedback(request)
+        return title, body, ["enhancement"]
 
     if result.success:
         parsed = _parse_json_response(result.text)
         if parsed:
-            return parsed["title"], parsed["body"]
+            labels = parsed.get("labels", ["enhancement"])
+            if not isinstance(labels, list):
+                labels = ["enhancement"]
+            labels = [lbl for lbl in labels if lbl in _ALLOWED_LABELS]
+            if not labels:
+                labels = ["enhancement"]
+            return parsed["title"], parsed["body"], labels
         logger.debug(
             "AI response JSON parsing failed, using fallback. Output: %s", result.text
         )
@@ -208,7 +197,8 @@ Do NOT include any sensitive data in the output."""
         logger.debug("AI CLI call failed for feedback formatting: %s", result.text)
 
     logger.warning("AI formatting failed for feedback, using fallback template")
-    return _build_fallback_feedback(request)
+    title, body = _build_fallback_feedback(request)
+    return title, body, ["enhancement"]
 
 
 def _parse_json_response(text: str) -> dict | None:
@@ -236,67 +226,63 @@ def _parse_json_response(text: str) -> dict | None:
 def _build_fallback_feedback(request: FeedbackRequest) -> tuple[str, str]:
     """Build fallback title and body when AI formatting fails."""
     _FALLBACK_TITLE_MAX = 500  # matches FeedbackCreateRequest.title max_length
-    if request.feedback_type == "bug":
-        scrubbed_desc = scrub_sensitive_data(request.description)
-        title = f"Bug report: {scrubbed_desc}"[:_FALLBACK_TITLE_MAX]
-        parts = [
-            "## Bug Report",
-            "",
-            f"**Description:** {scrubbed_desc}",
-        ]
-        if request.console_errors:
-            parts.extend(["", "## Console Errors", "```"])
-            parts.extend(scrub_sensitive_data(e) for e in request.console_errors)
-            parts.append("```")
-        if request.failed_api_calls:
-            scrubbed_calls = [
-                {
-                    "status": call.status,
-                    "endpoint": scrub_sensitive_data(call.endpoint),
-                    "error": scrub_sensitive_data(call.error),
-                }
-                for call in request.failed_api_calls
-            ]
-            parts.extend(
-                [
-                    "",
-                    "## Failed API Calls",
-                    f"```json\n{json.dumps(scrubbed_calls, indent=2)}\n```",
-                ]
-            )
-        if (
-            request.page_state.url
-            or request.page_state.active_filters
-            or request.page_state.report_id
-        ):
-            scrubbed_state = {
-                "url": scrub_sensitive_data(request.page_state.url),
-                "active_filters": scrub_sensitive_data(
-                    request.page_state.active_filters
-                ),
-                "report_id": scrub_sensitive_data(request.page_state.report_id),
+    scrubbed_desc = scrub_sensitive_data(request.description)
+    title = f"Feedback: {scrubbed_desc}"[:_FALLBACK_TITLE_MAX]
+    parts = [
+        "## Feedback",
+        "",
+        f"**Description:** {scrubbed_desc}",
+    ]
+    if request.console_errors:
+        parts.extend(["", "## Console Errors", "```"])
+        parts.extend(scrub_sensitive_data(e) for e in request.console_errors)
+        parts.append("```")
+    if request.failed_api_calls:
+        scrubbed_calls = [
+            {
+                "status": call.status,
+                "endpoint": scrub_sensitive_data(call.endpoint),
+                "error": scrub_sensitive_data(call.error),
             }
-            parts.extend(
-                [
-                    "",
-                    "## Page State",
-                    f"```json\n{json.dumps(scrubbed_state, indent=2)}\n```",
-                ]
-            )
-        if request.user_agent:
-            parts.extend(
-                ["", f"**User Agent:** {scrub_sensitive_data(request.user_agent)}"]
-            )
-        body = "\n".join(parts)
-    else:
-        scrubbed_desc = scrub_sensitive_data(request.description)
-        title = f"Feature request: {scrubbed_desc}"[:_FALLBACK_TITLE_MAX]
-        body = f"## Feature Request\n\n**Description:** {scrubbed_desc}"
+            for call in request.failed_api_calls
+        ]
+        parts.extend(
+            [
+                "",
+                "## Failed API Calls",
+                f"```json\n{json.dumps(scrubbed_calls, indent=2)}\n```",
+            ]
+        )
+    if (
+        request.page_state.url
+        or request.page_state.active_filters
+        or request.page_state.report_id
+    ):
+        scrubbed_state = {
+            "url": scrub_sensitive_data(request.page_state.url),
+            "active_filters": scrub_sensitive_data(request.page_state.active_filters),
+            "report_id": scrub_sensitive_data(request.page_state.report_id),
+        }
+        parts.extend(
+            [
+                "",
+                "## Page State",
+                f"```json\n{json.dumps(scrubbed_state, indent=2)}\n```",
+            ]
+        )
+    if request.user_agent:
+        parts.extend(
+            ["", f"**User Agent:** {scrub_sensitive_data(request.user_agent)}"]
+        )
+    body = "\n".join(parts)
     return title, body
 
 
 async def generate_feedback_preview(
-    request: FeedbackRequest, settings: Settings
+    request: FeedbackRequest,
+    settings: Settings,
+    ai_provider: str = "",
+    ai_model: str = "",
 ) -> FeedbackPreviewResponse:
     """Generate an AI-formatted preview of a feedback GitHub issue.
 
@@ -307,12 +293,15 @@ async def generate_feedback_preview(
     Args:
         request: User feedback submission.
         settings: Application settings.
+        ai_provider: Resolved AI provider identifier.
+        ai_model: Resolved AI model identifier.
 
     Returns:
         FeedbackPreviewResponse with generated title, body, and labels.
     """
-    title, body = await format_feedback_with_ai(request, settings)
-    labels = ["bug"] if request.feedback_type == "bug" else ["enhancement"]
+    title, body, labels = await format_feedback_with_ai(
+        request, settings, ai_provider=ai_provider, ai_model=ai_model
+    )
     return FeedbackPreviewResponse(title=title, body=body, labels=labels)
 
 

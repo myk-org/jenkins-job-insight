@@ -126,7 +126,6 @@ class TestScrubSensitiveData:
 class TestBuildFallbackFeedback:
     def test_bug_fallback(self):
         req = FeedbackRequest(
-            feedback_type="bug",
             description="Button does not work",
             console_errors=["TypeError: undefined is not a function"],
             failed_api_calls=[
@@ -140,8 +139,8 @@ class TestBuildFallbackFeedback:
             user_agent="Mozilla/5.0",
         )
         title, body = _build_fallback_feedback(req)
-        assert "Bug report:" in title
-        assert "## Bug Report" in body
+        assert "Feedback:" in title
+        assert "## Feedback" in body
         assert "Button does not work" in body
         assert "TypeError" in body
         assert "/api/analyze" in body
@@ -149,17 +148,15 @@ class TestBuildFallbackFeedback:
 
     def test_feature_fallback(self):
         req = FeedbackRequest(
-            feedback_type="feature",
             description="Add dark mode support",
         )
         title, body = _build_fallback_feedback(req)
-        assert "Feature request:" in title
-        assert "## Feature Request" in body
+        assert "Feedback:" in title
+        assert "## Feedback" in body
         assert "Add dark mode support" in body
 
-    def test_bug_fallback_scrubs_console_errors(self):
+    def test_fallback_scrubs_console_errors(self):
         req = FeedbackRequest(
-            feedback_type="bug",
             description="Auth error",
             console_errors=["Bearer my-secret-token leaked"],
         )
@@ -189,45 +186,70 @@ class TestFormatFeedbackWithAi:
 
     async def test_ai_success(self, settings):
         req = FeedbackRequest(
-            feedback_type="bug",
             description="The analyze button is broken",
         )
         ai_response = json.dumps(
             {
                 "title": "Analyze button not responding",
                 "body": "## Description\n\nThe analyze button fails to trigger analysis.",
+                "labels": ["bug"],
             }
         )
         with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
             mock_ai.return_value = AIResult(success=True, text=ai_response)
-            title, body = await format_feedback_with_ai(req, settings)
+            title, body, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
         assert title == "Analyze button not responding"
         assert "## Description" in body
+        assert labels == ["bug"]
+
+    async def test_ai_success_with_enhancement_label(self, settings):
+        req = FeedbackRequest(
+            description="Add export to CSV",
+        )
+        ai_response = json.dumps(
+            {
+                "title": "Add CSV export feature",
+                "body": "## Feature\n\nExport support.",
+                "labels": ["enhancement"],
+            }
+        )
+        with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
+            mock_ai.return_value = AIResult(success=True, text=ai_response)
+            title, body, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
+        assert title == "Add CSV export feature"
+        assert labels == ["enhancement"]
 
     async def test_ai_failure_uses_fallback(self, settings):
         req = FeedbackRequest(
-            feedback_type="feature",
             description="Add export to CSV",
         )
         with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
             mock_ai.return_value = AIResult(success=False, text="CLI error")
-            title, body = await format_feedback_with_ai(req, settings)
-        assert "Feature request:" in title
+            title, body, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
+        assert "Feedback:" in title
         assert "Add export to CSV" in body
+        assert labels == ["enhancement"]
 
     async def test_ai_returns_invalid_json_uses_fallback(self, settings):
         req = FeedbackRequest(
-            feedback_type="bug",
             description="Something broke",
         )
         with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
             mock_ai.return_value = AIResult(success=True, text="not json at all")
-            title, _ = await format_feedback_with_ai(req, settings)
-        assert "Bug report:" in title
+            title, _, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
+        assert "Feedback:" in title
+        assert labels == ["enhancement"]
 
     async def test_ai_response_with_markdown_fences(self, settings):
         req = FeedbackRequest(
-            feedback_type="bug",
             description="Error on page load",
         )
         ai_response = (
@@ -236,18 +258,21 @@ class TestFormatFeedbackWithAi:
                 {
                     "title": "Page load error",
                     "body": "## Bug\n\nPage fails to load.",
+                    "labels": ["bug"],
                 }
             )
             + "\n```"
         )
         with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
             mock_ai.return_value = AIResult(success=True, text=ai_response)
-            title, _ = await format_feedback_with_ai(req, settings)
+            title, _, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
         assert title == "Page load error"
+        assert labels == ["bug"]
 
     async def test_scrubs_sensitive_data_in_context(self, settings):
         req = FeedbackRequest(
-            feedback_type="bug",
             description="Auth failed",
             console_errors=["Bearer my-secret-token-123"],
             failed_api_calls=[FailedApiCall(error="password=hunter2")],
@@ -262,11 +287,42 @@ class TestFormatFeedbackWithAi:
         with patch(
             "jenkins_job_insight.feedback.call_ai_cli", side_effect=capture_call
         ):
-            await format_feedback_with_ai(req, settings)
+            await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
 
         # Verify sensitive data was scrubbed in the prompt sent to AI
         assert "my-secret-token-123" not in captured_prompt
         assert "hunter2" not in captured_prompt
+
+    async def test_ai_returns_no_labels_defaults_to_enhancement(self, settings):
+        req = FeedbackRequest(
+            description="Some feedback",
+        )
+        ai_response = json.dumps(
+            {
+                "title": "Some title",
+                "body": "Some body",
+            }
+        )
+        with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
+            mock_ai.return_value = AIResult(success=True, text=ai_response)
+            _, _, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
+        assert labels == ["enhancement"]
+
+    async def test_ai_exception_uses_fallback(self, settings):
+        req = FeedbackRequest(
+            description="Something broke",
+        )
+        with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
+            mock_ai.side_effect = RuntimeError("AI down")
+            title, body, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
+        assert "Feedback:" in title
+        assert labels == ["enhancement"]
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +346,6 @@ class TestGenerateFeedbackPreview:
 
     async def test_bug_preview_returns_correct_labels(self, settings):
         req = FeedbackRequest(
-            feedback_type="bug",
             description="Dashboard crashes",
         )
         with patch(
@@ -299,8 +354,11 @@ class TestGenerateFeedbackPreview:
             mock_format.return_value = (
                 "Dashboard crash on load",
                 "## Bug\n\nDetails...",
+                ["bug"],
             )
-            result = await generate_feedback_preview(req, settings)
+            result = await generate_feedback_preview(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
 
         assert isinstance(result, FeedbackPreviewResponse)
         assert result.title == "Dashboard crash on load"
@@ -309,7 +367,6 @@ class TestGenerateFeedbackPreview:
 
     async def test_feature_preview_returns_correct_labels(self, settings):
         req = FeedbackRequest(
-            feedback_type="feature",
             description="Add dark mode",
         )
         with patch(
@@ -318,8 +375,11 @@ class TestGenerateFeedbackPreview:
             mock_format.return_value = (
                 "Add dark mode support",
                 "## Feature\n\nDark mode...",
+                ["enhancement"],
             )
-            result = await generate_feedback_preview(req, settings)
+            result = await generate_feedback_preview(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
 
         assert isinstance(result, FeedbackPreviewResponse)
         assert result.title == "Add dark mode support"
@@ -421,7 +481,6 @@ class TestCreateFeedbackIssue:
 
     async def test_creates_bug_issue(self, settings):
         req = FeedbackRequest(
-            feedback_type="bug",
             description="Dashboard crashes",
         )
         with (
@@ -433,6 +492,7 @@ class TestCreateFeedbackIssue:
             mock_format.return_value = (
                 "Dashboard crash on load",
                 "## Bug\n\nDetails...",
+                ["bug"],
             )
             mock_create.return_value = {
                 "url": "https://github.com/myk-org/jenkins-job-insight/issues/42",
@@ -450,7 +510,6 @@ class TestCreateFeedbackIssue:
 
     async def test_creates_feature_issue_with_enhancement_label(self, settings):
         req = FeedbackRequest(
-            feedback_type="feature",
             description="Add dark mode",
         )
         with (
@@ -462,6 +521,7 @@ class TestCreateFeedbackIssue:
             mock_format.return_value = (
                 "Add dark mode support",
                 "## Feature\n\nDark mode...",
+                ["enhancement"],
             )
             mock_create.return_value = {
                 "url": "https://github.com/myk-org/jenkins-job-insight/issues/99",
@@ -475,7 +535,6 @@ class TestCreateFeedbackIssue:
 
     async def test_uses_correct_repo_url(self, settings):
         req = FeedbackRequest(
-            feedback_type="bug",
             description="test",
         )
         with (
@@ -484,7 +543,7 @@ class TestCreateFeedbackIssue:
             ) as mock_format,
             patch("jenkins_job_insight.feedback.create_github_issue") as mock_create,
         ):
-            mock_format.return_value = ("Title", "Body")
+            mock_format.return_value = ("Title", "Body", ["enhancement"])
             mock_create.return_value = {
                 "url": "https://github.com/x/y/issues/1",
                 "number": 1,
@@ -515,6 +574,8 @@ class TestFeedbackEndpoint:
         temp_db_path,
         github_token: str = "",
         enable_github_issues: str = "",
+        ai_provider: str = "claude",
+        ai_model: str = "test-model",
     ):
         """Create a TestClient with optional GITHUB_TOKEN."""
         env = {
@@ -527,6 +588,8 @@ class TestFeedbackEndpoint:
                 "JJI_ENCRYPTION_KEY",
                 "ALLOWED_USERS",
                 "ENABLE_GITHUB_ISSUES",
+                "AI_PROVIDER",
+                "AI_MODEL",
             }
         }
         env["SECURE_COOKIES"] = "false"
@@ -535,9 +598,19 @@ class TestFeedbackEndpoint:
             env["GITHUB_TOKEN"] = github_token
         if enable_github_issues:
             env["ENABLE_GITHUB_ISSUES"] = enable_github_issues
+        if ai_provider:
+            env["AI_PROVIDER"] = ai_provider
+        if ai_model:
+            env["AI_MODEL"] = ai_model
         with patch.dict(os.environ, env, clear=True):
             get_settings.cache_clear()
-            with patch.object(storage, "DB_PATH", temp_db_path):
+            import jenkins_job_insight.main as _main_mod
+
+            with (
+                patch.object(storage, "DB_PATH", temp_db_path),
+                patch.object(_main_mod, "AI_PROVIDER", ai_provider),
+                patch.object(_main_mod, "AI_MODEL", ai_model),
+            ):
                 from jenkins_job_insight.main import app
 
                 with TestClient(app) as c:
@@ -551,23 +624,37 @@ class TestFeedbackEndpoint:
             resp = client.post(
                 "/api/feedback/preview",
                 json={
-                    "feedback_type": "bug",
                     "description": "Something broke",
                 },
             )
             assert resp.status_code == 503
             assert "disabled" in resp.json()["detail"]
 
+    def test_preview_missing_ai_provider_returns_503(self, _init_db, temp_db_path):
+        for client in self._make_client(
+            temp_db_path,
+            github_token=_TEST_GITHUB_TOKEN,
+            ai_provider="",
+            ai_model="",
+        ):
+            resp = client.post(
+                "/api/feedback/preview",
+                json={
+                    "description": "Something broke",
+                },
+            )
+            assert resp.status_code == 503
+            assert "AI provider not configured" in resp.json()["detail"]
+
     def test_preview_successful(self, _init_db, temp_db_path):
         for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
             with patch(
                 "jenkins_job_insight.feedback.format_feedback_with_ai"
             ) as mock_format:
-                mock_format.return_value = ("Test title", "Test body")
+                mock_format.return_value = ("Test title", "Test body", ["bug"])
                 resp = client.post(
                     "/api/feedback/preview",
                     json={
-                        "feedback_type": "bug",
                         "description": "The button is broken",
                         "console_errors": ["TypeError: x is not a function"],
                     },
@@ -583,28 +670,20 @@ class TestFeedbackEndpoint:
             with patch(
                 "jenkins_job_insight.feedback.format_feedback_with_ai"
             ) as mock_format:
-                mock_format.return_value = ("Feature title", "Feature body")
+                mock_format.return_value = (
+                    "Feature title",
+                    "Feature body",
+                    ["enhancement"],
+                )
                 resp = client.post(
                     "/api/feedback/preview",
                     json={
-                        "feedback_type": "feature",
                         "description": "Add dark mode",
                     },
                 )
             assert resp.status_code == 200
             data = resp.json()
             assert data["labels"] == ["enhancement"]
-
-    def test_preview_invalid_feedback_type_returns_422(self, _init_db, temp_db_path):
-        for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
-            resp = client.post(
-                "/api/feedback/preview",
-                json={
-                    "feedback_type": "invalid",
-                    "description": "Something",
-                },
-            )
-            assert resp.status_code == 422
 
     # -- Create endpoint tests ------------------------------------------------
 
@@ -695,7 +774,6 @@ class TestFeedbackEndpoint:
             resp = client.post(
                 "/api/feedback/preview",
                 json={
-                    "feedback_type": "bug",
                     "description": "Something broke",
                 },
             )

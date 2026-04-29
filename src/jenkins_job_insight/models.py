@@ -858,8 +858,9 @@ class PageState(BaseModel):
 class FeedbackRequest(BaseModel):
     """User feedback submission (bug or feature request)."""
 
-    feedback_type: Literal["bug", "feature"] = Field(
-        description="Type of feedback: 'bug' or 'feature'"
+    feedback_type: str = Field(
+        default="feedback",
+        description="Type of feedback (auto-determined by AI if not specified)",
     )
     description: str = Field(
         min_length=1, max_length=10000, description="Natural language description"

@@ -390,7 +390,6 @@ export interface DashboardJobWithMetadata extends DashboardJob {
 // -- Feedback -----------------------------------------------------
 
 export interface FeedbackRequest {
-  feedback_type: 'bug' | 'feature'
   description: string
   console_errors: string[]
   failed_api_calls: { status: number; endpoint: string; error: string }[]

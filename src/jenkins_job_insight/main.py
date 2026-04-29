@@ -4814,7 +4814,20 @@ async def preview_feedback(request: Request, body: FeedbackRequest):
             status_code=503, detail="Feedback submission is disabled on this server"
         )
     try:
-        return await generate_feedback_preview(body, settings)
+        ai_provider, ai_model = _resolve_ai_config_values(None, None)
+    except HTTPException:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI provider not configured on this server. "
+                "Configure AI_PROVIDER and AI_MODEL environment variables "
+                "to enable AI-powered feedback."
+            ),
+        )
+    try:
+        return await generate_feedback_preview(
+            body, settings, ai_provider=ai_provider, ai_model=ai_model
+        )
     except Exception as exc:  # noqa: BLE001 — non-fatal feedback preview
         logger.exception("Failed to generate feedback preview")
         raise HTTPException(

@@ -40,12 +40,12 @@ describe('FeedbackDialog', () => {
     vi.clearAllMocks()
   })
 
-  it('renders form with type selector and textarea when open', () => {
+  it('renders form with description textarea when open', () => {
     render(<FeedbackDialog open={true} onOpenChange={onOpenChange} />)
     expect(screen.getByText('Send Feedback')).toBeInTheDocument()
-    expect(screen.getByText('Bug Report')).toBeInTheDocument()
-    expect(screen.getByText('Feature Request')).toBeInTheDocument()
+    expect(screen.getByText(/Describe your issue or idea/)).toBeInTheDocument()
     expect(screen.getByLabelText('Description')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Describe your issue or suggestion...')).toBeInTheDocument()
   })
 
   it('disables Preview when description is empty', () => {
@@ -58,15 +58,6 @@ describe('FeedbackDialog', () => {
     render(<FeedbackDialog open={true} onOpenChange={onOpenChange} />)
     await user.type(screen.getByLabelText('Description'), 'Something broke')
     expect(screen.getByRole('button', { name: /preview/i })).toBeEnabled()
-  })
-
-  it('switches feedback type when toggled', async () => {
-    const user = userEvent.setup()
-    render(<FeedbackDialog open={true} onOpenChange={onOpenChange} />)
-    const featureBtn = screen.getByText('Feature Request')
-    await user.click(featureBtn)
-    // The placeholder should change
-    expect(screen.getByPlaceholderText(/feature you'd like to see/i)).toBeInTheDocument()
   })
 
   it('calls preview endpoint and shows editable preview', async () => {
@@ -85,7 +76,6 @@ describe('FeedbackDialog', () => {
     expect(screen.getByLabelText('Title')).toHaveValue('AI generated title')
     expect(screen.getByLabelText('Body')).toHaveValue('AI generated body')
     expect(mockPost).toHaveBeenCalledWith('/api/feedback/preview', expect.objectContaining({
-      feedback_type: 'bug',
       description: 'Page crashes on load',
       user_agent: expect.any(String),
       console_errors: ['error1', 'error2'],
@@ -278,5 +268,36 @@ describe('FeedbackDialog', () => {
       body: 'Edited body',
       labels: ['feature'],
     })
+  })
+
+  it('shows AI-not-configured state with manual issue link when AI is not configured', async () => {
+    mockPost.mockRejectedValue(new Error('AI is not configured'))
+    const user = userEvent.setup()
+    render(<FeedbackDialog open={true} onOpenChange={onOpenChange} />)
+    await user.type(screen.getByLabelText('Description'), 'Some feedback')
+    await user.click(screen.getByRole('button', { name: /preview/i }))
+
+    await waitFor(() =>
+      expect(screen.getByText(/AI is not configured on this server/)).toBeInTheDocument()
+    )
+    const link = screen.getByRole('link', { name: /open a new issue/i })
+    expect(link).toHaveAttribute('href', 'https://github.com/myk-org/jenkins-job-insight/issues/new')
+    expect(link).toHaveAttribute('target', '_blank')
+    // Should show Close button in footer, not Try Again
+    const closeButtons = screen.getAllByRole('button', { name: /close/i })
+    expect(closeButtons.length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument()
+  })
+
+  it('handles "ai not configured" error with varied casing', async () => {
+    mockPost.mockRejectedValue(new Error('AI Not Configured on this instance'))
+    const user = userEvent.setup()
+    render(<FeedbackDialog open={true} onOpenChange={onOpenChange} />)
+    await user.type(screen.getByLabelText('Description'), 'Feedback')
+    await user.click(screen.getByRole('button', { name: /preview/i }))
+
+    await waitFor(() =>
+      expect(screen.getByText(/AI is not configured on this server/)).toBeInTheDocument()
+    )
   })
 })
