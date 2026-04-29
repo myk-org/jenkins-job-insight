@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,14 +50,14 @@ export function NewAnalysisPage() {
 
   // Peer analysis
   const [enablePeers, setEnablePeers] = useState(false)
-  const [peerConfigs, setPeerConfigs] = useState<AiConfig[]>([])
+  const [peerConfigs, setPeerConfigs] = useState<Array<AiConfig & { id: string }>>([])
   const [maxRounds, setMaxRounds] = useState(3)
 
   // Source repositories
   const [testsRepoUrl, setTestsRepoUrl] = useState('')
   const [testsRepoRef, setTestsRepoRef] = useState('')
   const [additionalRepos, setAdditionalRepos] = useState<
-    Array<{ name: string; url: string; ref: string }>
+    Array<{ id: string; name: string; url: string; ref: string }>
   >([])
 
   // Jira integration
@@ -69,6 +69,8 @@ export function NewAnalysisPage() {
   const [force, setForce] = useState(false)
   const [getArtifacts, setGetArtifacts] = useState<boolean | undefined>(undefined)
   const [maxArtifactsSize, setMaxArtifactsSize] = useState<number | undefined>(undefined)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -87,6 +89,9 @@ export function NewAnalysisPage() {
         setUploadFileName(file.name)
       }
     }
+    reader.onerror = () => {
+      setError(`Failed to read file: ${file.name}`)
+    }
     reader.readAsText(file)
   }, [])
 
@@ -104,7 +109,9 @@ export function NewAnalysisPage() {
         ...(jiraUrl && { jira_url: jiraUrl }),
         ...(jiraProjectKey && { jira_project_key: jiraProjectKey }),
         ...(testsRepoUrl && { tests_repo_url: testsRepoRef ? `${testsRepoUrl}:${testsRepoRef}` : testsRepoUrl }),
-        peer_ai_configs: enablePeers ? peerConfigs : [],
+        peer_ai_configs: enablePeers
+          ? peerConfigs.map(({ ai_provider, ai_model }) => ({ ai_provider, ai_model }))
+          : [],
         peer_analysis_max_rounds: maxRounds,
         additional_repos: additionalRepos
           .filter((r) => r.name && r.url)
@@ -316,7 +323,7 @@ export function NewAnalysisPage() {
                 const file = e.dataTransfer.files[0]
                 if (file && file.name.endsWith('.xml')) handleFileUpload(file)
               }}
-              onClick={() => document.getElementById('xml-file-input')?.click()}
+              onClick={() => fileInputRef.current?.click()}
             >
               <Upload className="h-8 w-8 text-text-tertiary mb-2" />
               <p className="text-sm text-text-secondary">
@@ -331,7 +338,7 @@ export function NewAnalysisPage() {
                 </p>
               )}
               <input
-                id="xml-file-input"
+                ref={fileInputRef}
                 type="file"
                 accept=".xml"
                 className="hidden"
@@ -405,16 +412,16 @@ export function NewAnalysisPage() {
                 <div className="space-y-2">
                   {peerConfigs.map((peer, i) => (
                     <div
-                      key={i}
+                      key={peer.id}
                       className="bg-surface-elevated border border-border-default rounded-lg p-2.5 flex items-center gap-2"
                     >
                       <Select
                         value={peer.ai_provider}
-                        onValueChange={(v) => {
-                          const next = [...peerConfigs]
-                          next[i] = { ...next[i], ai_provider: v }
-                          setPeerConfigs(next)
-                        }}
+                        onValueChange={(v) =>
+                          setPeerConfigs((prev) =>
+                            prev.map((p) => (p.id === peer.id ? { ...p, ai_provider: v } : p))
+                          )
+                        }
                       >
                         <SelectTrigger className="w-[120px]">
                           <SelectValue />
@@ -429,16 +436,18 @@ export function NewAnalysisPage() {
                         className="flex-1"
                         placeholder="Model"
                         value={peer.ai_model}
-                        onChange={(e) => {
-                          const next = [...peerConfigs]
-                          next[i] = { ...next[i], ai_model: e.target.value }
-                          setPeerConfigs(next)
-                        }}
+                        onChange={(e) =>
+                          setPeerConfigs((prev) =>
+                            prev.map((p) =>
+                              p.id === peer.id ? { ...p, ai_model: e.target.value } : p
+                            )
+                          )
+                        }
                       />
                       <button
                         type="button"
                         className="p-1 rounded hover:bg-surface-hover text-text-tertiary hover:text-signal-red transition flex-shrink-0"
-                        onClick={() => setPeerConfigs(peerConfigs.filter((_, j) => j !== i))}
+                        onClick={() => setPeerConfigs((prev) => prev.filter((p) => p.id !== peer.id))}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -449,7 +458,10 @@ export function NewAnalysisPage() {
                   type="button"
                   className="text-xs text-text-link hover:text-signal-blue font-medium flex items-center gap-1"
                   onClick={() =>
-                    setPeerConfigs([...peerConfigs, { ai_provider: 'claude', ai_model: '' }])
+                    setPeerConfigs((prev) => [
+                      ...prev,
+                      { id: crypto.randomUUID(), ai_provider: 'claude', ai_model: '' },
+                    ])
                   }
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -462,7 +474,7 @@ export function NewAnalysisPage() {
                     min={1}
                     max={10}
                     value={maxRounds}
-                    onChange={(e) => setMaxRounds(Number(e.target.value) || 1)}
+                    onChange={(e) => setMaxRounds(toIntInRange(e.target.value, 1, 10, 1))}
                     className="w-24"
                   />
                 </div>
@@ -494,9 +506,9 @@ export function NewAnalysisPage() {
             </div>
             <div className="space-y-2">
               <FieldLabel>Additional Repositories</FieldLabel>
-              {additionalRepos.map((repo, i) => (
+              {additionalRepos.map((repo) => (
                 <div
-                  key={i}
+                  key={repo.id}
                   className="bg-surface-elevated border border-border-default rounded-lg p-2.5 space-y-2"
                 >
                   <div className="flex items-center gap-2">
@@ -504,37 +516,43 @@ export function NewAnalysisPage() {
                       className="w-32"
                       placeholder="Name"
                       value={repo.name}
-                      onChange={(e) => {
-                        const next = [...additionalRepos]
-                        next[i] = { ...next[i], name: e.target.value }
-                        setAdditionalRepos(next)
-                      }}
+                      onChange={(e) =>
+                        setAdditionalRepos((prev) =>
+                          prev.map((r) =>
+                            r.id === repo.id ? { ...r, name: e.target.value } : r
+                          )
+                        )
+                      }
                     />
                     <Input
                       className="flex-1"
                       placeholder="URL"
                       value={repo.url}
-                      onChange={(e) => {
-                        const next = [...additionalRepos]
-                        next[i] = { ...next[i], url: e.target.value }
-                        setAdditionalRepos(next)
-                      }}
+                      onChange={(e) =>
+                        setAdditionalRepos((prev) =>
+                          prev.map((r) =>
+                            r.id === repo.id ? { ...r, url: e.target.value } : r
+                          )
+                        )
+                      }
                     />
                     <Input
                       className="w-24"
                       placeholder="Ref"
                       value={repo.ref}
-                      onChange={(e) => {
-                        const next = [...additionalRepos]
-                        next[i] = { ...next[i], ref: e.target.value }
-                        setAdditionalRepos(next)
-                      }}
+                      onChange={(e) =>
+                        setAdditionalRepos((prev) =>
+                          prev.map((r) =>
+                            r.id === repo.id ? { ...r, ref: e.target.value } : r
+                          )
+                        )
+                      }
                     />
                     <button
                       type="button"
                       className="p-1 rounded hover:bg-surface-hover text-text-tertiary hover:text-signal-red transition flex-shrink-0"
                       onClick={() =>
-                        setAdditionalRepos(additionalRepos.filter((_, j) => j !== i))
+                        setAdditionalRepos((prev) => prev.filter((r) => r.id !== repo.id))
                       }
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -546,7 +564,10 @@ export function NewAnalysisPage() {
                 type="button"
                 className="text-xs text-text-link hover:text-signal-blue font-medium flex items-center gap-1"
                 onClick={() =>
-                  setAdditionalRepos([...additionalRepos, { name: '', url: '', ref: '' }])
+                  setAdditionalRepos((prev) => [
+                    ...prev,
+                    { id: crypto.randomUUID(), name: '', url: '', ref: '' },
+                  ])
                 }
               >
                 <Plus className="h-3.5 w-3.5" />
