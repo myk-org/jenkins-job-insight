@@ -203,9 +203,7 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
       }
 
       // Notify AllReviewedPrompt to check if all failures are now reviewed
-      if (newState) {
-        setTimeout(() => window.dispatchEvent(new CustomEvent('jji:review-changed', { detail: { jobId } })), 100)
-      }
+      setTimeout(() => window.dispatchEvent(new CustomEvent('jji:review-changed', { detail: { jobId } })), 100)
     } finally {
       setReviewingAll(false)
     }

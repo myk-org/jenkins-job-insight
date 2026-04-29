@@ -87,7 +87,8 @@ function Injector({
         for (const [key, state] of Object.entries(additionalReviews)) {
           dispatch({ type: 'SET_REVIEW', payload: { key, state } })
         }
-        window.dispatchEvent(new CustomEvent('jji:review-changed', { detail: { jobId: 'job-1' } }))
+        // Fire event in a separate tick so React processes the SET_REVIEW state updates first
+        setTimeout(() => window.dispatchEvent(new CustomEvent('jji:review-changed', { detail: { jobId: 'job-1' } })), 0)
       }, 0)
       return () => clearTimeout(id)
     }
