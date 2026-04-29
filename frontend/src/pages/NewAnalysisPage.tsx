@@ -61,13 +61,13 @@ export function NewAnalysisPage() {
   >([])
 
   // Jira integration
-  const [enableJira, setEnableJira] = useState<boolean | undefined>(undefined)
+  const [enableJira, setEnableJira] = useState(true)
   const [jiraUrl, setJiraUrl] = useState('')
   const [jiraProjectKey, setJiraProjectKey] = useState('')
 
   // Advanced
   const [force, setForce] = useState(false)
-  const [getArtifacts, setGetArtifacts] = useState<boolean | undefined>(undefined)
+  const [getArtifacts, setGetArtifacts] = useState(true)
   const [maxArtifactsSize, setMaxArtifactsSize] = useState<number | undefined>(undefined)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -81,6 +81,8 @@ export function NewAnalysisPage() {
       : rawXml.trim() !== ''
 
   const handleFileUpload = useCallback((file: File) => {
+    setRawXml('')
+    setUploadFileName('')
     const reader = new FileReader()
     reader.onload = (e) => {
       const content = e.target?.result
@@ -90,6 +92,8 @@ export function NewAnalysisPage() {
       }
     }
     reader.onerror = () => {
+      setRawXml('')
+      setUploadFileName('')
       setError(`Failed to read file: ${file.name}`)
     }
     reader.readAsText(file)
@@ -105,7 +109,7 @@ export function NewAnalysisPage() {
         ...(aiModel && { ai_model: aiModel }),
         ...(aiCliTimeout !== undefined && { ai_cli_timeout: aiCliTimeout }),
         ...(rawPrompt && { raw_prompt: rawPrompt }),
-        ...(enableJira !== undefined && { enable_jira: enableJira }),
+        enable_jira: enableJira,
         ...(jiraUrl && { jira_url: jiraUrl }),
         ...(jiraProjectKey && { jira_project_key: jiraProjectKey }),
         ...(testsRepoUrl && { tests_repo_url: testsRepoRef ? `${testsRepoUrl}:${testsRepoRef}` : testsRepoUrl }),
@@ -134,7 +138,7 @@ export function NewAnalysisPage() {
           ...(jenkinsUrl && { jenkins_url: jenkinsUrl }),
           ...(jenkinsUser && { jenkins_user: jenkinsUser }),
           ...(jenkinsPassword && { jenkins_password: jenkinsPassword }),
-          ...(getArtifacts !== undefined && { get_job_artifacts: getArtifacts }),
+          get_job_artifacts: getArtifacts,
           ...(maxArtifactsSize !== undefined && { jenkins_artifacts_max_size_mb: maxArtifactsSize }),
         }
         const data = await api.post<{ job_id: string }>('/analyze', body)
@@ -376,7 +380,7 @@ export function NewAnalysisPage() {
                   min={1}
                   value={aiCliTimeout ?? ''}
                   placeholder="10"
-                  onChange={(e) => setAiCliTimeout(e.target.value ? Number(e.target.value) || 1 : undefined)}
+                  onChange={(e) => setAiCliTimeout(e.target.value ? toIntInRange(e.target.value, 1, 3600, 1) : undefined)}
                 />
               </div>
             </div>
@@ -582,9 +586,9 @@ export function NewAnalysisPage() {
           <Section title="Jira Integration" dotColor="bg-signal-orange">
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">Enable Jira search</span>
-              <Toggle checked={enableJira ?? true} onChange={setEnableJira} label="Enable Jira search" />
+              <Toggle checked={enableJira} onChange={setEnableJira} label="Enable Jira search" />
             </div>
-            {enableJira !== false && (
+            {!enableJira ? null : (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <FieldLabel>Jira URL</FieldLabel>
@@ -627,9 +631,9 @@ export function NewAnalysisPage() {
           <Section title="Jenkins Artifacts" dotColor="bg-[#58a6ff]">
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">Fetch build artifacts</span>
-              <Toggle checked={getArtifacts ?? true} onChange={setGetArtifacts} label="Fetch build artifacts" />
+              <Toggle checked={getArtifacts} onChange={setGetArtifacts} label="Fetch build artifacts" />
             </div>
-            {(getArtifacts ?? true) && (
+            {getArtifacts && (
               <div className="space-y-1.5">
                 <FieldLabel>Max Size (MB)</FieldLabel>
                 <Input
@@ -637,7 +641,7 @@ export function NewAnalysisPage() {
                   min={1}
                   value={maxArtifactsSize ?? ''}
                   placeholder="50"
-                  onChange={(e) => setMaxArtifactsSize(e.target.value ? Number(e.target.value) || 1 : undefined)}
+                  onChange={(e) => setMaxArtifactsSize(e.target.value ? toIntInRange(e.target.value, 1, 10000, 1) : undefined)}
                 />
               </div>
             )}
