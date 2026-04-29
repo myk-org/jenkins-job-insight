@@ -827,6 +827,8 @@ class AnalyzeCommentRequest(BaseModel):
     """Request body for AI-driven comment intent analysis."""
 
     comment: str
+    ai_provider: str | None = None
+    ai_model: str | None = None
 
 
 class AnalyzeCommentResponse(BaseModel):

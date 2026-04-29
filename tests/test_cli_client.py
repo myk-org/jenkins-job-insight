@@ -1503,6 +1503,34 @@ class TestAnalyzeCommentIntent:
         result = client.analyze_comment_intent(comment="Filed JIRA-123")
         assert result == expected
 
+    def test_analyze_comment_intent_with_ai_config(self):
+        def check_payload(request):
+            body = json.loads(request.content)
+            assert body["comment"] == "Filed JIRA-123"
+            assert body["ai_provider"] == "claude"
+            assert body["ai_model"] == "claude-sonnet-4-20250514"
+            return httpx.Response(
+                200, json={"suggests_reviewed": True, "reason": "Bug filed"}
+            )
+
+        client = _make_client(check_payload)
+        result = client.analyze_comment_intent(
+            comment="Filed JIRA-123",
+            ai_provider="claude",
+            ai_model="claude-sonnet-4-20250514",
+        )
+        assert result["suggests_reviewed"] is True
+
+    def test_analyze_comment_intent_without_ai_config(self):
+        def check_payload(request):
+            body = json.loads(request.content)
+            assert "ai_provider" not in body
+            assert "ai_model" not in body
+            return httpx.Response(200, json={"suggests_reviewed": False, "reason": ""})
+
+        client = _make_client(check_payload)
+        client.analyze_comment_intent(comment="test")
+
     def test_analyze_comment_intent_failure(self):
         client = _make_client(
             lambda request: httpx.Response(500, json={"detail": "Internal error"})

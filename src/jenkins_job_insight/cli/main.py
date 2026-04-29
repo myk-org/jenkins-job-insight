@@ -1820,13 +1820,21 @@ def override_classification_cmd(
 @app.command("analyze-comment-intent")
 def analyze_comment_intent_cmd(
     comment: str = typer.Argument(help="Comment text to analyze."),
+    ai_provider: str = typer.Option(
+        "", "--ai-provider", help="AI provider for content generation."
+    ),
+    ai_model: str = typer.Option(
+        "", "--ai-model", help="AI model for content generation."
+    ),
     json_output: bool = _JSON_OPTION,
 ):
     """Analyze whether a comment suggests a failure has been reviewed/resolved."""
     _set_json(json_output)
     try:
         client = _get_client()
-        data = client.analyze_comment_intent(comment=comment)
+        data = client.analyze_comment_intent(
+            comment=comment, ai_provider=ai_provider, ai_model=ai_model
+        )
     except JJIError as err:
         _handle_error(err)
 

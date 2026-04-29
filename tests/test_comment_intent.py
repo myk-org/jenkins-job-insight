@@ -142,3 +142,25 @@ class TestAnalyzeCommentIntent:
             json={},
         )
         assert response.status_code == 422
+
+    def test_accepts_ai_provider_and_model(self, client) -> None:
+        """Request body can include optional ai_provider and ai_model."""
+        ai_response = AIResult(
+            success=True,
+            text='{"suggests_reviewed": true, "reason": "Bug filed"}',
+        )
+        with patch("ai_cli_runner.call_ai_cli", return_value=ai_response) as mock_ai:
+            response = client.post(
+                "/api/analyze-comment-intent",
+                json={
+                    "comment": "Filed JIRA-123",
+                    "ai_provider": "claude",
+                    "ai_model": "claude-sonnet-4-20250514",
+                },
+            )
+
+        assert response.status_code == 200
+        assert response.json()["suggests_reviewed"] is True
+        call_kwargs = mock_ai.call_args
+        assert call_kwargs.kwargs["ai_provider"] == "claude"
+        assert call_kwargs.kwargs["ai_model"] == "claude-sonnet-4-20250514"

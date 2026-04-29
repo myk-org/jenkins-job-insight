@@ -4701,7 +4701,7 @@ async def analyze_comment_intent(
 ) -> AnalyzeCommentResponse:
     """Analyze a comment to determine if it implies a failure has been reviewed/resolved."""
     _check_allow_list(request)
-    ai_provider, ai_model = _resolve_ai_config_values(None, None)
+    ai_provider, ai_model = _resolve_ai_config_values(body.ai_provider, body.ai_model)
 
     from ai_cli_runner import call_ai_cli
 

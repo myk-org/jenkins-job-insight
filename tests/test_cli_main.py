@@ -3162,6 +3162,29 @@ class TestAnalyzeCommentIntentCommand:
         assert result.exit_code == 0
         assert json.loads(result.output) == expected
 
+    def test_analyze_comment_intent_with_ai_options(self, mock_client):
+        mock_client.analyze_comment_intent.return_value = {
+            "suggests_reviewed": True,
+            "reason": "Bug filed",
+        }
+        result = runner.invoke(
+            app,
+            [
+                "analyze-comment-intent",
+                "Filed JIRA-123",
+                "--ai-provider",
+                "claude",
+                "--ai-model",
+                "claude-sonnet-4-20250514",
+            ],
+        )
+        assert result.exit_code == 0
+        mock_client.analyze_comment_intent.assert_called_once_with(
+            comment="Filed JIRA-123",
+            ai_provider="claude",
+            ai_model="claude-sonnet-4-20250514",
+        )
+
 
 class TestApiKeyOption:
     def test_api_key_passed_to_client(self):
