@@ -648,6 +648,12 @@ class CreateIssueRequest(_ChildJobFieldsValidator, _TrackerCredentialsMixin):
         default="Bug", description="Jira issue type name (e.g. Bug, Story, Task)"
     )
 
+    @field_validator("jira_issue_type")
+    @classmethod
+    def jira_issue_type_not_empty(cls, v: str) -> str:
+        stripped = v.strip()
+        return stripped if stripped else "Bug"
+
     @field_validator("title")
     @classmethod
     def title_not_empty(cls, v: str) -> str:

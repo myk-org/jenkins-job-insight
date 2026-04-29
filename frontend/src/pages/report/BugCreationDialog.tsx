@@ -444,7 +444,7 @@ export function BugCreationDialog({
               )}
               <div className="flex gap-2 sm:ml-auto">
                 <Button variant="outline" onClick={() => handleCancel()}>Cancel</Button>
-                <Button onClick={handleCreate} disabled={!title.trim() || !hasToken} title={!hasToken ? `Add a ${target === 'github' ? 'GitHub' : 'Jira'} token to create issues` : undefined}>Create {label}</Button>
+                <Button onClick={handleCreate} disabled={!title.trim() || !hasToken || (target === 'jira' && jiraIssueType === '__custom__' && !customIssueType.trim())} title={!hasToken ? `Add a ${target === 'github' ? 'GitHub' : 'Jira'} token to create issues` : undefined}>Create {label}</Button>
               </div>
             </>
           )}
