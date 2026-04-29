@@ -110,8 +110,9 @@ export function MetadataDropdowns({
       {SELECT_FILTERS_CONFIG
         .filter((f) => optionsMap[f.key].length > 0 || !!values[f.key])
         .map((f) => {
-          const items = optionsMap[f.key].length > 0
-            ? optionsMap[f.key]
+          const opts = optionsMap[f.key]
+          const items = opts.length > 0
+            ? (opts.includes(values[f.key]) ? opts : values[f.key] ? [values[f.key], ...opts] : opts)
             : values[f.key] ? [values[f.key]] : []
           return (
             <Select
@@ -188,7 +189,7 @@ interface MetadataClearButtonProps {
   onClearAll: () => void
 }
 
-/** Renders a "Clear filters" button when metadata filters are active. */
+/** Renders a "Clear metadata" button when metadata filters are active. */
 export function MetadataClearButton({ hasFilters, onClearAll }: MetadataClearButtonProps) {
   if (!hasFilters) return null
   return (
