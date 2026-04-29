@@ -171,7 +171,10 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
         : 'Send Feedback'
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (!nextOpen && (phase === 'previewing' || phase === 'creating' || phase === 'preview')) return
+      handleClose(nextOpen)
+    }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{dialogTitle}</DialogTitle>
