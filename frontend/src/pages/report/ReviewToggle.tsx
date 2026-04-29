@@ -39,6 +39,14 @@ export function ReviewToggle({ jobId, testName, childJobName, childBuildNumber, 
         type: 'SET_REVIEW',
         payload: { key, state: { reviewed: !reviewed, username, updated_at: new Date().toISOString() } },
       })
+      // Notify AllReviewedPrompt to check if all failures are now reviewed.
+      // Using a custom event avoids useEffect timing issues entirely.
+      if (!reviewed) {
+        // We just marked as reviewed — schedule check after React processes the dispatch
+        setTimeout(() => {
+          window.dispatchEvent(new Event('jji:review-changed'))
+        }, 100)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to toggle review status')
     } finally {

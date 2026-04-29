@@ -201,6 +201,11 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
       if (failedCount > 0) {
         setReviewAllError(`Failed to update ${failedCount} of ${group.tests.length} tests: ${failedTestNames.join(', ')}`)
       }
+
+      // Notify AllReviewedPrompt to check if all failures are now reviewed
+      if (newState) {
+        setTimeout(() => window.dispatchEvent(new Event('jji:review-changed')), 100)
+      }
     } finally {
       setReviewingAll(false)
     }
