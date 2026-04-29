@@ -841,13 +841,14 @@ app.add_middleware(AuthMiddleware)
 app.add_middleware(ErrorTrackingMiddleware)
 
 
+_BODY_LOGGING_SKIP_PATHS = frozenset({"/api/feedback"})
+
+
 class RequestBodyLoggingMiddleware(BaseHTTPMiddleware):
     """Log incoming request bodies at DEBUG level with sensitive data masked."""
 
-    _SKIP_PATHS = frozenset({"/api/feedback"})
-
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in self._SKIP_PATHS:
+        if request.url.path in _BODY_LOGGING_SKIP_PATHS:
             return await call_next(request)
         if logger.isEnabledFor(logging.DEBUG) and request.method in (
             "POST",
@@ -898,6 +899,11 @@ async def _validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """Log 422 validation error details at DEBUG level, then return standard response."""
+    if request.url.path in _BODY_LOGGING_SKIP_PATHS:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": jsonable_encoder(exc.errors())},
+        )
     if logger.isEnabledFor(logging.DEBUG):
         masked_body = None
         if exc.body is not None:
@@ -4816,9 +4822,10 @@ async def submit_feedback(request: Request, body: FeedbackRequest):
             detail=f"GitHub API unreachable: {exc}",
         ) from exc
     except Exception as exc:
+        logger.exception("Failed to submit feedback")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to submit feedback: {exc}",
+            detail="Failed to submit feedback",
         ) from exc
 
 

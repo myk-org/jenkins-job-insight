@@ -19,6 +19,8 @@ from jenkins_job_insight.feedback import (
 )
 from jenkins_job_insight.models import FeedbackRequest, FeedbackResponse
 
+_TEST_GITHUB_TOKEN = "test-token-placeholder"  # noqa: S105
+
 
 # ---------------------------------------------------------------------------
 # scrub_sensitive_data tests
@@ -212,7 +214,7 @@ class TestFormatFeedbackWithAi:
         )
         with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
             mock_ai.return_value = AIResult(success=True, text="not json at all")
-            title, body = await format_feedback_with_ai(req, settings)
+            title, _ = await format_feedback_with_ai(req, settings)
         assert "Bug report:" in title
 
     async def test_ai_response_with_markdown_fences(self, settings):
@@ -232,7 +234,7 @@ class TestFormatFeedbackWithAi:
         )
         with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
             mock_ai.return_value = AIResult(success=True, text=ai_response)
-            title, body = await format_feedback_with_ai(req, settings)
+            title, _ = await format_feedback_with_ai(req, settings)
         assert title == "Page load error"
 
     async def test_scrubs_sensitive_data_in_context(self, settings):
@@ -271,13 +273,24 @@ class TestCreateFeedbackIssue:
             "JENKINS_URL": "https://jenkins.example.com",
             "JENKINS_USER": "user",
             "JENKINS_PASSWORD": "pass",  # pragma: allowlist secret
-            "GITHUB_TOKEN": "test-token-placeholder",  # pragma: allowlist secret
+            "GITHUB_TOKEN": _TEST_GITHUB_TOKEN,
         }
         with patch.dict(os.environ, env, clear=True):
             get_settings.cache_clear()
             s = get_settings()
             get_settings.cache_clear()
             return s
+
+    @staticmethod
+    def _assert_create_issue_kwargs(mock_create, *, expected_labels=None):
+        """Extract and validate common call_args from create_github_issue mock."""
+        mock_create.assert_called_once()
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs.get("repo_url") == _FEEDBACK_REPO_URL
+        assert call_kwargs.get("github_token") is not None
+        if expected_labels is not None:
+            assert call_kwargs.get("labels") == expected_labels
+        return call_kwargs
 
     async def test_creates_bug_issue(self, settings):
         req = FeedbackRequest(
@@ -306,12 +319,7 @@ class TestCreateFeedbackIssue:
         assert result.title == "Dashboard crash on load"
         assert "issues/42" in result.issue_url
 
-        # Verify correct label
-        mock_create.assert_called_once()
-        call_kwargs = mock_create.call_args
-        assert call_kwargs.kwargs.get("labels") == ["bug"] or call_kwargs[1].get(
-            "labels"
-        ) == ["bug"]
+        self._assert_create_issue_kwargs(mock_create, expected_labels=["bug"])
 
     async def test_creates_feature_issue_with_enhancement_label(self, settings):
         req = FeedbackRequest(
@@ -336,10 +344,7 @@ class TestCreateFeedbackIssue:
             result = await create_feedback_issue(req, settings)
 
         assert result.issue_number == 99
-        call_kwargs = mock_create.call_args
-        assert call_kwargs.kwargs.get("labels") == ["enhancement"] or call_kwargs[
-            1
-        ].get("labels") == ["enhancement"]
+        self._assert_create_issue_kwargs(mock_create, expected_labels=["enhancement"])
 
     async def test_uses_correct_repo_url(self, settings):
         req = FeedbackRequest(
@@ -360,11 +365,7 @@ class TestCreateFeedbackIssue:
             }
             await create_feedback_issue(req, settings)
 
-        call_kwargs = mock_create.call_args
-        assert (
-            call_kwargs.kwargs.get("repo_url") == _FEEDBACK_REPO_URL
-            or call_kwargs[1].get("repo_url") == _FEEDBACK_REPO_URL
-        )
+        self._assert_create_issue_kwargs(mock_create)
 
 
 # ---------------------------------------------------------------------------
@@ -429,9 +430,7 @@ class TestFeedbackEndpoint:
             assert "disabled" in resp.json()["detail"]
 
     def test_successful_feedback_submission(self, _init_db, temp_db_path):
-        for client in self._make_client(
-            temp_db_path, github_token="ghp_test"
-        ):  # pragma: allowlist secret
+        for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
             with (
                 patch(
                     "jenkins_job_insight.feedback.format_feedback_with_ai"
@@ -461,9 +460,7 @@ class TestFeedbackEndpoint:
             assert "issues/10" in data["issue_url"]
 
     def test_invalid_feedback_type_returns_422(self, _init_db, temp_db_path):
-        for client in self._make_client(
-            temp_db_path, github_token="ghp_test"
-        ):  # pragma: allowlist secret
+        for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
             resp = client.post(
                 "/api/feedback",
                 json={
@@ -474,9 +471,7 @@ class TestFeedbackEndpoint:
             assert resp.status_code == 422
 
     def test_capabilities_includes_feedback_enabled(self, _init_db, temp_db_path):
-        for client in self._make_client(
-            temp_db_path, github_token="ghp_test"
-        ):  # pragma: allowlist secret
+        for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
             resp = client.get("/api/capabilities")
             assert resp.status_code == 200
             data = resp.json()
@@ -495,7 +490,7 @@ class TestFeedbackEndpoint:
     ):
         for client in self._make_client(
             temp_db_path,
-            github_token="ghp_test",  # pragma: allowlist secret
+            github_token=_TEST_GITHUB_TOKEN,
             enable_github_issues="false",
         ):
             resp = client.post(
@@ -513,7 +508,7 @@ class TestFeedbackEndpoint:
     ):
         for client in self._make_client(
             temp_db_path,
-            github_token="ghp_test",  # pragma: allowlist secret
+            github_token=_TEST_GITHUB_TOKEN,
             enable_github_issues="false",
         ):
             resp = client.get("/api/capabilities")
