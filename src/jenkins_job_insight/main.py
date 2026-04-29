@@ -4821,7 +4821,7 @@ async def submit_feedback(request: Request, body: FeedbackRequest):
             status_code=502,
             detail=f"GitHub API unreachable: {exc}",
         ) from exc
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — non-fatal feedback submission
         logger.exception("Failed to submit feedback")
         raise HTTPException(
             status_code=500,
