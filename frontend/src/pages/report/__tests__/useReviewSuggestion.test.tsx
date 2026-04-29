@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { useEffect } from 'react'
 import { ReportProvider, useReportDispatch } from '../ReportContext'
-import { suggestsReviewed, useReviewSuggestion } from '../useReviewSuggestion'
+import { useReviewSuggestion } from '../useReviewSuggestion'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
 /* ------------------------------------------------------------------ */
@@ -14,49 +14,15 @@ vi.mock('@/lib/cookies', () => ({
 }))
 
 const mockPut = vi.fn()
+const mockPost = vi.fn()
 
 vi.mock('@/lib/api', () => ({
   api: {
     put: (...args: unknown[]) => mockPut(...args),
+    post: (...args: unknown[]) => mockPost(...args),
     get: vi.fn().mockResolvedValue({ users: [] }),
-    post: vi.fn().mockResolvedValue({}),
   },
 }))
-
-/* ------------------------------------------------------------------ */
-/*  suggestsReviewed unit tests                                        */
-/* ------------------------------------------------------------------ */
-
-describe('suggestsReviewed', () => {
-  it('returns true for text containing a URL', () => {
-    expect(suggestsReviewed('See https://jira.example.com/browse/BUG-123')).toBe(true)
-    expect(suggestsReviewed('Fixed in http://github.com/org/repo/pull/42')).toBe(true)
-  })
-
-  it('returns true for text containing review-suggesting keywords', () => {
-    expect(suggestsReviewed('This is a known issue')).toBe(true)
-    expect(suggestsReviewed('Root cause identified')).toBe(true)
-    expect(suggestsReviewed('Already fixed in main')).toBe(true)
-    expect(suggestsReviewed('Workaround applied')).toBe(true)
-    expect(suggestsReviewed('Issue resolved')).toBe(true)
-    expect(suggestsReviewed('Bug filed for this')).toBe(true)
-    expect(suggestsReviewed('Created JIRA ticket')).toBe(true)
-    expect(suggestsReviewed('Tracked in backlog')).toBe(true)
-    expect(suggestsReviewed('This is a duplicate of another failure')).toBe(true)
-  })
-
-  it('is case-insensitive for keywords', () => {
-    expect(suggestsReviewed('KNOWN ISSUE with this test')).toBe(true)
-    expect(suggestsReviewed('Root Cause: config mismatch')).toBe(true)
-  })
-
-  it('returns false for generic comments', () => {
-    expect(suggestsReviewed('Looking into this')).toBe(false)
-    expect(suggestsReviewed('Need to investigate')).toBe(false)
-    expect(suggestsReviewed('Not sure what happened')).toBe(false)
-    expect(suggestsReviewed('')).toBe(false)
-  })
-})
 
 /* ------------------------------------------------------------------ */
 /*  useReviewSuggestion hook integration tests                         */
@@ -85,9 +51,8 @@ function HookHarness({ setReviewed }: { setReviewed?: boolean }) {
       <span data-testid="show">{String(showSuggestion)}</span>
       <span data-testid="loading">{String(loading)}</span>
       <span data-testid="error">{error ?? ''}</span>
-      <button data-testid="suggest-url" onClick={() => maybeSuggest('See https://jira.example.com/BUG-1')}>Suggest URL</button>
-      <button data-testid="suggest-keyword" onClick={() => maybeSuggest('This is a known issue')}>Suggest Keyword</button>
-      <button data-testid="suggest-generic" onClick={() => maybeSuggest('Looking into it')}>Suggest Generic</button>
+      <button data-testid="suggest-reviewed" onClick={() => void maybeSuggest('This is a known issue')}>Suggest Reviewed</button>
+      <button data-testid="suggest-not-reviewed" onClick={() => void maybeSuggest('Looking into it')}>Suggest Not Reviewed</button>
       <ConfirmDialog
         open={showSuggestion}
         onOpenChange={(open) => { if (!open) dismissSuggestion() }}
@@ -121,47 +86,91 @@ describe('useReviewSuggestion hook', () => {
     expect(screen.getByTestId('show').textContent).toBe('false')
   })
 
-  it('shows suggestion when comment contains a URL', () => {
+  it('shows suggestion when API returns suggests_reviewed: true', async () => {
+    mockPost.mockResolvedValueOnce({ suggests_reviewed: true, reason: 'Contains known issue reference' })
     renderHarness()
-    fireEvent.click(screen.getByTestId('suggest-url'))
-    expect(screen.getByTestId('show').textContent).toBe('true')
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('suggest-reviewed'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('show').textContent).toBe('true')
+    })
+    expect(mockPost).toHaveBeenCalledWith('/api/analyze-comment-intent', { comment: 'This is a known issue' })
     expect(screen.getByText('Mark as reviewed?')).toBeDefined()
   })
 
-  it('shows suggestion when comment contains a keyword', () => {
+  it('does not show suggestion when API returns suggests_reviewed: false', async () => {
+    mockPost.mockResolvedValueOnce({ suggests_reviewed: false, reason: 'Generic comment' })
     renderHarness()
-    fireEvent.click(screen.getByTestId('suggest-keyword'))
-    expect(screen.getByTestId('show').textContent).toBe('true')
-  })
 
-  it('does not show suggestion for generic comments', () => {
-    renderHarness()
-    fireEvent.click(screen.getByTestId('suggest-generic'))
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('suggest-not-reviewed'))
+    })
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/api/analyze-comment-intent', { comment: 'Looking into it' })
+    })
     expect(screen.getByTestId('show').textContent).toBe('false')
   })
 
-  it('does not show suggestion when already reviewed', async () => {
+  it('does not show suggestion when API call fails (safe default)', async () => {
+    mockPost.mockRejectedValueOnce(new Error('Network error'))
+    renderHarness()
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('suggest-reviewed'))
+    })
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/api/analyze-comment-intent', { comment: 'This is a known issue' })
+    })
+    expect(screen.getByTestId('show').textContent).toBe('false')
+  })
+
+  it('does not call API when already reviewed', async () => {
     renderHarness({ setReviewed: true })
     // Wait for the SET_REVIEW dispatch to take effect
     await waitFor(() => {
       expect(screen.getByTestId('show').textContent).toBe('false')
     })
-    fireEvent.click(screen.getByTestId('suggest-url'))
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('suggest-reviewed'))
+    })
+
+    expect(mockPost).not.toHaveBeenCalled()
     expect(screen.getByTestId('show').textContent).toBe('false')
   })
 
-  it('dismisses suggestion when No is clicked', () => {
+  it('dismisses suggestion when No is clicked', async () => {
+    mockPost.mockResolvedValueOnce({ suggests_reviewed: true, reason: 'Match' })
     renderHarness()
-    fireEvent.click(screen.getByTestId('suggest-url'))
-    expect(screen.getByTestId('show').textContent).toBe('true')
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('suggest-reviewed'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('show').textContent).toBe('true')
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'No' }))
     expect(screen.getByTestId('show').textContent).toBe('false')
   })
 
   it('calls review API and hides dialog when Yes is clicked', async () => {
+    mockPost.mockResolvedValueOnce({ suggests_reviewed: true, reason: 'Match' })
     renderHarness()
-    fireEvent.click(screen.getByTestId('suggest-url'))
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('suggest-reviewed'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('show').textContent).toBe('true')
+    })
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
@@ -180,9 +189,17 @@ describe('useReviewSuggestion hook', () => {
   })
 
   it('sets error when review API call fails', async () => {
+    mockPost.mockResolvedValueOnce({ suggests_reviewed: true, reason: 'Match' })
     mockPut.mockRejectedValueOnce(new Error('Network error'))
     renderHarness()
-    fireEvent.click(screen.getByTestId('suggest-url'))
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('suggest-reviewed'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('show').textContent).toBe('true')
+    })
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Yes' }))

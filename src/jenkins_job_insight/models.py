@@ -821,3 +821,16 @@ class BulkJobMetadataRequest(BaseModel):
         max_length=1000,
         description="Metadata entries to import (1-1000 per request).",
     )
+
+
+class AnalyzeCommentRequest(BaseModel):
+    """Request body for AI-driven comment intent analysis."""
+
+    comment: str
+
+
+class AnalyzeCommentResponse(BaseModel):
+    """Response from comment intent analysis."""
+
+    suggests_reviewed: bool
+    reason: str = ""

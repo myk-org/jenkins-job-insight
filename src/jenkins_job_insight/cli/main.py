@@ -1817,6 +1817,29 @@ def override_classification_cmd(
         typer.echo(f"Classification overridden to: {data.get('classification', '')}")
 
 
+@app.command("analyze-comment-intent")
+def analyze_comment_intent_cmd(
+    comment: str = typer.Argument(help="Comment text to analyze."),
+    json_output: bool = _JSON_OPTION,
+):
+    """Analyze whether a comment suggests a failure has been reviewed/resolved."""
+    _set_json(json_output)
+    try:
+        client = _get_client()
+        data = client.analyze_comment_intent(comment=comment)
+    except JJIError as err:
+        _handle_error(err)
+
+    if _state.get("json", False):
+        print_output(data, columns=[], as_json=True)
+    else:
+        reviewed = data.get("suggests_reviewed", False)
+        reason = data.get("reason", "")
+        typer.echo(f"Suggests reviewed: {reviewed}")
+        if reason:
+            typer.echo(f"Reason: {reason}")
+
+
 # -- Auth ---------------------------------------------------------------------
 
 

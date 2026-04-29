@@ -70,6 +70,8 @@ from jenkins_job_insight.notifications import send_mention_notifications
 from jenkins_job_insight.vapid import get_vapid_config
 from jenkins_job_insight.models import (
     AddCommentRequest,
+    AnalyzeCommentRequest,
+    AnalyzeCommentResponse,
     AnalyzeFailuresRequest,
     AnalyzeRequest,
     BaseAnalysisRequest,
@@ -4691,6 +4693,76 @@ async def get_mentionable_users(request: Request):
     _check_allow_list(request)
     users = await storage.list_users()
     return {"usernames": [u["username"] for u in users]}
+
+
+@app.post("/api/analyze-comment-intent", response_model=AnalyzeCommentResponse)
+async def analyze_comment_intent(
+    request: Request, body: AnalyzeCommentRequest
+) -> AnalyzeCommentResponse:
+    """Analyze a comment to determine if it implies a failure has been reviewed/resolved."""
+    _check_allow_list(request)
+    ai_provider, ai_model = _resolve_ai_config_values(None, None)
+
+    from ai_cli_runner import call_ai_cli
+
+    from jenkins_job_insight.analyzer import PROVIDER_CLI_FLAGS
+
+    prompt = """You are analyzing a comment left on a test failure report.
+Does this comment imply the failure has been reviewed or resolved?
+
+Examples that SUGGEST reviewed/resolved:
+- Bug filed with a link (e.g., "Filed JIRA-123 for this")
+- Root cause identified (e.g., "This is caused by the config change in PR #456")
+- Known issue noted (e.g., "Known flaky test, tracked in BUG-789")
+- Fix merged (e.g., "Fixed in commit abc123")
+
+Examples that DO NOT suggest reviewed/resolved:
+- Asking for more info (e.g., "Can someone check the logs?")
+- Sharing logs for context (e.g., "Here's the full stack trace: ...")
+- Linking docs (e.g., "See the troubleshooting guide: ...")
+- General discussion (e.g., "This started happening after the last deploy")
+
+Comment:
+"""
+    prompt += body.comment
+    prompt += """
+
+Respond with ONLY a JSON object:
+{"suggests_reviewed": true/false, "reason": "brief explanation"}"""
+
+    result = await call_ai_cli(
+        prompt,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        ai_cli_timeout=1,
+        cli_flags=PROVIDER_CLI_FLAGS.get(ai_provider, []),
+        output_format="json",
+    )
+
+    from jenkins_job_insight.token_tracking import record_ai_usage
+
+    await record_ai_usage(
+        job_id="comment-intent",
+        result=result,
+        call_type="comment_intent",
+        prompt_chars=len(prompt),
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+    )
+
+    if not result.success:
+        logger.debug("AI CLI call failed for comment intent analysis: %s", result.text)
+        return AnalyzeCommentResponse(suggests_reviewed=False)
+
+    try:
+        parsed = json.loads(result.text)
+        return AnalyzeCommentResponse(
+            suggests_reviewed=bool(parsed.get("suggests_reviewed", False)),
+            reason=str(parsed.get("reason", "")),
+        )
+    except (json.JSONDecodeError, AttributeError):
+        logger.debug("Failed to parse AI response for comment intent: %s", result.text)
+        return AnalyzeCommentResponse(suggests_reviewed=False)
 
 
 # SPA catch-all routes — must be AFTER all API routes

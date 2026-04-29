@@ -144,7 +144,7 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
       }
       dispatch({ type: 'ADD_COMMENT', payload: fresh })
       refreshEnrichments(jobId)
-      maybeSuggest(submittedText)
+      void maybeSuggest(submittedText)
       // Clear text
       setText('')
     } catch (err) {

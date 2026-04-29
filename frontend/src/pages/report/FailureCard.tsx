@@ -519,7 +519,7 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
               ? repoUrls.map(({ name, url }) => ({ name, url }))
               : undefined
           }
-          onIssueCreated={(url) => maybeSuggestBugReview(url)}
+          onIssueCreated={(url) => void maybeSuggestBugReview(url)}
         />
       )}
 

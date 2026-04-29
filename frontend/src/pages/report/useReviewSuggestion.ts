@@ -4,19 +4,6 @@ import { getUsername } from '@/lib/cookies'
 import { useReportState, useReportDispatch, reviewKey } from './ReportContext'
 
 /* ------------------------------------------------------------------ */
-/*  Detection helper                                                   */
-/* ------------------------------------------------------------------ */
-
-const URL_RE = /https?:\/\//
-const KEYWORD_RE = /\b(known issue|fixed|root cause|workaround|resolved|bug filed|jira|tracked|duplicate)\b/i
-
-/** Returns true if the comment text implies the failure has been reviewed. */
-export function suggestsReviewed(commentText: string): boolean {
-  if (URL_RE.test(commentText)) return true
-  return KEYWORD_RE.test(commentText)
-}
-
-/* ------------------------------------------------------------------ */
 /*  Hook                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -37,12 +24,20 @@ export function useReviewSuggestion({ jobId, testName, childJobName, childBuildN
   const key = reviewKey(testName, childJobName, childBuildNumber)
   const isAlreadyReviewed = reviews[key]?.reviewed ?? false
 
-  /** Call after a comment is added. If it implies review and not already reviewed, show the prompt. */
+  /** Call after a comment is added. Asks the backend whether the comment implies the failure has been reviewed. */
   const maybeSuggest = useCallback(
-    (commentText: string) => {
+    async (commentText: string) => {
       if (isAlreadyReviewed) return
-      if (suggestsReviewed(commentText)) {
-        setShowSuggestion(true)
+      try {
+        const res = await api.post<{ suggests_reviewed: boolean; reason: string }>(
+          '/api/analyze-comment-intent',
+          { comment: commentText },
+        )
+        if (res.suggests_reviewed) {
+          setShowSuggestion(true)
+        }
+      } catch {
+        // AI analysis failed — don't prompt (safe default)
       }
     },
     [isAlreadyReviewed],

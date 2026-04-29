@@ -1496,6 +1496,22 @@ class TestTokenUsage:
         assert exc_info.value.status_code == 403
 
 
+class TestAnalyzeCommentIntent:
+    def test_analyze_comment_intent(self):
+        expected = {"suggests_reviewed": True, "reason": "Bug filed"}
+        client = _make_client(lambda request: httpx.Response(200, json=expected))
+        result = client.analyze_comment_intent(comment="Filed JIRA-123")
+        assert result == expected
+
+    def test_analyze_comment_intent_failure(self):
+        client = _make_client(
+            lambda request: httpx.Response(500, json={"detail": "Internal error"})
+        )
+        with pytest.raises(JJIError) as exc_info:
+            client.analyze_comment_intent(comment="test")
+        assert exc_info.value.status_code == 500
+
+
 class TestJJIClientApiKeyHeader:
     def test_api_key_sent_as_bearer_header(self):
         def check_header(request):
