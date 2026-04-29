@@ -180,9 +180,9 @@ export function BugCreationDialog({
     }
   }
 
-  function handleClose(nextOpen: boolean) {
-    if (nextOpen) return
-    onOpenChange(false)
+  const isBusy = phase === 'loading' || phase === 'preview' || phase === 'creating'
+
+  function resetState() {
     setTimeout(() => {
       setPhase('idle')
       setTitle('')
@@ -203,9 +203,21 @@ export function BugCreationDialog({
     }, 200)
   }
 
+  function handleCancel() {
+    onOpenChange(false)
+    resetState()
+  }
+
+  function handleClose(nextOpen: boolean) {
+    if (!nextOpen && isBusy) return
+    if (nextOpen) return
+    onOpenChange(false)
+    resetState()
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent hideCloseButton={isBusy} className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{phase === 'success' ? `${label} Created` : `Create ${label}`}</DialogTitle>
           {phase === 'preview' && <DialogDescription>Review and edit before creating.</DialogDescription>}
@@ -431,13 +443,13 @@ export function BugCreationDialog({
                 <p className="text-xs text-text-tertiary">Add a {target === 'github' ? 'GitHub' : 'Jira'} token in <a href="/settings" className="text-text-link hover:underline">settings</a> to create directly.</p>
               )}
               <div className="flex gap-2 sm:ml-auto">
-                <Button variant="ghost" onClick={() => handleClose(false)}>Cancel</Button>
+                <Button variant="outline" onClick={() => handleCancel()}>Cancel</Button>
                 <Button onClick={handleCreate} disabled={!title.trim() || !hasToken} title={!hasToken ? `Add a ${target === 'github' ? 'GitHub' : 'Jira'} token to create issues` : undefined}>Create {label}</Button>
               </div>
             </>
           )}
           {(phase === 'success' || phase === 'error') && (
-            <Button variant="ghost" onClick={() => handleClose(false)} className="sm:ml-auto">Close</Button>
+            <Button variant="outline" onClick={() => handleCancel()} className="sm:ml-auto">Close</Button>
           )}
         </DialogFooter>
       </DialogContent>
