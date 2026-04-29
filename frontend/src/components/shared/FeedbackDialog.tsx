@@ -175,7 +175,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
       if (!nextOpen && (phase === 'previewing' || phase === 'creating' || phase === 'preview')) return
       handleClose(nextOpen)
     }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" hideCloseButton={phase === 'preview' || phase === 'previewing' || phase === 'creating'}>
         <DialogHeader>
           <DialogTitle>{dialogTitle}</DialogTitle>
           {phase === 'form' && (
@@ -301,13 +301,14 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
         <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
           {phase === 'form' && (
             <div className="flex gap-2 sm:ml-auto">
-              <Button variant="ghost" onClick={() => handleClose(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
               <Button onClick={handlePreview} disabled={!description.trim()}>Preview</Button>
             </div>
           )}
           {phase === 'preview' && (
             <div className="flex gap-2 sm:ml-auto">
-              <Button variant="ghost" onClick={handleBack}>Back</Button>
+              <Button variant="outline" onClick={handleBack}>Back</Button>
+              <Button variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
               <Button
                 onClick={handleCreate}
                 disabled={!previewTitle.trim() || !previewBody.trim()}
@@ -316,15 +317,15 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
           )}
           {phase === 'error' && (
             <div className="flex gap-2 sm:ml-auto">
-              <Button variant="ghost" onClick={() => handleClose(false)}>Close</Button>
+              <Button variant="outline" onClick={() => handleClose(false)}>Close</Button>
               <Button onClick={() => setPhase(errorSource === 'preview' ? 'form' : 'preview')}>Try Again</Button>
             </div>
           )}
           {phase === 'ai-not-configured' && (
-            <Button variant="ghost" onClick={() => handleClose(false)} className="sm:ml-auto">Close</Button>
+            <Button variant="outline" onClick={() => handleClose(false)} className="sm:ml-auto">Close</Button>
           )}
           {phase === 'success' && (
-            <Button variant="ghost" onClick={() => handleClose(false)} className="sm:ml-auto">Close</Button>
+            <Button variant="outline" onClick={() => handleClose(false)} className="sm:ml-auto">Close</Button>
           )}
         </DialogFooter>
       </DialogContent>
