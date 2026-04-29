@@ -4745,7 +4745,7 @@ Respond with ONLY a JSON object:
         prompt,
         ai_provider=ai_provider,
         ai_model=ai_model,
-        ai_cli_timeout=1,
+        ai_cli_timeout=2,
         cli_flags=PROVIDER_CLI_FLAGS.get(ai_provider, []),
         output_format="json",
     )

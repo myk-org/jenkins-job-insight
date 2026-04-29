@@ -1499,12 +1499,20 @@ class TestTokenUsage:
 class TestAnalyzeCommentIntent:
     def test_analyze_comment_intent(self):
         expected = {"suggests_reviewed": True, "reason": "Bug filed"}
-        client = _make_client(lambda request: httpx.Response(200, json=expected))
+
+        def handler(request):
+            assert request.method == "POST"
+            assert request.url.path == "/api/analyze-comment-intent"
+            return httpx.Response(200, json=expected)
+
+        client = _make_client(handler)
         result = client.analyze_comment_intent(comment="Filed JIRA-123")
         assert result == expected
 
     def test_analyze_comment_intent_with_ai_config(self):
         def check_payload(request):
+            assert request.method == "POST"
+            assert request.url.path == "/api/analyze-comment-intent"
             body = json.loads(request.content)
             assert body["comment"] == "Filed JIRA-123"
             assert body["ai_provider"] == "claude"
@@ -1523,6 +1531,8 @@ class TestAnalyzeCommentIntent:
 
     def test_analyze_comment_intent_without_ai_config(self):
         def check_payload(request):
+            assert request.method == "POST"
+            assert request.url.path == "/api/analyze-comment-intent"
             body = json.loads(request.content)
             assert "ai_provider" not in body
             assert "ai_model" not in body
@@ -1530,6 +1540,23 @@ class TestAnalyzeCommentIntent:
 
         client = _make_client(check_payload)
         client.analyze_comment_intent(comment="test")
+
+    def test_analyze_comment_intent_with_job_id(self):
+        def check_payload(request):
+            assert request.method == "POST"
+            assert request.url.path == "/api/analyze-comment-intent"
+            body = json.loads(request.content)
+            assert body["comment"] == "Fixed in PR #42"
+            assert body["job_id"] == "job-abc-123"
+            return httpx.Response(
+                200, json={"suggests_reviewed": True, "reason": "PR reference"}
+            )
+
+        client = _make_client(check_payload)
+        result = client.analyze_comment_intent(
+            comment="Fixed in PR #42", job_id="job-abc-123"
+        )
+        assert result["suggests_reviewed"] is True
 
     def test_analyze_comment_intent_failure(self):
         client = _make_client(

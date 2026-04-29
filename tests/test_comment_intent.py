@@ -19,7 +19,7 @@ def _mock_settings(temp_db_path: Path):
         AI_PROVIDER="gemini",
         AI_MODEL="gemini-2.5-flash",
         DB_PATH=str(temp_db_path),
-        GEMINI_API_KEY="test-key",  # pragma: allowlist secret
+        GEMINI_API_KEY="test-key",  # noqa: S106  # pragma: allowlist secret
     )
     with patch.dict(os.environ, env, clear=True):
         from jenkins_job_insight.config import get_settings

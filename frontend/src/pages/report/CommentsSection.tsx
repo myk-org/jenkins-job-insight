@@ -284,7 +284,7 @@ export function CommentsSection({ jobId, testNames, childJobName, childBuildNumb
         loading={reviewLoading}
       />
       {reviewError && (
-        <span className="text-sm text-destructive">{reviewError}</span>
+        <span className="text-sm text-destructive" role="alert">{reviewError}</span>
       )}
     </div>
   )

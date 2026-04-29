@@ -534,7 +534,7 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
         loading={bugReviewLoading}
       />
       {bugReviewError && (
-        <span className="text-sm text-destructive">{bugReviewError}</span>
+        <span className="text-sm text-destructive" role="alert">{bugReviewError}</span>
       )}
     </>
   )
