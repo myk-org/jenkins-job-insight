@@ -91,6 +91,11 @@ const SELECT_FILTERS_CONFIG = [
   { key: 'version', allLabel: 'All versions', aria: 'Filter by version' },
 ] as const
 
+function buildOptionItems(options: string[], activeValue: string): string[] {
+  if (!activeValue || options.includes(activeValue)) return options
+  return [activeValue, ...options]
+}
+
 /** Renders team/tier/version select dropdowns. Renders nothing if no options exist. */
 export function MetadataDropdowns({
   options,
@@ -110,10 +115,7 @@ export function MetadataDropdowns({
       {SELECT_FILTERS_CONFIG
         .filter((f) => optionsMap[f.key].length > 0 || !!values[f.key])
         .map((f) => {
-          const opts = optionsMap[f.key]
-          const items = opts.length > 0
-            ? (opts.includes(values[f.key]) ? opts : values[f.key] ? [values[f.key], ...opts] : opts)
-            : values[f.key] ? [values[f.key]] : []
+          const items = buildOptionItems(optionsMap[f.key], values[f.key])
           return (
             <Select
               key={f.key}
@@ -199,5 +201,3 @@ export function MetadataClearButton({ hasFilters, onClearAll }: MetadataClearBut
     </Button>
   )
 }
-
-// ─── Legacy composite (kept for backward compat if needed) ─────────────────
