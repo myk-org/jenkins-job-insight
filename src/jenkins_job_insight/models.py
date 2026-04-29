@@ -845,7 +845,9 @@ class FeedbackRequest(BaseModel):
     feedback_type: Literal["bug", "feature"] = Field(
         description="Type of feedback: 'bug' or 'feature'"
     )
-    description: str = Field(description="Natural language description")
+    description: str = Field(
+        min_length=1, max_length=10000, description="Natural language description"
+    )
     console_errors: list[str] = Field(
         default_factory=list, description="Browser console errors"
     )
@@ -871,8 +873,10 @@ class FeedbackPreviewResponse(BaseModel):
 class FeedbackCreateRequest(BaseModel):
     """Request to create a GitHub issue from a previewed feedback."""
 
-    title: str = Field(description="Issue title")
-    body: str = Field(description="Issue body (markdown)")
+    title: str = Field(min_length=1, max_length=500, description="Issue title")
+    body: str = Field(
+        min_length=1, max_length=50000, description="Issue body (markdown)"
+    )
     labels: list[str] = Field(default_factory=list, description="Issue labels")
 
 

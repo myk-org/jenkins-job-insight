@@ -38,6 +38,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   const [errorMsg, setErrorMsg] = useState('')
   const [errorSource, setErrorSource] = useState<'preview' | 'create'>('preview')
   const cancelledRef = useRef(false)
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Preview state
   const [previewTitle, setPreviewTitle] = useState('')
@@ -48,10 +49,23 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   useEffect(() => {
     if (open) {
       cancelledRef.current = false
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current)
+        resetTimerRef.current = null
+      }
     } else {
       cancelledRef.current = true
     }
   }, [open])
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current)
+      }
+    }
+  }, [])
 
   function collectPageState(): FeedbackRequest['page_state'] {
     const state: FeedbackRequest['page_state'] = {
@@ -136,7 +150,11 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   function handleClose(nextOpen: boolean) {
     if (nextOpen) return
     onOpenChange(false)
-    setTimeout(() => {
+    if (resetTimerRef.current) {
+      clearTimeout(resetTimerRef.current)
+    }
+    resetTimerRef.current = setTimeout(() => {
+      resetTimerRef.current = null
       setPhase('form')
       setFeedbackType('bug')
       setDescription('')

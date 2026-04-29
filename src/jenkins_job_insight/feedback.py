@@ -283,6 +283,9 @@ async def generate_feedback_preview(
     return FeedbackPreviewResponse(title=title, body=body, labels=labels)
 
 
+_ALLOWED_LABELS: set[str] = {"bug", "enhancement"}
+
+
 async def create_feedback_from_preview(
     title: str, body: str, labels: list[str], settings: Settings
 ) -> FeedbackResponse:
@@ -297,6 +300,10 @@ async def create_feedback_from_preview(
     Returns:
         FeedbackResponse with the created issue details.
     """
+    title = scrub_sensitive_data(title)
+    body = scrub_sensitive_data(body)
+    labels = [lbl for lbl in labels if lbl in _ALLOWED_LABELS]
+
     github_token = (
         settings.github_token.get_secret_value() if settings.github_token else ""
     )
