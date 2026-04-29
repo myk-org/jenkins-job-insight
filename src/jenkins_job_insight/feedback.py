@@ -13,7 +13,7 @@ from simple_logger.logger import get_logger
 
 from ai_cli_runner import call_ai_cli
 from jenkins_job_insight.analyzer import PROVIDER_CLI_FLAGS
-from jenkins_job_insight.bug_creation import create_github_issue
+from jenkins_job_insight.bug_creation import GITHUB_AI_FOOTER, create_github_issue
 from jenkins_job_insight.config import Settings
 from jenkins_job_insight.models import (
     FeedbackPreviewResponse,
@@ -302,6 +302,9 @@ async def generate_feedback_preview(
     title, body, labels = await format_feedback_with_ai(
         request, settings, ai_provider=ai_provider, ai_model=ai_model
     )
+    # Append AI attribution footer so the user sees it in preview.
+    if GITHUB_AI_FOOTER.strip() not in body:
+        body += GITHUB_AI_FOOTER
     return FeedbackPreviewResponse(title=title, body=body, labels=labels)
 
 

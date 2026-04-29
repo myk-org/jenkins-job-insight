@@ -23,6 +23,16 @@ from jenkins_job_insight.token_tracking import record_ai_usage
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
+# AI attribution footers appended to all generated issues.
+GITHUB_AI_FOOTER = (
+    "\n\n---\n"
+    "*Generated using AI with [JJI](https://github.com/myk-org/jenkins-job-insight)*"
+)
+JIRA_AI_FOOTER = (
+    "\n\n----\n"
+    "_Generated using AI with [JJI|https://github.com/myk-org/jenkins-job-insight]_"
+)
+
 
 def _build_failure_context(failure: FailureAnalysis) -> dict:
     """Extract structured context from a FailureAnalysis for prompt building.
@@ -348,6 +358,7 @@ Do not wrap in code blocks or JSON. Just the title on the first line, then the b
     if result.success:
         parsed = _parse_ai_issue_response(result.text)
         if parsed:
+            parsed["body"] += GITHUB_AI_FOOTER
             return parsed
         logger.debug(
             "AI returned output but JSON parsing failed for GitHub issue, output=%s",
@@ -359,7 +370,11 @@ Do not wrap in code blocks or JSON. Just the title on the first line, then the b
     logger.warning(
         "AI content generation failed for GitHub issue, using fallback template"
     )
-    return _build_fallback_github_content(ctx, jenkins_url, report_url, include_links)
+    content = _build_fallback_github_content(
+        ctx, jenkins_url, report_url, include_links
+    )
+    content["body"] += GITHUB_AI_FOOTER
+    return content
 
 
 async def generate_jira_bug_content(
@@ -477,6 +492,7 @@ Do not wrap in code blocks or JSON. Just the summary on the first line, then the
     if result.success:
         parsed = _parse_ai_issue_response(result.text)
         if parsed:
+            parsed["body"] += JIRA_AI_FOOTER
             return parsed
         logger.debug(
             "AI returned output but JSON parsing failed for Jira bug, output=%s",
@@ -486,7 +502,9 @@ Do not wrap in code blocks or JSON. Just the summary on the first line, then the
         logger.debug("AI CLI call failed for Jira bug: %s", result.text)
 
     logger.warning("AI content generation failed for Jira bug, using fallback template")
-    return _build_fallback_jira_content(ctx, jenkins_url, report_url, include_links)
+    content = _build_fallback_jira_content(ctx, jenkins_url, report_url, include_links)
+    content["body"] += JIRA_AI_FOOTER
+    return content
 
 
 def _parse_github_repo_url(repo_url: str) -> tuple[str, str]:
@@ -612,6 +630,10 @@ async def create_github_issue(
     """
     owner, repo = _parse_github_repo_url(repo_url)
 
+    # Append AI attribution footer if not already present.
+    if GITHUB_AI_FOOTER.strip() not in body:
+        body += GITHUB_AI_FOOTER
+
     headers = {
         "Accept": "application/vnd.github.v3+json",
         "Authorization": f"Bearer {github_token}",
@@ -678,6 +700,10 @@ async def create_jira_bug(
     effective_issue_type = issue_type.strip() if issue_type else "Bug"
     if not effective_issue_type:
         effective_issue_type = "Bug"
+
+    # Append AI attribution footer if not already present.
+    if JIRA_AI_FOOTER.strip() not in body:
+        body += JIRA_AI_FOOTER
 
     payload: dict = {
         "fields": {

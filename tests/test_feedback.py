@@ -29,6 +29,10 @@ from jenkins_job_insight.models import (
 
 _TEST_GITHUB_TOKEN = "test-token-placeholder"  # noqa: S105
 
+_GITHUB_FOOTER_MARKER = (
+    "Generated using AI with [JJI](https://github.com/myk-org/jenkins-job-insight)"
+)
+
 
 # ---------------------------------------------------------------------------
 # scrub_sensitive_data tests
@@ -362,7 +366,7 @@ class TestGenerateFeedbackPreview:
 
         assert isinstance(result, FeedbackPreviewResponse)
         assert result.title == "Dashboard crash on load"
-        assert result.body == "## Bug\n\nDetails..."
+        assert _GITHUB_FOOTER_MARKER in result.body
         assert result.labels == ["bug"]
 
     async def test_feature_preview_returns_correct_labels(self, settings):
@@ -383,6 +387,7 @@ class TestGenerateFeedbackPreview:
 
         assert isinstance(result, FeedbackPreviewResponse)
         assert result.title == "Add dark mode support"
+        assert _GITHUB_FOOTER_MARKER in result.body
         assert result.labels == ["enhancement"]
 
 
@@ -662,7 +667,8 @@ class TestFeedbackEndpoint:
             assert resp.status_code == 200
             data = resp.json()
             assert data["title"] == "Test title"
-            assert data["body"] == "Test body"
+            assert "Test body" in data["body"]
+            assert _GITHUB_FOOTER_MARKER in data["body"]
             assert data["labels"] == ["bug"]
 
     def test_preview_feature_returns_enhancement_label(self, _init_db, temp_db_path):

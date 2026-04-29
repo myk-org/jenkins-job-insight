@@ -16,6 +16,14 @@ from jenkins_job_insight.models import (
 
 _TEST_GITHUB_TOKEN = "ghp_test"  # noqa: S105
 
+# Expected footer substrings for assertion checks.
+_GITHUB_FOOTER_MARKER = (
+    "Generated using AI with [JJI](https://github.com/myk-org/jenkins-job-insight)"
+)
+_JIRA_FOOTER_MARKER = (
+    "Generated using AI with [JJI|https://github.com/myk-org/jenkins-job-insight]"
+)
+
 
 @pytest.fixture
 def code_issue_failure() -> FailureAnalysis:
@@ -88,6 +96,7 @@ class TestGenerateGithubIssueContent:
             assert result["title"]
             assert result["body"]
             assert "test_valid_credentials" in result["body"]
+            assert _GITHUB_FOOTER_MARKER in result["body"]
 
     async def test_fallback_on_ai_failure(self, code_issue_failure):
         from jenkins_job_insight.bug_creation import generate_github_issue_content
@@ -105,6 +114,7 @@ class TestGenerateGithubIssueContent:
             assert result["title"]
             assert result["body"]
             assert "test_valid_credentials" in result["body"]
+            assert _GITHUB_FOOTER_MARKER in result["body"]
 
     async def test_fallback_includes_code_fix(self, code_issue_failure):
         from jenkins_job_insight.bug_creation import generate_github_issue_content
@@ -120,6 +130,7 @@ class TestGenerateGithubIssueContent:
             )
             assert "src/auth/handlers.py" in result["body"]
             assert "Suggested Fix" in result["body"]
+            assert _GITHUB_FOOTER_MARKER in result["body"]
 
 
 class TestGenerateJiraBugContent:
@@ -144,6 +155,7 @@ class TestGenerateJiraBugContent:
             )
             assert result["title"]
             assert result["body"]
+            assert _JIRA_FOOTER_MARKER in result["body"]
 
     async def test_fallback_on_ai_failure(self, product_bug_failure):
         from jenkins_job_insight.bug_creation import generate_jira_bug_content
@@ -159,6 +171,7 @@ class TestGenerateJiraBugContent:
             )
             assert result["title"] == "DNS resolution timeout on internal resolver"
             assert "test_resolve" in result["body"]
+            assert _JIRA_FOOTER_MARKER in result["body"]
 
 
 class TestSearchGithubDuplicates:
@@ -256,6 +269,10 @@ class TestCreateGithubIssue:
             assert result["url"] == "https://github.com/org/repo/issues/99"
             assert result["number"] == 99
 
+            # Verify footer was appended to the body sent to GitHub API
+            posted_body = mock_client.post.call_args.kwargs["json"]["body"]
+            assert _GITHUB_FOOTER_MARKER in posted_body
+
     async def test_creates_issue_with_labels(self):
         from jenkins_job_insight.bug_creation import create_github_issue
 
@@ -283,6 +300,10 @@ class TestCreateGithubIssue:
                 labels=["bug", "test-failure"],
             )
             assert result["number"] == 100
+
+            # Verify footer was appended to the body sent to GitHub API
+            posted_body = mock_client.post.call_args.kwargs["json"]["body"]
+            assert _GITHUB_FOOTER_MARKER in posted_body
 
 
 class TestCreateJiraBug:
@@ -320,6 +341,12 @@ class TestCreateJiraBug:
             )
             assert result["key"] == "PROJ-456"
             assert "jira.example.com" in result["url"]
+
+            # Verify Jira-format footer was appended
+            posted_body = mock_client.post.call_args.kwargs["json"]["fields"][
+                "description"
+            ]
+            assert _JIRA_FOOTER_MARKER in posted_body
 
     async def test_creates_bug_server_dc(self):
         """Test Jira Server/DC auth (Bearer PAT, no email)."""
@@ -428,6 +455,12 @@ class TestCreateJiraBug:
             payload = call_args.kwargs.get("json") or call_args[1].get("json")
             assert payload["fields"]["issuetype"] == {"name": "Bug"}
 
+            # Verify Jira-format footer was appended
+            posted_body = mock_client.post.call_args.kwargs["json"]["fields"][
+                "description"
+            ]
+            assert _JIRA_FOOTER_MARKER in posted_body
+
 
 class TestParseGithubRepoUrl:
     def test_standard_url(self):
@@ -531,3 +564,76 @@ class TestCreateIssueRequestJiraIssueType:
             jira_issue_type="Task",
         )
         assert req.jira_issue_type == "Task"
+
+
+class TestAiFooterNotDoubled:
+    """Verify footer deduplication: content that already has the footer is not doubled."""
+
+    async def test_github_footer_not_doubled(self):
+        from jenkins_job_insight.bug_creation import (
+            GITHUB_AI_FOOTER,
+            create_github_issue,
+        )
+
+        body_with_footer = "## Details\nSome content" + GITHUB_AI_FOOTER
+
+        mock_response = httpx.Response(
+            201,
+            json={
+                "number": 200,
+                "title": "Test",
+                "html_url": "https://github.com/org/repo/issues/200",
+            },
+            request=_mock_request(),
+        )
+        with patch("jenkins_job_insight.bug_creation.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = mock_client
+
+            await create_github_issue(
+                title="Test",
+                body=body_with_footer,
+                repo_url="https://github.com/org/repo",
+                github_token=_TEST_GITHUB_TOKEN,
+            )
+            posted_body = mock_client.post.call_args.kwargs["json"]["body"]
+            assert posted_body.count(_GITHUB_FOOTER_MARKER) == 1
+
+    async def test_jira_footer_not_doubled(self):
+        from jenkins_job_insight.bug_creation import JIRA_AI_FOOTER, create_jira_bug
+
+        body_with_footer = "h2. Details\nSome content" + JIRA_AI_FOOTER
+
+        mock_settings = MagicMock()
+        mock_settings.jira_url = "https://jira.example.com"
+        mock_settings.jira_project_key = "PROJ"
+        mock_settings.jira_email = "test@example.com"
+        mock_settings.jira_api_token = MagicMock()
+        mock_settings.jira_api_token.get_secret_value.return_value = "token"
+        mock_settings.jira_pat = None
+        mock_settings.jira_ssl_verify = True
+
+        mock_response = httpx.Response(
+            201,
+            json={"key": "PROJ-999"},
+            request=_mock_request(),
+        )
+        with patch("jenkins_job_insight.bug_creation.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = mock_client
+
+            await create_jira_bug(
+                title="Test",
+                body=body_with_footer,
+                settings=mock_settings,
+            )
+            posted_body = mock_client.post.call_args.kwargs["json"]["fields"][
+                "description"
+            ]
+            assert posted_body.count(_JIRA_FOOTER_MARKER) == 1
