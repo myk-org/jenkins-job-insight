@@ -104,16 +104,28 @@ async def format_feedback_with_ai(
                 "Console errors:\n" + "\n".join(f"- {e}" for e in scrubbed_errors)
             )
         if request.failed_api_calls:
-            scrubbed_calls = []
-            for call in request.failed_api_calls:
-                scrubbed = {k: scrub_sensitive_data(str(v)) for k, v in call.items()}
-                scrubbed_calls.append(scrubbed)
+            scrubbed_calls = [
+                {
+                    "status": call.status,
+                    "endpoint": scrub_sensitive_data(call.endpoint),
+                    "error": scrub_sensitive_data(call.error),
+                }
+                for call in request.failed_api_calls
+            ]
             context_parts.append(
                 f"Failed API calls:\n{json.dumps(scrubbed_calls, indent=2)}"
             )
-        if request.page_state:
+        if (
+            request.page_state.url
+            or request.page_state.active_filters
+            or request.page_state.report_id
+        ):
             scrubbed_state = {
-                k: scrub_sensitive_data(str(v)) for k, v in request.page_state.items()
+                "url": scrub_sensitive_data(request.page_state.url),
+                "active_filters": scrub_sensitive_data(
+                    request.page_state.active_filters
+                ),
+                "report_id": scrub_sensitive_data(request.page_state.report_id),
             }
             context_parts.append(f"Page state:\n{json.dumps(scrubbed_state, indent=2)}")
         if request.user_agent:
@@ -217,9 +229,10 @@ def _parse_json_response(text: str) -> dict | None:
 
 def _build_fallback_feedback(request: FeedbackRequest) -> tuple[str, str]:
     """Build fallback title and body when AI formatting fails."""
+    _FALLBACK_TITLE_MAX = 500  # matches FeedbackCreateRequest.title max_length
     if request.feedback_type == "bug":
         scrubbed_desc = scrub_sensitive_data(request.description)
-        title = f"Bug report: {scrubbed_desc}"
+        title = f"Bug report: {scrubbed_desc}"[:_FALLBACK_TITLE_MAX]
         parts = [
             "## Bug Report",
             "",
@@ -231,7 +244,11 @@ def _build_fallback_feedback(request: FeedbackRequest) -> tuple[str, str]:
             parts.append("```")
         if request.failed_api_calls:
             scrubbed_calls = [
-                {k: scrub_sensitive_data(str(v)) for k, v in call.items()}
+                {
+                    "status": call.status,
+                    "endpoint": scrub_sensitive_data(call.endpoint),
+                    "error": scrub_sensitive_data(call.error),
+                }
                 for call in request.failed_api_calls
             ]
             parts.extend(
@@ -241,9 +258,17 @@ def _build_fallback_feedback(request: FeedbackRequest) -> tuple[str, str]:
                     f"```json\n{json.dumps(scrubbed_calls, indent=2)}\n```",
                 ]
             )
-        if request.page_state:
+        if (
+            request.page_state.url
+            or request.page_state.active_filters
+            or request.page_state.report_id
+        ):
             scrubbed_state = {
-                k: scrub_sensitive_data(str(v)) for k, v in request.page_state.items()
+                "url": scrub_sensitive_data(request.page_state.url),
+                "active_filters": scrub_sensitive_data(
+                    request.page_state.active_filters
+                ),
+                "report_id": scrub_sensitive_data(request.page_state.report_id),
             }
             parts.extend(
                 [
@@ -257,7 +282,7 @@ def _build_fallback_feedback(request: FeedbackRequest) -> tuple[str, str]:
         body = "\n".join(parts)
     else:
         scrubbed_desc = scrub_sensitive_data(request.description)
-        title = f"Feature request: {scrubbed_desc}"
+        title = f"Feature request: {scrubbed_desc}"[:_FALLBACK_TITLE_MAX]
         body = f"## Feature Request\n\n**Description:** {scrubbed_desc}"
     return title, body
 

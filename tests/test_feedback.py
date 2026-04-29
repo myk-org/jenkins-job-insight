@@ -20,9 +20,11 @@ from jenkins_job_insight.feedback import (
     scrub_sensitive_data,
 )
 from jenkins_job_insight.models import (
+    FailedApiCall,
     FeedbackPreviewResponse,
     FeedbackRequest,
     FeedbackResponse,
+    PageState,
 )
 
 _TEST_GITHUB_TOKEN = "test-token-placeholder"  # noqa: S105
@@ -128,13 +130,13 @@ class TestBuildFallbackFeedback:
             description="Button does not work",
             console_errors=["TypeError: undefined is not a function"],
             failed_api_calls=[
-                {
-                    "status": 500,
-                    "endpoint": "/api/analyze",
-                    "error": "Internal Server Error",
-                }
+                FailedApiCall(
+                    status=500,
+                    endpoint="/api/analyze",
+                    error="Internal Server Error",
+                )
             ],
-            page_state={"url": "/report/123"},
+            page_state=PageState(url="/report/123"),
             user_agent="Mozilla/5.0",
         )
         title, body = _build_fallback_feedback(req)
@@ -248,7 +250,7 @@ class TestFormatFeedbackWithAi:
             feedback_type="bug",
             description="Auth failed",
             console_errors=["Bearer my-secret-token-123"],
-            failed_api_calls=[{"error": "password=hunter2"}],
+            failed_api_calls=[FailedApiCall(error="password=hunter2")],
         )
         captured_prompt = None
 

@@ -839,6 +839,22 @@ class AnalyzeCommentResponse(BaseModel):
     reason: str = ""
 
 
+class FailedApiCall(BaseModel):
+    """A single failed API call captured by the frontend."""
+
+    status: int = Field(default=0, description="HTTP status code")
+    endpoint: str = Field(default="", description="API endpoint path")
+    error: str = Field(default="", description="Error message or response body")
+
+
+class PageState(BaseModel):
+    """Current page state when feedback was submitted."""
+
+    url: str = Field(default="", description="Current page URL")
+    active_filters: str = Field(default="", description="Active filter selections")
+    report_id: str = Field(default="", description="Current report ID")
+
+
 class FeedbackRequest(BaseModel):
     """User feedback submission (bug or feature request)."""
 
@@ -851,13 +867,13 @@ class FeedbackRequest(BaseModel):
     console_errors: list[str] = Field(
         default_factory=list, description="Browser console errors"
     )
-    failed_api_calls: list[dict] = Field(
+    failed_api_calls: list[FailedApiCall] = Field(
         default_factory=list,
-        description="Recent failed API responses: {status, endpoint, error}",
+        description="Recent failed API responses",
     )
-    page_state: dict = Field(
-        default_factory=dict,
-        description="Current page state: {url, active_filters, report_id}",
+    page_state: PageState = Field(
+        default_factory=PageState,
+        description="Current page state when feedback was submitted",
     )
     user_agent: str = Field(default="", description="Browser user agent string")
 

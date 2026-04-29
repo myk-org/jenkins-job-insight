@@ -37,7 +37,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   const [issueUrl, setIssueUrl] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [errorSource, setErrorSource] = useState<'preview' | 'create'>('preview')
-  const cancelledRef = useRef(false)
+  const generationRef = useRef(0)
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Preview state
@@ -48,13 +48,13 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   // Track dialog open/close to guard async setState
   useEffect(() => {
     if (open) {
-      cancelledRef.current = false
+      generationRef.current += 1
       if (resetTimerRef.current) {
         clearTimeout(resetTimerRef.current)
         resetTimerRef.current = null
       }
     } else {
-      cancelledRef.current = true
+      generationRef.current += 1
     }
   }, [open])
 
@@ -88,6 +88,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   async function handlePreview() {
     if (!description.trim()) return
 
+    const gen = generationRef.current
     setPhase('previewing')
     try {
       const failedCalls = getRecentFailedCalls()
@@ -105,22 +106,21 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
       }
 
       const res = await api.post<FeedbackPreviewResponse>('/api/feedback/preview', payload)
-      if (!cancelledRef.current) {
-        setPreviewTitle(res.title)
-        setPreviewBody(res.body)
-        setPreviewLabels(res.labels)
-        setPhase('preview')
-      }
+      if (gen !== generationRef.current) return
+      setPreviewTitle(res.title)
+      setPreviewBody(res.body)
+      setPreviewLabels(res.labels)
+      setPhase('preview')
     } catch (err) {
-      if (!cancelledRef.current) {
-        setErrorMsg(err instanceof Error ? err.message : 'Failed to generate preview')
-        setErrorSource('preview')
-        setPhase('error')
-      }
+      if (gen !== generationRef.current) return
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to generate preview')
+      setErrorSource('preview')
+      setPhase('error')
     }
   }
 
   async function handleCreate() {
+    const gen = generationRef.current
     setPhase('creating')
     try {
       const payload: FeedbackCreateRequest = {
@@ -130,16 +130,14 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
       }
 
       const res = await api.post<FeedbackCreateResponse>('/api/feedback/create', payload)
-      if (!cancelledRef.current) {
-        setIssueUrl(res.issue_url)
-        setPhase('success')
-      }
+      if (gen !== generationRef.current) return
+      setIssueUrl(res.issue_url)
+      setPhase('success')
     } catch (err) {
-      if (!cancelledRef.current) {
-        setErrorMsg(err instanceof Error ? err.message : 'Failed to create issue')
-        setErrorSource('create')
-        setPhase('error')
-      }
+      if (gen !== generationRef.current) return
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to create issue')
+      setErrorSource('create')
+      setPhase('error')
     }
   }
 
