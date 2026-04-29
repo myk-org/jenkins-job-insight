@@ -33,7 +33,9 @@ export function AllReviewedPrompt({ jobId }: AllReviewedPromptProps) {
   rpRef.current = reportportalAvailable
 
   useEffect(() => {
-    function onReviewChanged() {
+    function onReviewChanged(event: Event) {
+      const { detail } = event as CustomEvent<{ jobId?: string }>
+      if (detail?.jobId !== jobId) return
       // Wait for React to process the state update and re-render
       requestAnimationFrame(() => {
         const currentReviews = reviewsRef.current
@@ -47,7 +49,7 @@ export function AllReviewedPrompt({ jobId }: AllReviewedPromptProps) {
     }
     window.addEventListener('jji:review-changed', onReviewChanged)
     return () => window.removeEventListener('jji:review-changed', onReviewChanged)
-  }, []) // stable — reads from refs
+  }, [jobId]) // re-subscribe when jobId changes
 
   // Reset on navigation
   useEffect(() => {

@@ -87,7 +87,7 @@ function Injector({
         for (const [key, state] of Object.entries(additionalReviews)) {
           dispatch({ type: 'SET_REVIEW', payload: { key, state } })
         }
-        window.dispatchEvent(new Event('jji:review-changed'))
+        window.dispatchEvent(new CustomEvent('jji:review-changed', { detail: { jobId: 'job-1' } }))
       }, 0)
       return () => clearTimeout(id)
     }
@@ -139,7 +139,7 @@ const DynamicInjector = forwardRef<DynamicInjectorHandle, {
       for (const [key, state] of Object.entries(newReviews)) {
         dispatch({ type: 'SET_REVIEW', payload: { key, state } })
       }
-      window.dispatchEvent(new Event('jji:review-changed'))
+      window.dispatchEvent(new CustomEvent('jji:review-changed', { detail: { jobId: 'job-1' } }))
     },
   }))
 

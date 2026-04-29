@@ -44,7 +44,7 @@ export function ReviewToggle({ jobId, testName, childJobName, childBuildNumber, 
       if (!reviewed) {
         // We just marked as reviewed — schedule check after React processes the dispatch
         setTimeout(() => {
-          window.dispatchEvent(new Event('jji:review-changed'))
+          window.dispatchEvent(new CustomEvent('jji:review-changed', { detail: { jobId } }))
         }, 100)
       }
     } catch (err) {
