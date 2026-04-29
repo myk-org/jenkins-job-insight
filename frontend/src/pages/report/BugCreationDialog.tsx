@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { CheckCircle2, ExternalLink, AlertTriangle } from 'lucide-react'
 import type { PreviewIssueResponse, CreateIssueResponse, SimilarIssue, CommentsAndReviews } from '@/types'
@@ -66,10 +67,14 @@ export function BugCreationDialog({
   const [showProjectDropdown, setShowProjectDropdown] = useState(false)
   const [showSecurityDropdown, setShowSecurityDropdown] = useState(false)
   const [securityLevels, setSecurityLevels] = useState<Array<{id: string; name: string; description: string}>>([])
+  const [jiraIssueType, setJiraIssueType] = useState('Bug')
+  const [customIssueType, setCustomIssueType] = useState('')
+
+  const JIRA_ISSUE_TYPES = ['Bug', 'Task', 'Story', 'Epic', 'Sub-task']
 
   const previewPath = target === 'github' ? 'preview-github-issue' : 'preview-jira-bug'
   const createPath = target === 'github' ? 'create-github-issue' : 'create-jira-bug'
-  const label = target === 'github' ? 'GitHub Issue' : 'Jira Bug'
+  const label = target === 'github' ? 'GitHub Issue' : 'Jira Ticket'
   const hasToken = target === 'github' ? !!getGithubToken() : !!getJiraToken()
 
   function getTrackerCredentials() {
@@ -80,6 +85,7 @@ export function BugCreationDialog({
       ...(target === 'github' && selectedRepo ? { github_repo_url: selectedRepo } : {}),
       ...(target === 'jira' && jiraProjectKey ? { jira_project_key: jiraProjectKey } : {}),
       ...(target === 'jira' && jiraSecurityLevel ? { jira_security_level: jiraSecurityLevel } : {}),
+      ...(target === 'jira' ? { jira_issue_type: jiraIssueType === '__custom__' ? customIssueType : jiraIssueType } : {}),
     }
   }
 
@@ -192,6 +198,8 @@ export function BugCreationDialog({
       setSecurityLevels([])
       setShowProjectDropdown(false)
       setShowSecurityDropdown(false)
+      setJiraIssueType('Bug')
+      setCustomIssueType('')
     }, 200)
   }
 
@@ -269,6 +277,32 @@ export function BugCreationDialog({
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+            {target === 'jira' && (
+              <div className="space-y-2">
+                <label htmlFor="bug-jira-issue-type" className="text-xs font-display uppercase tracking-widest text-text-tertiary">Issue Type</label>
+                <Select value={jiraIssueType} onValueChange={setJiraIssueType}>
+                  <SelectTrigger id="bug-jira-issue-type" className="w-full">
+                    <SelectValue placeholder="Select issue type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {JIRA_ISSUE_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">Custom...</SelectItem>
+                  </SelectContent>
+                </Select>
+                {jiraIssueType === '__custom__' && (
+                  <input
+                    type="text"
+                    value={customIssueType}
+                    onChange={(e) => setCustomIssueType(e.target.value)}
+                    placeholder="Enter custom issue type..."
+                    autoComplete="off"
+                    className="w-full h-9 rounded-md border border-border-default bg-surface-elevated px-2 text-sm text-text-primary placeholder:text-text-tertiary mt-1"
+                  />
+                )}
               </div>
             )}
             {target === 'jira' && (

@@ -644,6 +644,9 @@ class CreateIssueRequest(_ChildJobFieldsValidator, _TrackerCredentialsMixin):
     test_name: str
     title: str
     body: str
+    jira_issue_type: str = Field(
+        default="Bug", description="Jira issue type name (e.g. Bug, Story, Task)"
+    )
 
     @field_validator("title")
     @classmethod

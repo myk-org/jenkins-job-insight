@@ -642,6 +642,7 @@ async def create_jira_bug(
     priority: str = "",
     project_key: str = "",
     security_level: str = "",
+    issue_type: str = "Bug",
 ) -> dict:
     """Create a Jira Bug issue via the REST API.
 
@@ -679,7 +680,7 @@ async def create_jira_bug(
             "project": {"key": effective_project_key},
             "summary": title,
             "description": body,
-            "issuetype": {"name": "Bug"},
+            "issuetype": {"name": issue_type},
         }
     }
     if priority:

@@ -1652,6 +1652,11 @@ def create_issue(
         "--jira-security-level",
         help="Jira security level name for restricted issues.",
     ),
+    jira_issue_type: str = typer.Option(
+        "Bug",
+        "--jira-issue-type",
+        help="Jira issue type name (e.g. Bug, Story, Task). Default: Bug.",
+    ),
     json_output: bool = _JSON_OPTION,
 ):
     """Create a GitHub issue or Jira bug from a failure analysis."""
@@ -1697,6 +1702,7 @@ def create_issue(
                 jira_email=_jira_email,
                 jira_project_key=_jira_project_key,
                 jira_security_level=_jira_security_level,
+                jira_issue_type=jira_issue_type,
             )
     except JJIError as err:
         _handle_error(err)

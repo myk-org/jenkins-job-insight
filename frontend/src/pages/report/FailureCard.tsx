@@ -479,7 +479,7 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
               <IssueButton
                 disabled={!jiraIssuesEnabled}
                 tooltip={!jiraIssuesEnabled ? 'Jira issues are disabled on this server' : undefined}
-                label="Jira Bug"
+                label="Jira Ticket"
                 onClick={() => setBugTarget('jira')}
               />
             </div>

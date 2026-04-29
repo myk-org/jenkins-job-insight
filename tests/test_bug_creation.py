@@ -9,6 +9,7 @@ from ai_cli_runner import AIResult
 from jenkins_job_insight.models import (
     AnalysisDetail,
     CodeFix,
+    CreateIssueRequest,
     FailureAnalysis,
     ProductBugReport,
 )
@@ -352,6 +353,81 @@ class TestCreateJiraBug:
             )
             assert result["key"] == "PROJ-789"
 
+    async def test_creates_bug_with_custom_issue_type(self):
+        """Test creating a Jira issue with a custom issue type."""
+        from jenkins_job_insight.bug_creation import create_jira_bug
+
+        mock_settings = MagicMock()
+        mock_settings.jira_url = "https://jira.example.com"
+        mock_settings.jira_project_key = "PROJ"
+        mock_settings.jira_email = "test@example.com"
+        mock_settings.jira_api_token = MagicMock()
+        mock_settings.jira_api_token.get_secret_value.return_value = "token123"
+        mock_settings.jira_pat = None
+        mock_settings.jira_ssl_verify = True
+
+        mock_response = httpx.Response(
+            201,
+            json={"key": "PROJ-999"},
+            request=_mock_request(),
+        )
+        with patch("jenkins_job_insight.bug_creation.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = mock_client
+
+            result = await create_jira_bug(
+                title="Story title",
+                body="Story description",
+                settings=mock_settings,
+                issue_type="Story",
+            )
+            assert result["key"] == "PROJ-999"
+
+            # Verify the payload sent to Jira uses the custom issue type
+            call_args = mock_client.post.call_args
+            payload = call_args.kwargs.get("json") or call_args[1].get("json")
+            assert payload["fields"]["issuetype"] == {"name": "Story"}
+
+    async def test_creates_bug_default_issue_type(self):
+        """Test that default issue type is 'Bug' when not specified."""
+        from jenkins_job_insight.bug_creation import create_jira_bug
+
+        mock_settings = MagicMock()
+        mock_settings.jira_url = "https://jira.example.com"
+        mock_settings.jira_project_key = "PROJ"
+        mock_settings.jira_email = "test@example.com"
+        mock_settings.jira_api_token = MagicMock()
+        mock_settings.jira_api_token.get_secret_value.return_value = "token123"
+        mock_settings.jira_pat = None
+        mock_settings.jira_ssl_verify = True
+
+        mock_response = httpx.Response(
+            201,
+            json={"key": "PROJ-100"},
+            request=_mock_request(),
+        )
+        with patch("jenkins_job_insight.bug_creation.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = mock_client
+
+            result = await create_jira_bug(
+                title="Bug title",
+                body="Bug description",
+                settings=mock_settings,
+            )
+            assert result["key"] == "PROJ-100"
+
+            # Verify the payload uses default 'Bug' issue type
+            call_args = mock_client.post.call_args
+            payload = call_args.kwargs.get("json") or call_args[1].get("json")
+            assert payload["fields"]["issuetype"] == {"name": "Bug"}
+
 
 class TestParseGithubRepoUrl:
     def test_standard_url(self):
@@ -425,3 +501,33 @@ class TestBuildFailbackContent:
         ctx = _build_failure_context(code_issue_failure)
         result = _build_fallback_github_content(ctx, "", "")
         assert "test_valid_credentials" in result["title"]
+
+
+class TestCreateIssueRequestJiraIssueType:
+    """Tests for the jira_issue_type field on CreateIssueRequest."""
+
+    def test_default_issue_type_is_bug(self):
+        req = CreateIssueRequest(
+            test_name="test_foo",
+            title="title",
+            body="body",
+        )
+        assert req.jira_issue_type == "Bug"
+
+    def test_custom_issue_type(self):
+        req = CreateIssueRequest(
+            test_name="test_foo",
+            title="title",
+            body="body",
+            jira_issue_type="Story",
+        )
+        assert req.jira_issue_type == "Story"
+
+    def test_issue_type_task(self):
+        req = CreateIssueRequest(
+            test_name="test_foo",
+            title="title",
+            body="body",
+            jira_issue_type="Task",
+        )
+        assert req.jira_issue_type == "Task"

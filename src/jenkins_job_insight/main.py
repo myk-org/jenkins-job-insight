@@ -2902,6 +2902,7 @@ async def create_jira_bug_endpoint(
             settings=effective_jira_settings,
             project_key=body.jira_project_key,
             security_level=body.jira_security_level,
+            issue_type=body.jira_issue_type,
         )
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code in (401, 403):

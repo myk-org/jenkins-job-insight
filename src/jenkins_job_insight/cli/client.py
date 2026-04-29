@@ -558,6 +558,7 @@ class JJIClient:
         jira_email: str = "",
         jira_project_key: str = "",
         jira_security_level: str = "",
+        jira_issue_type: str = "Bug",
     ) -> dict:
         """Create a Jira bug. POST /results/{job_id}/create-jira-bug"""
         payload = self._build_tracker_body(
@@ -572,6 +573,8 @@ class JJIClient:
             jira_security_level=jira_security_level,
             include_github=False,
         )
+        if jira_issue_type and jira_issue_type != "Bug":
+            payload["jira_issue_type"] = jira_issue_type
         return self._request(
             "POST",
             f"/results/{job_id}/create-jira-bug",
