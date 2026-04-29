@@ -13,11 +13,17 @@ from jenkins_job_insight.config import get_settings
 from jenkins_job_insight.feedback import (
     _FEEDBACK_REPO_URL,
     _build_fallback_feedback,
+    create_feedback_from_preview,
     create_feedback_issue,
     format_feedback_with_ai,
+    generate_feedback_preview,
     scrub_sensitive_data,
 )
-from jenkins_job_insight.models import FeedbackRequest, FeedbackResponse
+from jenkins_job_insight.models import (
+    FeedbackPreviewResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+)
 
 _TEST_GITHUB_TOKEN = "test-token-placeholder"  # noqa: S105
 
@@ -262,7 +268,126 @@ class TestFormatFeedbackWithAi:
 
 
 # ---------------------------------------------------------------------------
-# create_feedback_issue tests
+# generate_feedback_preview tests
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateFeedbackPreview:
+    @pytest.fixture
+    def settings(self):
+        env = {
+            "JENKINS_URL": "https://jenkins.example.com",
+            "JENKINS_USER": "user",
+            "JENKINS_PASSWORD": "pass",  # pragma: allowlist secret
+        }
+        with patch.dict(os.environ, env, clear=True):
+            get_settings.cache_clear()
+            s = get_settings()
+            get_settings.cache_clear()
+            return s
+
+    async def test_bug_preview_returns_correct_labels(self, settings):
+        req = FeedbackRequest(
+            feedback_type="bug",
+            description="Dashboard crashes",
+        )
+        with patch(
+            "jenkins_job_insight.feedback.format_feedback_with_ai"
+        ) as mock_format:
+            mock_format.return_value = (
+                "Dashboard crash on load",
+                "## Bug\n\nDetails...",
+            )
+            result = await generate_feedback_preview(req, settings)
+
+        assert isinstance(result, FeedbackPreviewResponse)
+        assert result.title == "Dashboard crash on load"
+        assert result.body == "## Bug\n\nDetails..."
+        assert result.labels == ["bug"]
+
+    async def test_feature_preview_returns_correct_labels(self, settings):
+        req = FeedbackRequest(
+            feedback_type="feature",
+            description="Add dark mode",
+        )
+        with patch(
+            "jenkins_job_insight.feedback.format_feedback_with_ai"
+        ) as mock_format:
+            mock_format.return_value = (
+                "Add dark mode support",
+                "## Feature\n\nDark mode...",
+            )
+            result = await generate_feedback_preview(req, settings)
+
+        assert isinstance(result, FeedbackPreviewResponse)
+        assert result.title == "Add dark mode support"
+        assert result.labels == ["enhancement"]
+
+
+# ---------------------------------------------------------------------------
+# create_feedback_from_preview tests
+# ---------------------------------------------------------------------------
+
+
+class TestCreateFeedbackFromPreview:
+    @pytest.fixture
+    def settings(self):
+        env = {
+            "JENKINS_URL": "https://jenkins.example.com",
+            "JENKINS_USER": "user",
+            "JENKINS_PASSWORD": "pass",  # pragma: allowlist secret
+            "GITHUB_TOKEN": _TEST_GITHUB_TOKEN,
+        }
+        with patch.dict(os.environ, env, clear=True):
+            get_settings.cache_clear()
+            s = get_settings()
+            get_settings.cache_clear()
+            return s
+
+    async def test_creates_issue_with_labels(self, settings):
+        with patch("jenkins_job_insight.feedback.create_github_issue") as mock_create:
+            mock_create.return_value = {
+                "url": "https://github.com/myk-org/jenkins-job-insight/issues/42",
+                "number": 42,
+                "title": "Dashboard crash on load",
+            }
+            result = await create_feedback_from_preview(
+                title="Dashboard crash on load",
+                body="## Bug\n\nDetails...",
+                labels=["bug"],
+                settings=settings,
+            )
+
+        assert isinstance(result, FeedbackResponse)
+        assert result.issue_number == 42
+        assert result.title == "Dashboard crash on load"
+        assert "issues/42" in result.issue_url
+
+        mock_create.assert_called_once()
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs["repo_url"] == _FEEDBACK_REPO_URL
+        assert call_kwargs["labels"] == ["bug"]
+
+    async def test_uses_correct_repo_url(self, settings):
+        with patch("jenkins_job_insight.feedback.create_github_issue") as mock_create:
+            mock_create.return_value = {
+                "url": "https://github.com/x/y/issues/1",
+                "number": 1,
+                "title": "Title",
+            }
+            await create_feedback_from_preview(
+                title="Title",
+                body="Body",
+                labels=["enhancement"],
+                settings=settings,
+            )
+
+        mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs["repo_url"] == _FEEDBACK_REPO_URL
+
+
+# ---------------------------------------------------------------------------
+# create_feedback_issue (legacy) tests
 # ---------------------------------------------------------------------------
 
 
@@ -417,10 +542,12 @@ class TestFeedbackEndpoint:
                     yield c
             get_settings.cache_clear()
 
-    def test_missing_github_token_returns_503(self, _init_db, temp_db_path):
+    # -- Preview endpoint tests -----------------------------------------------
+
+    def test_preview_missing_github_token_returns_503(self, _init_db, temp_db_path):
         for client in self._make_client(temp_db_path, github_token=""):
             resp = client.post(
-                "/api/feedback",
+                "/api/feedback/preview",
                 json={
                     "feedback_type": "bug",
                     "description": "Something broke",
@@ -429,28 +556,85 @@ class TestFeedbackEndpoint:
             assert resp.status_code == 503
             assert "disabled" in resp.json()["detail"]
 
-    def test_successful_feedback_submission(self, _init_db, temp_db_path):
+    def test_preview_successful(self, _init_db, temp_db_path):
         for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
-            with (
-                patch(
-                    "jenkins_job_insight.feedback.format_feedback_with_ai"
-                ) as mock_format,
-                patch(
-                    "jenkins_job_insight.feedback.create_github_issue"
-                ) as mock_create,
-            ):
+            with patch(
+                "jenkins_job_insight.feedback.format_feedback_with_ai"
+            ) as mock_format:
                 mock_format.return_value = ("Test title", "Test body")
+                resp = client.post(
+                    "/api/feedback/preview",
+                    json={
+                        "feedback_type": "bug",
+                        "description": "The button is broken",
+                        "console_errors": ["TypeError: x is not a function"],
+                    },
+                )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["title"] == "Test title"
+            assert data["body"] == "Test body"
+            assert data["labels"] == ["bug"]
+
+    def test_preview_feature_returns_enhancement_label(self, _init_db, temp_db_path):
+        for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
+            with patch(
+                "jenkins_job_insight.feedback.format_feedback_with_ai"
+            ) as mock_format:
+                mock_format.return_value = ("Feature title", "Feature body")
+                resp = client.post(
+                    "/api/feedback/preview",
+                    json={
+                        "feedback_type": "feature",
+                        "description": "Add dark mode",
+                    },
+                )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["labels"] == ["enhancement"]
+
+    def test_preview_invalid_feedback_type_returns_422(self, _init_db, temp_db_path):
+        for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
+            resp = client.post(
+                "/api/feedback/preview",
+                json={
+                    "feedback_type": "invalid",
+                    "description": "Something",
+                },
+            )
+            assert resp.status_code == 422
+
+    # -- Create endpoint tests ------------------------------------------------
+
+    def test_create_missing_github_token_returns_503(self, _init_db, temp_db_path):
+        for client in self._make_client(temp_db_path, github_token=""):
+            resp = client.post(
+                "/api/feedback/create",
+                json={
+                    "title": "Test title",
+                    "body": "Test body",
+                    "labels": ["bug"],
+                },
+            )
+            assert resp.status_code == 503
+            assert "disabled" in resp.json()["detail"]
+
+    def test_create_successful(self, _init_db, temp_db_path):
+        for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
+            with patch(
+                "jenkins_job_insight.feedback.create_github_issue"
+            ) as mock_create:
                 mock_create.return_value = {
                     "url": "https://github.com/myk-org/jenkins-job-insight/issues/10",
                     "number": 10,
                     "title": "Test title",
                 }
                 resp = client.post(
-                    "/api/feedback",
+                    "/api/feedback/create",
                     json={
-                        "feedback_type": "bug",
-                        "description": "The button is broken",
-                        "console_errors": ["TypeError: x is not a function"],
+                        "title": "Test title",
+                        "body": "Test body",
+                        "labels": ["bug"],
                     },
                 )
             assert resp.status_code == 201
@@ -459,16 +643,29 @@ class TestFeedbackEndpoint:
             assert data["title"] == "Test title"
             assert "issues/10" in data["issue_url"]
 
-    def test_invalid_feedback_type_returns_422(self, _init_db, temp_db_path):
+    def test_create_with_empty_labels(self, _init_db, temp_db_path):
         for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
-            resp = client.post(
-                "/api/feedback",
-                json={
-                    "feedback_type": "invalid",
-                    "description": "Something",
-                },
-            )
-            assert resp.status_code == 422
+            with patch(
+                "jenkins_job_insight.feedback.create_github_issue"
+            ) as mock_create:
+                mock_create.return_value = {
+                    "url": "https://github.com/myk-org/jenkins-job-insight/issues/11",
+                    "number": 11,
+                    "title": "No labels",
+                }
+                resp = client.post(
+                    "/api/feedback/create",
+                    json={
+                        "title": "No labels",
+                        "body": "Test body",
+                    },
+                )
+            assert resp.status_code == 201
+            # Verify create_github_issue was called with empty labels
+            mock_create.assert_called_once()
+            assert mock_create.call_args.kwargs["labels"] == []
+
+    # -- Capabilities tests ---------------------------------------------------
 
     def test_capabilities_includes_feedback_enabled(self, _init_db, temp_db_path):
         for client in self._make_client(temp_db_path, github_token=_TEST_GITHUB_TOKEN):
@@ -494,10 +691,29 @@ class TestFeedbackEndpoint:
             enable_github_issues="false",
         ):
             resp = client.post(
-                "/api/feedback",
+                "/api/feedback/preview",
                 json={
                     "feedback_type": "bug",
                     "description": "Something broke",
+                },
+            )
+            assert resp.status_code == 503
+            assert "disabled" in resp.json()["detail"]
+
+    def test_create_disabled_when_enable_github_issues_false(
+        self, _init_db, temp_db_path
+    ):
+        for client in self._make_client(
+            temp_db_path,
+            github_token=_TEST_GITHUB_TOKEN,
+            enable_github_issues="false",
+        ):
+            resp = client.post(
+                "/api/feedback/create",
+                json={
+                    "title": "Test title",
+                    "body": "Test body",
+                    "labels": ["bug"],
                 },
             )
             assert resp.status_code == 503

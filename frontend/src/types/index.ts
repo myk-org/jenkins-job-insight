@@ -398,7 +398,20 @@ export interface FeedbackRequest {
   user_agent: string
 }
 
-export interface FeedbackResponse {
+export interface FeedbackPreviewResponse {
+  title: string
+  body: string
+  labels: string[]
+}
+
+export interface FeedbackCreateRequest {
+  title: string
+  body: string
+  labels: string[]
+}
+
+export interface FeedbackCreateResponse {
   issue_url: string
-  issue_key: string
+  issue_number: number
+  title: string
 }

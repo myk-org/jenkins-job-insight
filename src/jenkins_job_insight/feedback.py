@@ -15,7 +15,11 @@ from ai_cli_runner import call_ai_cli
 from jenkins_job_insight.analyzer import PROVIDER_CLI_FLAGS
 from jenkins_job_insight.bug_creation import create_github_issue
 from jenkins_job_insight.config import Settings
-from jenkins_job_insight.models import FeedbackRequest, FeedbackResponse
+from jenkins_job_insight.models import (
+    FeedbackPreviewResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+)
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
 
@@ -258,22 +262,41 @@ def _build_fallback_feedback(request: FeedbackRequest) -> tuple[str, str]:
     return title, body
 
 
-async def create_feedback_issue(
+async def generate_feedback_preview(
     request: FeedbackRequest, settings: Settings
-) -> FeedbackResponse:
-    """Orchestrate feedback submission: scrub, format with AI, create GitHub issue.
+) -> FeedbackPreviewResponse:
+    """Generate an AI-formatted preview of a feedback GitHub issue.
+
+    Calls AI to generate a well-structured title and body, scrubs
+    sensitive data from attached logs, and returns the preview
+    without creating the issue.
 
     Args:
         request: User feedback submission.
+        settings: Application settings.
+
+    Returns:
+        FeedbackPreviewResponse with generated title, body, and labels.
+    """
+    title, body = await format_feedback_with_ai(request, settings)
+    labels = ["bug"] if request.feedback_type == "bug" else ["enhancement"]
+    return FeedbackPreviewResponse(title=title, body=body, labels=labels)
+
+
+async def create_feedback_from_preview(
+    title: str, body: str, labels: list[str], settings: Settings
+) -> FeedbackResponse:
+    """Create a GitHub issue from a previously previewed feedback.
+
+    Args:
+        title: Issue title (from preview).
+        body: Issue body (from preview).
+        labels: Issue labels (from preview).
         settings: Application settings (must have github_token configured).
 
     Returns:
         FeedbackResponse with the created issue details.
     """
-    title, body = await format_feedback_with_ai(request, settings)
-
-    label = "bug" if request.feedback_type == "bug" else "enhancement"
-
     github_token = (
         settings.github_token.get_secret_value() if settings.github_token else ""
     )
@@ -283,11 +306,36 @@ async def create_feedback_issue(
         body=body,
         repo_url=_FEEDBACK_REPO_URL,
         github_token=github_token,
-        labels=[label],
+        labels=labels,
     )
 
     return FeedbackResponse(
         issue_url=result["url"],
         issue_number=result["number"],
         title=result["title"],
+    )
+
+
+async def create_feedback_issue(
+    request: FeedbackRequest, settings: Settings
+) -> FeedbackResponse:
+    """Orchestrate feedback submission: scrub, format with AI, create GitHub issue.
+
+    .. deprecated::
+        Use :func:`generate_feedback_preview` + :func:`create_feedback_from_preview`
+        for the two-step preview/create flow.
+
+    Args:
+        request: User feedback submission.
+        settings: Application settings (must have github_token configured).
+
+    Returns:
+        FeedbackResponse with the created issue details.
+    """
+    preview = await generate_feedback_preview(request, settings)
+    return await create_feedback_from_preview(
+        title=preview.title,
+        body=preview.body,
+        labels=preview.labels,
+        settings=settings,
     )

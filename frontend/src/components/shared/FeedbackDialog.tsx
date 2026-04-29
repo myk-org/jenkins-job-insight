@@ -11,13 +11,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { CheckCircle2, ExternalLink, Bug, Lightbulb } from 'lucide-react'
-import type { FeedbackRequest, FeedbackResponse } from '@/types'
+import type {
+  FeedbackRequest,
+  FeedbackPreviewResponse,
+  FeedbackCreateRequest,
+  FeedbackCreateResponse,
+} from '@/types'
 
 type FeedbackType = 'bug' | 'feature'
-type Phase = 'form' | 'submitting' | 'success' | 'error'
+type Phase = 'form' | 'previewing' | 'preview' | 'creating' | 'success' | 'error'
 
 interface FeedbackDialogProps {
   open: boolean
@@ -30,7 +36,13 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   const [phase, setPhase] = useState<Phase>('form')
   const [issueUrl, setIssueUrl] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+  const [errorSource, setErrorSource] = useState<'preview' | 'create'>('preview')
   const cancelledRef = useRef(false)
+
+  // Preview state
+  const [previewTitle, setPreviewTitle] = useState('')
+  const [previewBody, setPreviewBody] = useState('')
+  const [previewLabels, setPreviewLabels] = useState<string[]>([])
 
   // Track dialog open/close to guard async setState
   useEffect(() => {
@@ -59,10 +71,10 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
     return state
   }
 
-  async function handleSubmit() {
+  async function handlePreview() {
     if (!description.trim()) return
 
-    setPhase('submitting')
+    setPhase('previewing')
     try {
       const failedCalls = getRecentFailedCalls()
       const payload: FeedbackRequest = {
@@ -78,17 +90,47 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
         user_agent: navigator.userAgent,
       }
 
-      const res = await api.post<FeedbackResponse>('/api/feedback', payload)
+      const res = await api.post<FeedbackPreviewResponse>('/api/feedback/preview', payload)
+      if (!cancelledRef.current) {
+        setPreviewTitle(res.title)
+        setPreviewBody(res.body)
+        setPreviewLabels(res.labels)
+        setPhase('preview')
+      }
+    } catch (err) {
+      if (!cancelledRef.current) {
+        setErrorMsg(err instanceof Error ? err.message : 'Failed to generate preview')
+        setErrorSource('preview')
+        setPhase('error')
+      }
+    }
+  }
+
+  async function handleCreate() {
+    setPhase('creating')
+    try {
+      const payload: FeedbackCreateRequest = {
+        title: previewTitle,
+        body: previewBody,
+        labels: previewLabels,
+      }
+
+      const res = await api.post<FeedbackCreateResponse>('/api/feedback/create', payload)
       if (!cancelledRef.current) {
         setIssueUrl(res.issue_url)
         setPhase('success')
       }
     } catch (err) {
       if (!cancelledRef.current) {
-        setErrorMsg(err instanceof Error ? err.message : 'Failed to submit feedback')
+        setErrorMsg(err instanceof Error ? err.message : 'Failed to create issue')
+        setErrorSource('create')
         setPhase('error')
       }
     }
+  }
+
+  function handleBack() {
+    setPhase('form')
   }
 
   function handleClose(nextOpen: boolean) {
@@ -100,6 +142,9 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
       setDescription('')
       setIssueUrl('')
       setErrorMsg('')
+      setPreviewTitle('')
+      setPreviewBody('')
+      setPreviewLabels([])
     }, 200)
   }
 
@@ -108,19 +153,31 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
     { value: 'feature', label: 'Feature Request', icon: Lightbulb },
   ]
 
+  const dialogTitle =
+    phase === 'success'
+      ? 'Feedback Submitted'
+      : phase === 'preview' || phase === 'creating'
+        ? 'Preview Issue'
+        : 'Send Feedback'
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{phase === 'success' ? 'Feedback Submitted' : 'Send Feedback'}</DialogTitle>
+          <DialogTitle>{dialogTitle}</DialogTitle>
           {phase === 'form' && (
             <DialogDescription>
               Report a bug or suggest a feature. Browser context is attached automatically.
             </DialogDescription>
           )}
+          {phase === 'preview' && (
+            <DialogDescription>
+              Review and edit the generated issue before creating it.
+            </DialogDescription>
+          )}
         </DialogHeader>
 
-        {/* Form */}
+        {/* Phase 1: Form */}
         {phase === 'form' && (
           <div className="space-y-4">
             {/* Type selector */}
@@ -166,15 +223,50 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
           </div>
         )}
 
-        {/* Submitting */}
-        {phase === 'submitting' && (
+        {/* Previewing (loading) */}
+        {phase === 'previewing' && (
           <div className="flex flex-col items-center gap-4 py-8">
             <LoadingSpinner size="lg" />
-            <p className="text-sm text-text-secondary">Submitting feedback...</p>
+            <p className="text-sm text-text-secondary">Generating preview...</p>
           </div>
         )}
 
-        {/* Success */}
+        {/* Phase 2: Preview */}
+        {phase === 'preview' && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="preview-title" className="text-xs font-display uppercase tracking-widest text-text-tertiary">
+                Title
+              </label>
+              <Input
+                id="preview-title"
+                value={previewTitle}
+                onChange={(e) => setPreviewTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="preview-body" className="text-xs font-display uppercase tracking-widest text-text-tertiary">
+                Body
+              </label>
+              <Textarea
+                id="preview-body"
+                value={previewBody}
+                onChange={(e) => setPreviewBody(e.target.value)}
+                rows={10}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Creating (loading) */}
+        {phase === 'creating' && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <LoadingSpinner size="lg" />
+            <p className="text-sm text-text-secondary">Creating issue...</p>
+          </div>
+        )}
+
+        {/* Phase 3: Success */}
         {phase === 'success' && (
           <div className="flex flex-col items-center gap-4 py-8 animate-scale-in">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-signal-green/15">
@@ -205,13 +297,19 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
           {phase === 'form' && (
             <div className="flex gap-2 sm:ml-auto">
               <Button variant="ghost" onClick={() => handleClose(false)}>Cancel</Button>
-              <Button onClick={handleSubmit} disabled={!description.trim()}>Submit</Button>
+              <Button onClick={handlePreview} disabled={!description.trim()}>Preview</Button>
+            </div>
+          )}
+          {phase === 'preview' && (
+            <div className="flex gap-2 sm:ml-auto">
+              <Button variant="ghost" onClick={handleBack}>Back</Button>
+              <Button onClick={handleCreate} disabled={!previewTitle.trim()}>Create Issue</Button>
             </div>
           )}
           {phase === 'error' && (
             <div className="flex gap-2 sm:ml-auto">
               <Button variant="ghost" onClick={() => handleClose(false)}>Close</Button>
-              <Button onClick={() => setPhase('form')}>Try Again</Button>
+              <Button onClick={() => setPhase(errorSource === 'preview' ? 'form' : 'preview')}>Try Again</Button>
             </div>
           )}
           {phase === 'success' && (

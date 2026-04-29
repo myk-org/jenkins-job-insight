@@ -860,6 +860,22 @@ class FeedbackRequest(BaseModel):
     user_agent: str = Field(default="", description="Browser user agent string")
 
 
+class FeedbackPreviewResponse(BaseModel):
+    """Response from feedback preview (AI-generated title + body)."""
+
+    title: str = Field(description="Generated issue title")
+    body: str = Field(description="Generated issue body (markdown)")
+    labels: list[str] = Field(default_factory=list, description="Issue labels")
+
+
+class FeedbackCreateRequest(BaseModel):
+    """Request to create a GitHub issue from a previewed feedback."""
+
+    title: str = Field(description="Issue title")
+    body: str = Field(description="Issue body (markdown)")
+    labels: list[str] = Field(default_factory=list, description="Issue labels")
+
+
 class FeedbackResponse(BaseModel):
     """Response from feedback submission."""
 

@@ -65,7 +65,10 @@ from jenkins_job_insight.bug_creation import (
     search_github_duplicates,
     search_jira_duplicates,
 )
-from jenkins_job_insight.feedback import create_feedback_issue
+from jenkins_job_insight.feedback import (
+    create_feedback_from_preview,
+    generate_feedback_preview,
+)
 from jenkins_job_insight.comment_enrichment import detect_mentions
 from jenkins_job_insight.notifications import send_mention_notifications
 from jenkins_job_insight.vapid import get_vapid_config
@@ -83,6 +86,8 @@ from jenkins_job_insight.models import (
     CreateIssueRequest,
     FailureAnalysis,
     FailureAnalysisResult,
+    FeedbackCreateRequest,
+    FeedbackPreviewResponse,
     FeedbackRequest,
     FeedbackResponse,
     JobMetadataInput,
@@ -841,7 +846,7 @@ app.add_middleware(AuthMiddleware)
 app.add_middleware(ErrorTrackingMiddleware)
 
 
-_BODY_LOGGING_SKIP_PATHS = frozenset({"/api/feedback"})
+_BODY_LOGGING_SKIP_PATHS = frozenset({"/api/feedback/preview", "/api/feedback/create"})
 
 
 class RequestBodyLoggingMiddleware(BaseHTTPMiddleware):
@@ -4790,13 +4795,17 @@ Respond with ONLY a JSON object:
         return AnalyzeCommentResponse(suggests_reviewed=False)
 
 
-@app.post("/api/feedback", status_code=201, response_model=FeedbackResponse)
-async def submit_feedback(request: Request, body: FeedbackRequest):
-    """Submit user feedback as a GitHub issue.
+@app.post(
+    "/api/feedback/preview",
+    status_code=200,
+    response_model=FeedbackPreviewResponse,
+)
+async def preview_feedback(request: Request, body: FeedbackRequest):
+    """Preview user feedback as a formatted GitHub issue.
 
     Accepts bug reports or feature requests, uses AI to format them
     into well-structured GitHub issues, scrubs sensitive data from
-    attached logs, and creates the issue in myk-org/jenkins-job-insight.
+    attached logs, and returns the preview without creating the issue.
     """
     _check_allow_list(request)
     settings = get_settings()
@@ -4805,7 +4814,35 @@ async def submit_feedback(request: Request, body: FeedbackRequest):
             status_code=503, detail="Feedback submission is disabled on this server"
         )
     try:
-        return await create_feedback_issue(body, settings)
+        return await generate_feedback_preview(body, settings)
+    except Exception as exc:  # noqa: BLE001 — non-fatal feedback preview
+        logger.exception("Failed to generate feedback preview")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate feedback preview",
+        ) from exc
+
+
+@app.post("/api/feedback/create", status_code=201, response_model=FeedbackResponse)
+async def create_feedback(request: Request, body: FeedbackCreateRequest):
+    """Create a GitHub issue from a previewed feedback.
+
+    Takes a title, body, and labels (typically from the preview endpoint)
+    and creates the GitHub issue.
+    """
+    _check_allow_list(request)
+    settings = get_settings()
+    if not settings.feedback_enabled:
+        raise HTTPException(
+            status_code=503, detail="Feedback submission is disabled on this server"
+        )
+    try:
+        return await create_feedback_from_preview(
+            title=body.title,
+            body=body.body,
+            labels=body.labels,
+            settings=settings,
+        )
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code in (401, 403):
             raise HTTPException(
@@ -4822,10 +4859,10 @@ async def submit_feedback(request: Request, body: FeedbackRequest):
             detail=f"GitHub API unreachable: {exc}",
         ) from exc
     except Exception as exc:  # noqa: BLE001 — non-fatal feedback submission
-        logger.exception("Failed to submit feedback")
+        logger.exception("Failed to create feedback issue")
         raise HTTPException(
             status_code=500,
-            detail="Failed to submit feedback",
+            detail="Failed to create feedback issue",
         ) from exc
 
 
