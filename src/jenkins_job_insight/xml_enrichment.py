@@ -14,6 +14,18 @@ from defusedxml.ElementTree import fromstring as safe_fromstring
 logger = logging.getLogger(__name__)
 
 
+def _first_nonempty_line(text: str) -> str:
+    """Return the first non-blank line from *text*, stripped.
+
+    Returns empty string when *text* is empty or contains only whitespace.
+    """
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return ""
+
+
 def extract_failures_from_xml(raw_xml: str) -> list[dict[str, str]]:
     """Extract test failures and errors from a JUnit XML string.
 
@@ -52,7 +64,7 @@ def extract_failures_from_xml(raw_xml: str) -> list[dict[str, str]]:
             {
                 "test_name": test_name,
                 "error_message": result_elem.get("message", "")
-                or ((result_elem.text or "").split("\n")[0].strip()),
+                or _first_nonempty_line(result_elem.text or ""),
                 "stack_trace": result_elem.text or "",
                 "status": "ERROR"
                 if error_elem is not None and failure_elem is None

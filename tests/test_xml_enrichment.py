@@ -67,6 +67,64 @@ class TestExtractFailuresFromXml:
         assert no_msg_failure["error_message"] == "tests/storage/datavolume.go:229"
         assert "Timed out after 500.055s" in no_msg_failure["stack_trace"]
 
+    def test_body_text_with_leading_newlines_extracts_first_nonempty_line(
+        self,
+    ) -> None:
+        """When body text starts with whitespace/newlines, skip blank lines."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="TestSuite" tests="1" failures="1">
+    <testcase classname="tests.network" name="test_id:1514">
+        <failure type="Failure">
+            tests/network/networkpolicy.go:136
+Timed out after 15.001s.
+Expected failure, but got no error.
+</failure>
+    </testcase>
+</testsuite>"""
+        failures = extract_failures_from_xml(xml)
+        assert len(failures) == 1
+        assert failures[0]["error_message"] == "tests/network/networkpolicy.go:136"
+        assert "Timed out after 15.001s" in failures[0]["stack_trace"]
+
+    def test_message_attribute_takes_precedence_over_body(self) -> None:
+        """When both message attribute and body text exist, use attribute."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="TestSuite" tests="1" failures="1">
+    <testcase classname="com.example" name="test_both">
+        <failure message="Attribute message" type="AssertionError">Body text line one
+Body text line two</failure>
+    </testcase>
+</testsuite>"""
+        failures = extract_failures_from_xml(xml)
+        assert len(failures) == 1
+        assert failures[0]["error_message"] == "Attribute message"
+        assert "Body text line one" in failures[0]["stack_trace"]
+
+    def test_empty_message_attribute_falls_back_to_body(self) -> None:
+        """When message attribute is empty string, use body text."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="TestSuite" tests="1" failures="1">
+    <testcase classname="com.example" name="test_empty_msg">
+        <failure message="" type="Failure">actual error text here</failure>
+    </testcase>
+</testsuite>"""
+        failures = extract_failures_from_xml(xml)
+        assert len(failures) == 1
+        assert failures[0]["error_message"] == "actual error text here"
+
+    def test_no_message_no_body_yields_empty_error_message(self) -> None:
+        """Self-closing failure with no message/body gives empty error."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="TestSuite" tests="1" failures="1">
+    <testcase classname="com.example" name="test_bare">
+        <failure type="Failure"/>
+    </testcase>
+</testsuite>"""
+        failures = extract_failures_from_xml(xml)
+        assert len(failures) == 1
+        assert failures[0]["error_message"] == ""
+        assert failures[0]["stack_trace"] == ""
+
     def test_no_failures_returns_empty_list(self) -> None:
         failures = extract_failures_from_xml(JUNIT_XML_NO_FAILURES)
         assert failures == []
