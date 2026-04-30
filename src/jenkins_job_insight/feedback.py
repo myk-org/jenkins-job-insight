@@ -178,7 +178,7 @@ Do NOT include any sensitive data (tokens, passwords, etc.) in the output."""
     except Exception as exc:  # noqa: BLE001 - feedback formatting should fall back
         logger.warning("AI CLI call failed for feedback formatting: %s", exc)
         title, body = _build_fallback_feedback(request)
-        return title, body, ["enhancement"]
+        return title, body, _derive_fallback_labels(request)
 
     if result.success:
         parsed = _parse_json_response(result.text)
@@ -198,7 +198,7 @@ Do NOT include any sensitive data (tokens, passwords, etc.) in the output."""
 
     logger.warning("AI formatting failed for feedback, using fallback template")
     title, body = _build_fallback_feedback(request)
-    return title, body, ["enhancement"]
+    return title, body, _derive_fallback_labels(request)
 
 
 def _parse_json_response(text: str) -> dict | None:
@@ -217,6 +217,10 @@ def _parse_json_response(text: str) -> dict | None:
     try:
         data = json.loads(text)
         if isinstance(data, dict) and "title" in data and "body" in data:
+            if not isinstance(data["title"], str) or not data["title"].strip():
+                return None
+            if not isinstance(data["body"], str) or not data["body"].strip():
+                return None
             return data
     except (json.JSONDecodeError, ValueError):
         pass
@@ -309,6 +313,17 @@ async def generate_feedback_preview(
 
 
 _ALLOWED_LABELS: set[str] = {"bug", "enhancement"}
+
+
+def _derive_fallback_labels(request: FeedbackRequest) -> list[str]:
+    """Derive issue labels from request signals when AI is unavailable.
+
+    Returns ["bug"] when error signals (console_errors or failed_api_calls)
+    are present, otherwise ["enhancement"].
+    """
+    if request.console_errors or request.failed_api_calls:
+        return ["bug"]
+    return ["enhancement"]
 
 
 async def create_feedback_from_preview(

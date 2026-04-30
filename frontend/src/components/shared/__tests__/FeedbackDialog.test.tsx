@@ -237,7 +237,7 @@ describe('FeedbackDialog', () => {
     mockPost.mockResolvedValueOnce({
       title: 'Original title',
       body: 'Original body',
-      labels: ['feature'],
+      labels: ['enhancement'],
     })
     mockPost.mockResolvedValueOnce({
       issue_url: 'https://github.com/org/repo/issues/99',
@@ -266,7 +266,7 @@ describe('FeedbackDialog', () => {
     expect(mockPost).toHaveBeenCalledWith('/api/feedback/create', {
       title: 'Edited title',
       body: 'Edited body',
-      labels: ['feature'],
+      labels: ['enhancement'],
     })
   })
 

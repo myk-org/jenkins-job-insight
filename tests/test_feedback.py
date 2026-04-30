@@ -13,6 +13,8 @@ from jenkins_job_insight.config import get_settings
 from jenkins_job_insight.feedback import (
     _FEEDBACK_REPO_URL,
     _build_fallback_feedback,
+    _derive_fallback_labels,
+    _parse_json_response,
     create_feedback_from_preview,
     create_feedback_issue,
     format_feedback_with_ai,
@@ -170,6 +172,94 @@ class TestBuildFallbackFeedback:
 
 
 # ---------------------------------------------------------------------------
+# _derive_fallback_labels tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeriveFallbackLabels:
+    def test_enhancement_when_no_errors(self):
+        req = FeedbackRequest(description="Add dark mode")
+        assert _derive_fallback_labels(req) == ["enhancement"]
+
+    def test_bug_when_console_errors(self):
+        req = FeedbackRequest(
+            description="Page crashed",
+            console_errors=["TypeError: x is not a function"],
+        )
+        assert _derive_fallback_labels(req) == ["bug"]
+
+    def test_bug_when_failed_api_calls(self):
+        req = FeedbackRequest(
+            description="API broken",
+            failed_api_calls=[
+                FailedApiCall(status=500, endpoint="/api/x", error="err")
+            ],
+        )
+        assert _derive_fallback_labels(req) == ["bug"]
+
+    def test_bug_when_both_errors(self):
+        req = FeedbackRequest(
+            description="Everything broke",
+            console_errors=["err"],
+            failed_api_calls=[
+                FailedApiCall(status=500, endpoint="/api/x", error="err")
+            ],
+        )
+        assert _derive_fallback_labels(req) == ["bug"]
+
+
+# ---------------------------------------------------------------------------
+# _parse_json_response tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseJsonResponse:
+    def test_valid_response(self):
+        text = json.dumps({"title": "Bug report", "body": "Details here"})
+        result = _parse_json_response(text)
+        assert result == {"title": "Bug report", "body": "Details here"}
+
+    def test_empty_title_rejected(self):
+        text = json.dumps({"title": "", "body": "Details here"})
+        assert _parse_json_response(text) is None
+
+    def test_whitespace_title_rejected(self):
+        text = json.dumps({"title": "   ", "body": "Details here"})
+        assert _parse_json_response(text) is None
+
+    def test_empty_body_rejected(self):
+        text = json.dumps({"title": "Bug report", "body": ""})
+        assert _parse_json_response(text) is None
+
+    def test_whitespace_body_rejected(self):
+        text = json.dumps({"title": "Bug report", "body": "  \n  "})
+        assert _parse_json_response(text) is None
+
+    def test_non_string_title_rejected(self):
+        text = json.dumps({"title": 123, "body": "Details"})
+        assert _parse_json_response(text) is None
+
+    def test_non_string_body_rejected(self):
+        text = json.dumps({"title": "Bug", "body": ["line1"]})
+        assert _parse_json_response(text) is None
+
+    def test_null_title_rejected(self):
+        text = json.dumps({"title": None, "body": "Details"})
+        assert _parse_json_response(text) is None
+
+    def test_markdown_fences_stripped(self):
+        text = "```json\n" + json.dumps({"title": "T", "body": "B"}) + "\n```"
+        result = _parse_json_response(text)
+        assert result == {"title": "T", "body": "B"}
+
+    def test_invalid_json(self):
+        assert _parse_json_response("not json") is None
+
+    def test_missing_keys(self):
+        assert _parse_json_response(json.dumps({"title": "only title"})) is None
+
+
+# ---------------------------------------------------------------------------
 # format_feedback_with_ai tests
 # ---------------------------------------------------------------------------
 
@@ -221,7 +311,7 @@ class TestFormatFeedbackWithAi:
         )
         with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
             mock_ai.return_value = AIResult(success=True, text=ai_response)
-            title, body, labels = await format_feedback_with_ai(
+            title, _, labels = await format_feedback_with_ai(
                 req, settings, ai_provider="claude", ai_model="test-model"
             )
         assert title == "Add CSV export feature"
@@ -322,7 +412,44 @@ class TestFormatFeedbackWithAi:
         )
         with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
             mock_ai.side_effect = RuntimeError("AI down")
-            title, body, labels = await format_feedback_with_ai(
+            title, _, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
+        assert "Feedback:" in title
+        assert labels == ["enhancement"]
+
+    async def test_fallback_labels_bug_when_console_errors(self, settings):
+        req = FeedbackRequest(
+            description="Page crashed",
+            console_errors=["TypeError: x is not a function"],
+        )
+        with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
+            mock_ai.return_value = AIResult(success=False, text="fail")
+            _, _, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
+        assert labels == ["bug"]
+
+    async def test_fallback_labels_bug_when_failed_api_calls(self, settings):
+        req = FeedbackRequest(
+            description="API error",
+            failed_api_calls=[
+                FailedApiCall(status=500, endpoint="/api/x", error="err")
+            ],
+        )
+        with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
+            mock_ai.side_effect = RuntimeError("AI down")
+            _, _, labels = await format_feedback_with_ai(
+                req, settings, ai_provider="claude", ai_model="test-model"
+            )
+        assert labels == ["bug"]
+
+    async def test_ai_returns_blank_title_uses_fallback(self, settings):
+        req = FeedbackRequest(description="Some feedback")
+        ai_response = json.dumps({"title": "", "body": "Details", "labels": ["bug"]})
+        with patch("jenkins_job_insight.feedback.call_ai_cli") as mock_ai:
+            mock_ai.return_value = AIResult(success=True, text=ai_response)
+            title, _, labels = await format_feedback_with_ai(
                 req, settings, ai_provider="claude", ai_model="test-model"
             )
         assert "Feedback:" in title
@@ -812,6 +939,18 @@ class TestFeedbackEndpoint:
             temp_db_path,
             github_token=_TEST_GITHUB_TOKEN,
             enable_github_issues="false",
+        ):
+            resp = client.get("/api/capabilities")
+            assert resp.status_code == 200
+            assert resp.json()["feedback_enabled"] is False
+
+    def test_capabilities_feedback_disabled_without_ai_provider(
+        self, _init_db, temp_db_path
+    ):
+        for client in self._make_client(
+            temp_db_path,
+            github_token=_TEST_GITHUB_TOKEN,
+            ai_provider="",
         ):
             resp = client.get("/api/capabilities")
             assert resp.status_code == 200
