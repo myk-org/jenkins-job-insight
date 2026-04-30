@@ -81,6 +81,7 @@ export function NewAnalysisPage() {
       : rawXml.trim() !== ''
 
   const handleFileUpload = useCallback((file: File) => {
+    setError('')
     setRawXml('')
     setUploadFileName('')
     const reader = new FileReader()
@@ -115,9 +116,9 @@ export function NewAnalysisPage() {
         ...(jiraUrl && { jira_url: jiraUrl }),
         ...(jiraProjectKey && { jira_project_key: jiraProjectKey }),
         ...(testsRepoUrl && { tests_repo_url: testsRepoRef ? `${testsRepoUrl}:${testsRepoRef}` : testsRepoUrl }),
-        peer_ai_configs: enablePeers
-          ? peerConfigs.map(({ ai_provider, ai_model }) => ({ ai_provider, ai_model }))
-          : [],
+        ...(enablePeers && peerConfigs.length > 0 && {
+          peer_ai_configs: peerConfigs.map(({ ai_provider, ai_model }) => ({ ai_provider, ai_model })),
+        }),
         peer_analysis_max_rounds: maxRounds,
         ...(() => {
           const validRepos = additionalRepos
@@ -419,7 +420,12 @@ export function NewAnalysisPage() {
           <Section title="Peer Analysis" dotColor="bg-signal-purple">
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">Enable peer review</span>
-              <Toggle checked={enablePeers} onChange={setEnablePeers} label="Enable peer review" />
+              <Toggle checked={enablePeers} onChange={(v) => {
+                setEnablePeers(v)
+                if (v && peerConfigs.length === 0) {
+                  setPeerConfigs([{ id: crypto.randomUUID(), ai_provider: 'claude', ai_model: '' }])
+                }
+              }} label="Enable peer review" />
             </div>
             {enablePeers && (
               <>
