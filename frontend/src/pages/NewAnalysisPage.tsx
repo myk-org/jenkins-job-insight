@@ -119,13 +119,12 @@ export function NewAnalysisPage() {
           ? peerConfigs.map(({ ai_provider, ai_model }) => ({ ai_provider, ai_model }))
           : [],
         peer_analysis_max_rounds: maxRounds,
-        additional_repos: additionalRepos
-          .filter((r) => r.name && r.url)
-          .map((r) => ({
-            name: r.name,
-            url: r.url,
-            ...(r.ref && { ref: r.ref }),
-          })),
+        ...(() => {
+          const validRepos = additionalRepos
+            .filter((r) => r.name.trim() && r.url.trim())
+            .map((r) => ({ name: r.name.trim(), url: r.url.trim(), ...(r.ref.trim() && { ref: r.ref.trim() }) }))
+          return validRepos.length > 0 ? { additional_repos: validRepos } : {}
+        })(),
       }
 
       if (inputMode === 'jenkins') {
