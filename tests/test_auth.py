@@ -313,6 +313,52 @@ class TestBearerTokenAuth:
         assert data["username"] == "apiuser"
         assert data["is_admin"] is True
 
+    def test_bearer_nonadmin_api_key_sets_username(self, client, temp_db_path):
+        """Bearer token with non-admin user API key sets username correctly."""
+        import aiosqlite
+
+        from jenkins_job_insight.storage import generate_api_key, hash_api_key
+
+        raw_key = generate_api_key()
+        key_hash = hash_api_key(raw_key)
+
+        # Insert a non-admin user with an API key directly
+        async def _insert():
+            async with aiosqlite.connect(temp_db_path) as db:
+                await db.execute(
+                    "INSERT INTO users (username, api_key_hash, role) VALUES (?, ?, 'user')",
+                    ("nonadmin-key-user", key_hash),
+                )
+                await db.commit()
+
+        asyncio.run(_insert())
+        resp = client.get(
+            "/api/auth/me", headers={"Authorization": f"Bearer {raw_key}"}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["username"] == "nonadmin-key-user"
+        assert data["is_admin"] is False
+        assert data["role"] == "user"
+
+    def test_bearer_admin_api_key_unchanged(self, client):
+        """Bearer token with admin API key still grants admin access."""
+        create_resp = client.post(
+            "/api/admin/users",
+            json={"username": "admin-key-user"},
+            headers={"Authorization": "Bearer test-admin-key-16chars"},
+        )
+        assert create_resp.status_code == 200
+        api_key = create_resp.json()["api_key"]
+        resp = client.get(
+            "/api/auth/me", headers={"Authorization": f"Bearer {api_key}"}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["username"] == "admin-key-user"
+        assert data["is_admin"] is True
+        assert data["role"] == "admin"
+
     def test_bearer_invalid_key(self, client):
         """Bearer token with invalid key returns non-admin."""
         resp = client.get(

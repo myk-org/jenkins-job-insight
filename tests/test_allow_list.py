@@ -263,3 +263,71 @@ class TestRestrictedAccess:
             cookies={"jji_username": "charlie"},
         )
         assert resp.status_code == 200
+
+    def test_nonadmin_api_key_user_in_allow_list(self, client_restricted, temp_db_path):
+        """Non-admin API key user passes ALLOWED_USERS check when in allow list."""
+        import aiosqlite
+
+        from jenkins_job_insight.storage import generate_api_key, hash_api_key
+
+        raw_key = generate_api_key()
+        key_hash = hash_api_key(raw_key)
+
+        # Insert a non-admin user 'alice' (who is in the allow list) with an API key
+        async def _insert():
+            async with aiosqlite.connect(temp_db_path) as db:
+                await db.execute(
+                    "UPDATE users SET api_key_hash = ? WHERE username = 'alice'",
+                    (key_hash,),
+                )
+                rows = (await (await db.execute("SELECT changes()")).fetchone())[0]
+                if rows == 0:
+                    await db.execute(
+                        "INSERT INTO users (username, api_key_hash, role) VALUES ('alice', ?, 'user')",
+                        (key_hash,),
+                    )
+                await db.commit()
+
+        asyncio.run(_insert())
+
+        resp = client_restricted.post(
+            "/results/job-1/comments",
+            json={"test_name": "test_foo", "comment": "api key user comment"},
+            headers={"Authorization": f"Bearer {raw_key}"},
+        )
+        assert resp.status_code == 201
+
+    def test_nonadmin_api_key_user_not_in_allow_list(
+        self, client_restricted, temp_db_path
+    ):
+        """Non-admin API key user NOT in allow list gets 403."""
+        import aiosqlite
+
+        from jenkins_job_insight.storage import generate_api_key, hash_api_key
+
+        raw_key = generate_api_key()
+        key_hash = hash_api_key(raw_key)
+
+        # Insert a non-admin user 'charlie' (NOT in the allow list) with an API key
+        async def _insert():
+            async with aiosqlite.connect(temp_db_path) as db:
+                await db.execute(
+                    "UPDATE users SET api_key_hash = ? WHERE username = 'charlie'",
+                    (key_hash,),
+                )
+                rows = (await (await db.execute("SELECT changes()")).fetchone())[0]
+                if rows == 0:
+                    await db.execute(
+                        "INSERT INTO users (username, api_key_hash, role) VALUES ('charlie', ?, 'user')",
+                        (key_hash,),
+                    )
+                await db.commit()
+
+        asyncio.run(_insert())
+
+        resp = client_restricted.post(
+            "/results/job-1/comments",
+            json={"test_name": "test_foo", "comment": "should be blocked"},
+            headers={"Authorization": f"Bearer {raw_key}"},
+        )
+        assert resp.status_code == 403

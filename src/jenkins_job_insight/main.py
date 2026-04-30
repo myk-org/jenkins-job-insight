@@ -773,10 +773,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     authenticated_admin = True
                 else:
                     user = await storage.get_user_by_key(token)
-                    if user and user.get("role") == "admin":
-                        is_admin = True
+                    if user:
                         username = str(user["username"])
-                        authenticated_admin = True
+                        if user.get("role") == "admin":
+                            is_admin = True
+                            authenticated_admin = True
 
         # 3. Check X-Forwarded-User header (SSO via trusted proxy)
         if not username and proxy_username:
