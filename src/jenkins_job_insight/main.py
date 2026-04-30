@@ -2672,7 +2672,9 @@ def _build_capabilities(settings: Settings) -> dict[str, bool | str]:
         "server_jira_project_key": settings.jira_project_key or "",
         "reportportal": settings.reportportal_enabled,
         "reportportal_project": settings.reportportal_project or "",
-        "feedback_enabled": settings.feedback_enabled and bool(AI_PROVIDER),
+        "feedback_enabled": settings.feedback_enabled
+        and bool(AI_PROVIDER)
+        and bool(AI_MODEL),
     }
 
 

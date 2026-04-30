@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 from jenkins_job_insight import storage
 from jenkins_job_insight.config import get_settings
 from jenkins_job_insight.feedback import (
-    _FEEDBACK_REPO_URL,
     _build_fallback_feedback,
     _derive_fallback_labels,
     _parse_json_response,
@@ -559,7 +558,9 @@ class TestCreateFeedbackFromPreview:
 
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args.kwargs
-        assert call_kwargs["repo_url"] == _FEEDBACK_REPO_URL
+        assert (
+            call_kwargs["repo_url"] == "https://github.com/myk-org/jenkins-job-insight"
+        )
         assert call_kwargs["labels"] == ["bug"]
 
     async def test_uses_correct_repo_url(self, settings):
@@ -577,7 +578,10 @@ class TestCreateFeedbackFromPreview:
             )
 
         mock_create.assert_called_once()
-        assert mock_create.call_args.kwargs["repo_url"] == _FEEDBACK_REPO_URL
+        assert (
+            mock_create.call_args.kwargs["repo_url"]
+            == "https://github.com/myk-org/jenkins-job-insight"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +609,10 @@ class TestCreateFeedbackIssue:
         """Extract and validate common call_args from create_github_issue mock."""
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args.kwargs
-        assert call_kwargs.get("repo_url") == _FEEDBACK_REPO_URL
+        assert (
+            call_kwargs.get("repo_url")
+            == "https://github.com/myk-org/jenkins-job-insight"
+        )
         assert call_kwargs.get("github_token") is not None
         if expected_labels is not None:
             assert call_kwargs.get("labels") == expected_labels
@@ -951,6 +958,18 @@ class TestFeedbackEndpoint:
             temp_db_path,
             github_token=_TEST_GITHUB_TOKEN,
             ai_provider="",
+        ):
+            resp = client.get("/api/capabilities")
+            assert resp.status_code == 200
+            assert resp.json()["feedback_enabled"] is False
+
+    def test_capabilities_feedback_disabled_without_ai_model(
+        self, _init_db, temp_db_path
+    ):
+        for client in self._make_client(
+            temp_db_path,
+            github_token=_TEST_GITHUB_TOKEN,
+            ai_model="",
         ):
             resp = client.get("/api/capabilities")
             assert resp.status_code == 200
