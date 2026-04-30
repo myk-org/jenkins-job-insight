@@ -391,66 +391,46 @@ export function DashboardPage() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="font-display text-xl font-bold text-text-primary">Dashboard</h1>
-            <div className="mt-0.5 flex items-center gap-3">
-              <p className="text-sm text-text-tertiary">
-                {filtered.length} analysis {filtered.length === 1 ? 'run' : 'runs'}
-              </p>
-              <a
-                href={`${GITHUB_REPO_URL}/issues`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="View GitHub issues"
-                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-text-tertiary transition-colors duration-150 hover:bg-surface-hover hover:text-text-secondary"
-              >
-                <Github className="h-3 w-3" />
-                View Issues
-              </a>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3 items-center">
-            <SearchInput value={search} onChange={setSearch} placeholder="Filter jobs..." className="w-full sm:w-64" />
-            <MetadataDropdowns
-              options={metadataOptions}
-              team={metaTeam}
-              tier={metaTier}
-              version={metaVersion}
-              onTeamChange={(v) => setMetaParam('team', v)}
-              onTierChange={(v) => setMetaParam('tier', v)}
-              onVersionChange={(v) => setMetaParam('version', v)}
-            />
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger aria-label="Filter by status" className="w-full sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_FILTER_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s === STATUS_FILTER_ALL ? 'All statuses' : s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDates} />
-            <Select value={String(perPage)} onValueChange={(v) => setPerPage(Number(v))}>
-              <SelectTrigger aria-label="Rows per page" className="w-full sm:w-20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-              </SelectContent>
-            </Select>
-            <MetadataClearButton hasFilters={hasMetadataFilters} onClearAll={clearMetadataFilters} />
-            <Button onClick={() => navigate('/new-analysis')} className="gap-1.5 whitespace-nowrap">
-              <Plus className="h-3.5 w-3.5" />
-              New Analysis
-            </Button>
-          </div>
+        {/* Filters — single wrapping row */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <SearchInput value={search} onChange={setSearch} placeholder="Filter jobs..." className="w-full sm:w-64" />
+          <MetadataDropdowns
+            options={metadataOptions}
+            team={metaTeam}
+            tier={metaTier}
+            version={metaVersion}
+            onTeamChange={(v) => setMetaParam('team', v)}
+            onTierChange={(v) => setMetaParam('tier', v)}
+            onVersionChange={(v) => setMetaParam('version', v)}
+          />
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger aria-label="Filter by status" className="w-full sm:w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_FILTER_OPTIONS.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s === STATUS_FILTER_ALL ? 'All statuses' : s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDates} />
+          <Select value={String(perPage)} onValueChange={(v) => setPerPage(Number(v))}>
+            <SelectTrigger aria-label="Rows per page" className="w-full sm:w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+            </SelectContent>
+          </Select>
+          <MetadataClearButton hasFilters={hasMetadataFilters} onClearAll={clearMetadataFilters} />
+          <Button onClick={() => navigate('/new-analysis')} className="gap-1.5 whitespace-nowrap">
+            <Plus className="h-3.5 w-3.5" />
+            New Analysis
+          </Button>
         </div>
 
         {/* Tag filter chips — only shown when labels exist */}
@@ -459,6 +439,23 @@ export function DashboardPage() {
           labels={metaLabels}
           onLabelsChange={setMetaLabels}
         />
+
+        {/* Summary row: count + View Issues */}
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-text-tertiary">
+            {filtered.length} analysis {filtered.length === 1 ? 'run' : 'runs'}
+          </p>
+          <a
+            href={`${GITHUB_REPO_URL}/issues`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View GitHub issues"
+            className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-text-tertiary transition-colors duration-150 hover:bg-surface-hover hover:text-text-secondary"
+          >
+            <Github className="h-3 w-3" />
+            View Issues
+          </a>
+        </div>
 
         {/* Bulk result message */}
         {bulkResultMessage && (
