@@ -4817,7 +4817,7 @@ async def preview_feedback(request: Request, body: FeedbackRequest):
         )
     try:
         ai_provider, ai_model = _resolve_ai_config_values(None, None)
-    except HTTPException:
+    except HTTPException as exc:
         raise HTTPException(
             status_code=503,
             detail=(
@@ -4825,7 +4825,7 @@ async def preview_feedback(request: Request, body: FeedbackRequest):
                 "Configure AI_PROVIDER and AI_MODEL environment variables "
                 "to enable AI-powered feedback."
             ),
-        )
+        ) from exc
     try:
         return await generate_feedback_preview(
             body, settings, ai_provider=ai_provider, ai_model=ai_model

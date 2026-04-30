@@ -64,7 +64,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     trackFailedCall({
       status: res.status,
       endpoint: path,
-      error: typeof body === 'string' ? body : JSON.stringify(body ?? ''),
+      error: typeof body === 'string' ? body : body != null ? JSON.stringify(body) : '',
       timestamp: Date.now(),
     })
     throw new ApiError(res.status, res.statusText, body)

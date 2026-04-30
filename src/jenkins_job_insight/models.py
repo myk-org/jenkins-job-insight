@@ -843,16 +843,20 @@ class FailedApiCall(BaseModel):
     """A single failed API call captured by the frontend."""
 
     status: int = Field(default=0, description="HTTP status code")
-    endpoint: str = Field(default="", description="API endpoint path")
-    error: str = Field(default="", description="Error message or response body")
+    endpoint: str = Field(default="", max_length=500, description="API endpoint path")
+    error: str = Field(
+        default="", max_length=2000, description="Error message or response body"
+    )
 
 
 class PageState(BaseModel):
     """Current page state when feedback was submitted."""
 
-    url: str = Field(default="", description="Current page URL")
-    active_filters: str = Field(default="", description="Active filter selections")
-    report_id: str = Field(default="", description="Current report ID")
+    url: str = Field(default="", max_length=500, description="Current page URL")
+    active_filters: str = Field(
+        default="", max_length=1000, description="Active filter selections"
+    )
+    report_id: str = Field(default="", max_length=200, description="Current report ID")
 
 
 class FeedbackRequest(BaseModel):
@@ -865,8 +869,8 @@ class FeedbackRequest(BaseModel):
     description: str = Field(
         min_length=1, max_length=10000, description="Natural language description"
     )
-    console_errors: list[str] = Field(
-        default_factory=list, description="Browser console errors"
+    console_errors: list[Annotated[str, Field(max_length=5000)]] = Field(
+        default_factory=list, max_length=50, description="Browser console errors"
     )
     failed_api_calls: list[FailedApiCall] = Field(
         default_factory=list,
@@ -876,7 +880,9 @@ class FeedbackRequest(BaseModel):
         default_factory=PageState,
         description="Current page state when feedback was submitted",
     )
-    user_agent: str = Field(default="", description="Browser user agent string")
+    user_agent: str = Field(
+        default="", max_length=500, description="Browser user agent string"
+    )
 
 
 class FeedbackPreviewResponse(BaseModel):
