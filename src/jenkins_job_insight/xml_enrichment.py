@@ -63,7 +63,7 @@ def extract_failures_from_xml(raw_xml: str) -> list[dict[str, str]]:
         failures.append(
             {
                 "test_name": test_name,
-                "error_message": result_elem.get("message", "")
+                "error_message": (result_elem.get("message", "") or "").strip()
                 or _first_nonempty_line(result_elem.text or ""),
                 "stack_trace": result_elem.text or "",
                 "status": "ERROR"
