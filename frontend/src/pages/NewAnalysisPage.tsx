@@ -90,11 +90,13 @@ export function NewAnalysisPage() {
         setRawXml(content)
         setUploadFileName(file.name)
       }
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
     reader.onerror = () => {
       setRawXml('')
       setUploadFileName('')
       setError(`Failed to read file: ${file.name}`)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
     reader.readAsText(file)
   }, [])
@@ -152,7 +154,8 @@ export function NewAnalysisPage() {
         navigate(`/results/${data.job_id}`)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit analysis')
+      console.error('Failed to submit analysis', err)
+      setError('Failed to submit analysis. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -328,6 +331,14 @@ export function NewAnalysisPage() {
                 if (file && file.name.endsWith('.xml')) handleFileUpload(file)
               }}
               onClick={() => fileInputRef.current?.click()}
+              tabIndex={0}
+              role="button"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  fileInputRef.current?.click()
+                }
+              }}
             >
               <Upload className="h-8 w-8 text-text-tertiary mb-2" />
               <p className="text-sm text-text-secondary">
@@ -450,6 +461,7 @@ export function NewAnalysisPage() {
                       />
                       <button
                         type="button"
+                        aria-label={`Remove peer ${i + 1}`}
                         className="p-1 rounded hover:bg-surface-hover text-text-tertiary hover:text-signal-red transition flex-shrink-0"
                         onClick={() => setPeerConfigs((prev) => prev.filter((p) => p.id !== peer.id))}
                       >
@@ -554,6 +566,7 @@ export function NewAnalysisPage() {
                     />
                     <button
                       type="button"
+                      aria-label={`Remove repository ${repo.name || repo.id}`}
                       className="p-1 rounded hover:bg-surface-hover text-text-tertiary hover:text-signal-red transition flex-shrink-0"
                       onClick={() =>
                         setAdditionalRepos((prev) => prev.filter((r) => r.id !== repo.id))
