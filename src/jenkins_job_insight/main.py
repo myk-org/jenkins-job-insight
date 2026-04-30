@@ -65,6 +65,10 @@ from jenkins_job_insight.bug_creation import (
     search_github_duplicates,
     search_jira_duplicates,
 )
+from jenkins_job_insight.feedback import (
+    create_feedback_from_preview,
+    generate_feedback_preview,
+)
 from jenkins_job_insight.comment_enrichment import detect_mentions
 from jenkins_job_insight.notifications import send_mention_notifications
 from jenkins_job_insight.vapid import get_vapid_config
@@ -82,6 +86,10 @@ from jenkins_job_insight.models import (
     CreateIssueRequest,
     FailureAnalysis,
     FailureAnalysisResult,
+    FeedbackCreateRequest,
+    FeedbackPreviewResponse,
+    FeedbackRequest,
+    FeedbackResponse,
     JobMetadataInput,
     OverrideClassificationRequest,
     PreviewIssueRequest,
@@ -838,10 +846,15 @@ app.add_middleware(AuthMiddleware)
 app.add_middleware(ErrorTrackingMiddleware)
 
 
+_BODY_LOGGING_SKIP_PATHS = frozenset({"/api/feedback/preview", "/api/feedback/create"})
+
+
 class RequestBodyLoggingMiddleware(BaseHTTPMiddleware):
     """Log incoming request bodies at DEBUG level with sensitive data masked."""
 
     async def dispatch(self, request: Request, call_next):
+        if request.url.path in _BODY_LOGGING_SKIP_PATHS:
+            return await call_next(request)
         if logger.isEnabledFor(logging.DEBUG) and request.method in (
             "POST",
             "PUT",
@@ -891,6 +904,11 @@ async def _validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """Log 422 validation error details at DEBUG level, then return standard response."""
+    if request.url.path in _BODY_LOGGING_SKIP_PATHS:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": jsonable_encoder(exc.errors())},
+        )
     if logger.isEnabledFor(logging.DEBUG):
         masked_body = None
         if exc.body is not None:
@@ -2654,6 +2672,9 @@ def _build_capabilities(settings: Settings) -> dict[str, bool | str]:
         "server_jira_project_key": settings.jira_project_key or "",
         "reportportal": settings.reportportal_enabled,
         "reportportal_project": settings.reportportal_project or "",
+        "feedback_enabled": settings.feedback_enabled
+        and bool(AI_PROVIDER)
+        and bool(AI_MODEL),
     }
 
 
@@ -4774,6 +4795,90 @@ Respond with ONLY a JSON object:
     except (json.JSONDecodeError, AttributeError):
         logger.debug("Failed to parse AI response for comment intent: %s", result.text)
         return AnalyzeCommentResponse(suggests_reviewed=False)
+
+
+@app.post(
+    "/api/feedback/preview",
+    status_code=200,
+    response_model=FeedbackPreviewResponse,
+)
+async def preview_feedback(request: Request, body: FeedbackRequest):
+    """Preview user feedback as a formatted GitHub issue.
+
+    Accepts bug reports or feature requests, uses AI to format them
+    into well-structured GitHub issues, scrubs sensitive data from
+    attached logs, and returns the preview without creating the issue.
+    """
+    _check_allow_list(request)
+    settings = get_settings()
+    if not settings.feedback_enabled:
+        raise HTTPException(
+            status_code=503, detail="Feedback submission is disabled on this server"
+        )
+    try:
+        ai_provider, ai_model = _resolve_ai_config_values(None, None)
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI provider not configured on this server. "
+                "Configure AI_PROVIDER and AI_MODEL environment variables "
+                "to enable AI-powered feedback."
+            ),
+        ) from exc
+    try:
+        return await generate_feedback_preview(
+            body, settings, ai_provider=ai_provider, ai_model=ai_model
+        )
+    except Exception as exc:  # noqa: BLE001 — non-fatal feedback preview
+        logger.exception("Failed to generate feedback preview")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate feedback preview",
+        ) from exc
+
+
+@app.post("/api/feedback/create", status_code=201, response_model=FeedbackResponse)
+async def create_feedback(request: Request, body: FeedbackCreateRequest):
+    """Create a GitHub issue from a previewed feedback.
+
+    Takes a title, body, and labels (typically from the preview endpoint)
+    and creates the GitHub issue.
+    """
+    _check_allow_list(request)
+    settings = get_settings()
+    if not settings.feedback_enabled:
+        raise HTTPException(
+            status_code=503, detail="Feedback submission is disabled on this server"
+        )
+    try:
+        return await create_feedback_from_preview(
+            title=body.title,
+            body=body.body,
+            labels=body.labels,
+            settings=settings,
+        )
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (401, 403):
+            raise HTTPException(
+                status_code=502,
+                detail="GitHub token is invalid or expired",
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"GitHub API error: {exc.response.status_code}",
+        ) from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"GitHub API unreachable: {exc}",
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 — non-fatal feedback submission
+        logger.exception("Failed to create feedback issue")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create feedback issue",
+        ) from exc
 
 
 # SPA catch-all routes — must be AFTER all API routes

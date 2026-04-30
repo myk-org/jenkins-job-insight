@@ -837,3 +837,75 @@ class AnalyzeCommentResponse(BaseModel):
 
     suggests_reviewed: bool
     reason: str = ""
+
+
+class FailedApiCall(BaseModel):
+    """A single failed API call captured by the frontend."""
+
+    status: int = Field(default=0, description="HTTP status code")
+    endpoint: str = Field(default="", max_length=500, description="API endpoint path")
+    error: str = Field(
+        default="", max_length=2000, description="Error message or response body"
+    )
+
+
+class PageState(BaseModel):
+    """Current page state when feedback was submitted."""
+
+    url: str = Field(default="", max_length=500, description="Current page URL")
+    active_filters: str = Field(
+        default="", max_length=1000, description="Active filter selections"
+    )
+    report_id: str = Field(default="", max_length=200, description="Current report ID")
+
+
+class FeedbackRequest(BaseModel):
+    """User feedback submission (bug or feature request)."""
+
+    feedback_type: str = Field(
+        default="feedback",
+        description="Type of feedback (auto-determined by AI if not specified)",
+    )
+    description: str = Field(
+        min_length=1, max_length=10000, description="Natural language description"
+    )
+    console_errors: list[Annotated[str, Field(max_length=5000)]] = Field(
+        default_factory=list, max_length=50, description="Browser console errors"
+    )
+    failed_api_calls: list[FailedApiCall] = Field(
+        default_factory=list,
+        description="Recent failed API responses",
+    )
+    page_state: PageState = Field(
+        default_factory=PageState,
+        description="Current page state when feedback was submitted",
+    )
+    user_agent: str = Field(
+        default="", max_length=500, description="Browser user agent string"
+    )
+
+
+class FeedbackPreviewResponse(BaseModel):
+    """Response from feedback preview (AI-generated title + body)."""
+
+    title: str = Field(description="Generated issue title")
+    body: str = Field(description="Generated issue body (markdown)")
+    labels: list[str] = Field(default_factory=list, description="Issue labels")
+
+
+class FeedbackCreateRequest(BaseModel):
+    """Request to create a GitHub issue from a previewed feedback."""
+
+    title: str = Field(min_length=1, max_length=500, description="Issue title")
+    body: str = Field(
+        min_length=1, max_length=50000, description="Issue body (markdown)"
+    )
+    labels: list[str] = Field(default_factory=list, description="Issue labels")
+
+
+class FeedbackResponse(BaseModel):
+    """Response from feedback submission."""
+
+    issue_url: str = Field(description="URL to the created GitHub issue")
+    issue_number: int = Field(description="GitHub issue number")
+    title: str = Field(description="Issue title as created")

@@ -1,5 +1,31 @@
 /** Centralized fetch wrapper for the JJI API. */
 
+// -- Failed API call tracking ------------------------------------
+
+interface FailedApiCall {
+  status: number
+  endpoint: string
+  error: string
+  timestamp: number
+}
+
+const MAX_FAILED_CALLS = 10
+const recentFailedCalls: FailedApiCall[] = []
+
+function trackFailedCall(entry: FailedApiCall) {
+  if (recentFailedCalls.length >= MAX_FAILED_CALLS) {
+    recentFailedCalls.shift()
+  }
+  recentFailedCalls.push(entry)
+}
+
+/** Return a snapshot of the recent failed API calls (status >= 400). */
+export function getRecentFailedCalls(): FailedApiCall[] {
+  return [...recentFailedCalls]
+}
+
+// ----------------------------------------------------------------
+
 class ApiError extends Error {
   status: number
   statusText: string
@@ -35,6 +61,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     } catch {
       body = null
     }
+    trackFailedCall({
+      status: res.status,
+      endpoint: path,
+      error: typeof body === 'string' ? body : body != null ? JSON.stringify(body) : '',
+      timestamp: Date.now(),
+    })
     throw new ApiError(res.status, res.statusText, body)
   }
 

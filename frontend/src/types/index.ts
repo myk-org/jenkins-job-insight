@@ -291,6 +291,7 @@ export interface ResultResponse {
     server_jira_project_key?: string
     reportportal?: boolean
     reportportal_project?: string
+    feedback_enabled?: boolean
   }
 }
 
@@ -384,4 +385,32 @@ export interface JobMetadata {
 
 export interface DashboardJobWithMetadata extends DashboardJob {
   metadata?: JobMetadata | null
+}
+
+// -- Feedback -----------------------------------------------------
+
+export interface FeedbackRequest {
+  description: string
+  console_errors: string[]
+  failed_api_calls: { status: number; endpoint: string; error: string }[]
+  page_state: { url?: string; active_filters?: string; report_id?: string }
+  user_agent: string
+}
+
+export interface FeedbackPreviewResponse {
+  title: string
+  body: string
+  labels: string[]
+}
+
+export interface FeedbackCreateRequest {
+  title: string
+  body: string
+  labels: string[]
+}
+
+export interface FeedbackCreateResponse {
+  issue_url: string
+  issue_number: number
+  title: string
 }

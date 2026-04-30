@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Bug, type LucideIcon } from 'lucide-react'
+import { BookOpen, MessageSquarePlus, type LucideIcon } from 'lucide-react'
 import { UserBadge } from './UserBadge'
+import { FeedbackDialog } from '@/components/shared/FeedbackDialog'
 import { useAuth } from '@/lib/auth'
 import { api } from '@/lib/api'
-import { GITHUB_REPO_URL } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
 interface ExternalNavLink {
@@ -16,7 +16,6 @@ interface ExternalNavLink {
 
 const EXTERNAL_NAV_LINKS: ExternalNavLink[] = [
   { href: 'https://myk-org.github.io/jenkins-job-insight/', label: 'User Guide', title: 'User Guide', icon: BookOpen },
-  { href: `${GITHUB_REPO_URL}/issues/new`, label: 'Report Bug', title: 'Report a bug on GitHub', icon: Bug },
 ]
 
 const BASE_NAV_LINKS = [
@@ -30,6 +29,8 @@ export function NavBar() {
   const location = useLocation()
   const { isAdmin, username } = useAuth()
   const [unreadCount, setUnreadCount] = useState(0)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchUnread = useCallback(async () => {
@@ -74,6 +75,27 @@ export function NavBar() {
   useEffect(() => {
     if (!username) setUnreadCount(0)
   }, [username])
+
+  // Fetch server capabilities to check if feedback is enabled
+  useEffect(() => {
+    let cancelled = false
+    async function loadCapabilities(retry = true) {
+      try {
+        const caps = await api.get<{ feedback_enabled?: boolean }>('/api/capabilities')
+        if (!cancelled) setFeedbackEnabled(caps.feedback_enabled ?? false)
+      } catch {
+        if (!cancelled && retry) {
+          setTimeout(() => { if (!cancelled) void loadCapabilities(false) }, 5000)
+        } else if (!cancelled) {
+          setFeedbackEnabled(false)
+        }
+      }
+    }
+    void loadCapabilities()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const baseNavLinks = username
     ? [...BASE_NAV_LINKS, { to: '/mentions', label: 'Mentions' }]
@@ -129,7 +151,21 @@ export function NavBar() {
               {label}
             </a>
           ))}
+          {feedbackEnabled && (
+            <button
+              type="button"
+              onClick={() => setFeedbackOpen(true)}
+              title="Send feedback"
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-text-tertiary transition-colors duration-150 hover:bg-surface-hover hover:text-text-secondary"
+            >
+              <MessageSquarePlus className="h-4 w-4 shrink-0" />
+              Feedback
+            </button>
+          )}
           <UserBadge />
+          {feedbackEnabled && (
+            <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+          )}
         </div>
       </div>
     </header>

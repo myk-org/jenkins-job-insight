@@ -369,6 +369,19 @@ class Settings(BaseSettings):
         return bool(tests_repo_url and github_token)
 
     @property
+    def feedback_enabled(self) -> bool:
+        """Check if feedback submission is enabled.
+
+        Requires ENABLE_GITHUB_ISSUES to not be explicitly False and
+        GITHUB_TOKEN to be configured. Unlike github_issues_enabled,
+        does not require TESTS_REPO_URL since feedback issues go to
+        the hardcoded project repo.
+        """
+        if self.enable_github_issues is False:
+            return False
+        return bool(self.github_token and self.github_token.get_secret_value())
+
+    @property
     def web_push_enabled(self) -> bool:
         """Check if Web Push is enabled (env vars or auto-generated keys)."""
         if hasattr(self, "_vapid_config_cache"):
