@@ -302,6 +302,14 @@ class CodeFix(BaseModel):
         default=None,
         description="Complete replacement file content after applying the suggested fix (raw string, no markdown)",
     )
+    tests_repo_search_keywords: list[str] = Field(
+        default_factory=list,
+        description="AI-suggested keywords for searching related issues in the tests repository",
+    )
+    tests_repo_matches: list["SimilarIssue"] = Field(
+        default_factory=list,
+        description="Matched issues from the tests repository (populated in post-processing)",
+    )
 
 
 class AnalysisDetail(BaseModel):
@@ -913,3 +921,7 @@ class FeedbackResponse(BaseModel):
     issue_url: str = Field(description="URL to the created GitHub issue")
     issue_number: int = Field(description="GitHub issue number")
     title: str = Field(description="Issue title as created")
+
+
+# Resolve forward references (CodeFix references SimilarIssue which is defined later)
+CodeFix.model_rebuild()

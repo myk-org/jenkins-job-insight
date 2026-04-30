@@ -9,6 +9,7 @@ import time as _time
 import urllib.parse
 import uuid
 from collections import defaultdict
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Coroutine, Literal
@@ -47,6 +48,7 @@ from jenkins_job_insight.encryption import (
     decrypt_sensitive_fields,
     encrypt_sensitive_fields,
 )
+from jenkins_job_insight.github_issues import enrich_with_tests_repo_matches
 from jenkins_job_insight.jira import enrich_with_jira_matches
 from jenkins_job_insight.token_tracking import build_token_usage_summary
 from jenkins_job_insight.monitoring import (
@@ -1134,6 +1136,29 @@ def _merge_settings(body: BaseAnalysisRequest, settings: Settings) -> Settings:
     return settings
 
 
+def _collect_all_failures(
+    items: Sequence[FailureAnalysis | ChildJobAnalysis],
+) -> list[FailureAnalysis]:
+    """Recursively collect all FailureAnalysis objects from a mixed list.
+
+    Recurses into ChildJobAnalysis objects to find nested failures.
+
+    Args:
+        items: Mixed list of FailureAnalysis and ChildJobAnalysis objects.
+
+    Returns:
+        Flat list of all FailureAnalysis objects found.
+    """
+    result: list[FailureAnalysis] = []
+    for item in items:
+        if isinstance(item, FailureAnalysis):
+            result.append(item)
+        elif isinstance(item, ChildJobAnalysis):
+            result.extend(_collect_all_failures(item.failures))
+            result.extend(_collect_all_failures(item.failed_children))
+    return result
+
+
 async def _enrich_result_with_jira(
     failures: list[FailureAnalysis | ChildJobAnalysis],
     settings: Settings,
@@ -1157,19 +1182,37 @@ async def _enrich_result_with_jira(
     if not settings.jira_enabled:
         return
 
-    all_failures: list[FailureAnalysis] = []
-
-    def _collect(items: list) -> None:
-        for item in items:
-            if isinstance(item, FailureAnalysis):
-                all_failures.append(item)
-            elif isinstance(item, ChildJobAnalysis):
-                _collect(item.failures)
-                _collect(item.failed_children)
-
-    _collect(failures)
-
+    all_failures = _collect_all_failures(failures)
     await enrich_with_jira_matches(
+        all_failures, settings, ai_provider, ai_model, job_id=job_id
+    )
+
+
+async def _enrich_result_with_tests_repo_matches(
+    failures: list[FailureAnalysis | ChildJobAnalysis],
+    settings: Settings,
+    ai_provider: str = "",
+    ai_model: str = "",
+    job_id: str = "",
+) -> None:
+    """Enrich CODE ISSUE failures with tests repo issue matches.
+
+    Collects all FailureAnalysis objects from the provided list,
+    recursing into ChildJobAnalysis objects, then searches GitHub
+    Issues for matching issues. Results are attached in-place.
+
+    Args:
+        failures: Mixed list of FailureAnalysis and ChildJobAnalysis objects.
+        settings: Application settings with tests repo configuration.
+        ai_provider: AI provider for relevance filtering.
+        ai_model: AI model for relevance filtering.
+        job_id: Job identifier for token usage tracking.
+    """
+    if not settings.tests_repo_url:
+        return
+
+    all_failures = _collect_all_failures(failures)
+    await enrich_with_tests_repo_matches(
         all_failures, settings, ai_provider, ai_model, job_id=job_id
     )
 
@@ -1404,6 +1447,20 @@ async def process_analysis_with_id(
                 f"process_analysis_with_id: enriching with Jira matches, job_id={job_id}"
             )
             await _enrich_result_with_jira(
+                result.failures + list(result.child_job_analyses),
+                settings,
+                ai_provider,
+                ai_model,
+                job_id=job_id,
+            )
+
+        # Enrich CODE ISSUE failures with tests repo issue matches
+        if settings.tests_repo_url:
+            await _safe_update_progress_phase("enriching_tests_repo")
+            logger.debug(
+                f"process_analysis_with_id: enriching with tests repo matches, job_id={job_id}"
+            )
+            await _enrich_result_with_tests_repo_matches(
                 result.failures + list(result.child_job_analyses),
                 settings,
                 ai_provider,
@@ -1853,6 +1910,12 @@ async def analyze_failures(
         # Enrich PRODUCT BUG failures with Jira matches
         if _resolve_enable_jira(body, merged):
             await enrich_with_jira_matches(
+                all_analyses, merged, ai_provider, ai_model, job_id=job_id
+            )
+
+        # Enrich CODE ISSUE failures with tests repo issue matches
+        if merged.tests_repo_url:
+            await enrich_with_tests_repo_matches(
                 all_analyses, merged, ai_provider, ai_model, job_id=job_id
             )
 

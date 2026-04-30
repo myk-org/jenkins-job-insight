@@ -282,9 +282,18 @@ If CODE ISSUE:
     "line": "line number",
     "change": "specific code change that fixes all affected tests",
     "original_code": "optional complete current contents of exact/file/path.py for diff/editor display (raw code string, NO markdown formatting)",
-    "suggested_code": "complete replacement contents of exact/file/path.py after applying the fix (raw code string, NO markdown formatting)"
+    "suggested_code": "complete replacement contents of exact/file/path.py after applying the fix (raw code string, NO markdown formatting)",
+    "tests_repo_search_keywords": ["specific error symptom", "component + behavior", "error type"]
   }
 }
+
+tests_repo_search_keywords rules:
+- Generate 3-5 SHORT specific keywords for finding matching issues in the tests repository
+- Focus on the specific error symptom and broken behavior from the test code perspective
+- Combine component name with the specific failure (e.g. "fixture setup timeout", "API mock validation error")
+- AVOID generic/broad terms alone like "timeout", "failure", "error"
+- Each keyword should be specific enough to narrow GitHub issue search results to relevant issues
+- Think: "what would someone title a GitHub issue for this exact test code problem?"
 
 If PRODUCT BUG:
 {
@@ -469,6 +478,14 @@ def _recover_from_details(result: AnalysisDetail) -> AnalysisDetail:
         suggested_code_match = re.search(
             r'"suggested_code"\s*:\s*"((?:[^"\\]|\\.)*)"', details, re.DOTALL
         )
+        tests_repo_kw_match = re.search(
+            r'"tests_repo_search_keywords"\s*:\s*\[([^\]]*)\]', details
+        )
+        tests_repo_keywords = (
+            re.findall(r'"([^"]+)"', tests_repo_kw_match.group(1))
+            if tests_repo_kw_match
+            else []
+        )
         code_fix = CodeFix(
             file=file_match.group(1),
             line=line_match.group(1) if line_match else "",
@@ -483,6 +500,7 @@ def _recover_from_details(result: AnalysisDetail) -> AnalysisDetail:
                 if suggested_code_match
                 else None
             ),
+            tests_repo_search_keywords=tests_repo_keywords,
         )
 
     # Extract artifacts_evidence (top-level field)
