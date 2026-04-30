@@ -420,6 +420,34 @@ def _decode_recovered_json_string(value: str) -> str:
         return value.replace("\\n", "\n")
 
 
+def _extract_string_array_field(details: str, field_name: str) -> list[str]:
+    """Extract a JSON string-array field from raw AI response text.
+
+    Searches for ``"field_name": [...]`` via regex, parses the array
+    content, strips whitespace, removes empty/whitespace-only entries,
+    and deduplicates while preserving order.
+
+    Args:
+        details: Raw AI response text.
+        field_name: JSON field name whose value is a string array.
+
+    Returns:
+        Deduplicated list of non-empty strings, or ``[]`` on failure.
+    """
+    match = re.search(rf'"{re.escape(field_name)}"\s*:\s*\[([^\]]*)\]', details)
+    if not match:
+        return []
+    raw = re.findall(r'"([^"]+)"', match.group(1))
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in raw:
+        stripped = item.strip()
+        if stripped and stripped not in seen:
+            seen.add(stripped)
+            result.append(stripped)
+    return result
+
+
 def _recover_from_details(result: AnalysisDetail) -> AnalysisDetail:
     """Attempt to recover structured fields from a fallback result.
 
@@ -478,13 +506,8 @@ def _recover_from_details(result: AnalysisDetail) -> AnalysisDetail:
         suggested_code_match = re.search(
             r'"suggested_code"\s*:\s*"((?:[^"\\]|\\.)*)"', details, re.DOTALL
         )
-        tests_repo_kw_match = re.search(
-            r'"tests_repo_search_keywords"\s*:\s*\[([^\]]*)\]', details
-        )
-        tests_repo_keywords = (
-            re.findall(r'"([^"]+)"', tests_repo_kw_match.group(1))
-            if tests_repo_kw_match
-            else []
+        tests_repo_keywords = _extract_string_array_field(
+            details, "tests_repo_search_keywords"
         )
         code_fix = CodeFix(
             file=file_match.group(1),
@@ -520,12 +543,7 @@ def _recover_from_details(result: AnalysisDetail) -> AnalysisDetail:
         evidence_match = re.search(
             r'"evidence"\s*:\s*"((?:[^"\\]|\\.)*)"', details, re.DOTALL
         )
-        keywords_match = re.search(
-            r'"jira_search_keywords"\s*:\s*\[([^\]]*)\]', details
-        )
-        jira_keywords = (
-            re.findall(r'"([^"]+)"', keywords_match.group(1)) if keywords_match else []
-        )
+        jira_keywords = _extract_string_array_field(details, "jira_search_keywords")
 
         product_bug_report = ProductBugReport(
             title=title_match.group(1),

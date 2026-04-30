@@ -311,6 +311,18 @@ class CodeFix(BaseModel):
         description="Matched issues from the tests repository (populated in post-processing)",
     )
 
+    @field_validator("tests_repo_search_keywords")
+    @classmethod
+    def _normalize_tests_repo_search_keywords(cls, v: list[str]) -> list[str]:
+        seen: set[str] = set()
+        result: list[str] = []
+        for item in v:
+            stripped = item.strip()
+            if stripped and stripped not in seen:
+                seen.add(stripped)
+                result.append(stripped)
+        return result
+
 
 class AnalysisDetail(BaseModel):
     """Structured AI analysis broken into sections."""

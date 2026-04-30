@@ -22,6 +22,8 @@ from jenkins_job_insight.models import (
 )
 
 
+_TEST_GITHUB_TOKEN = "ghp_test_token_123"  # noqa: S105  # pragma: allowlist secret
+
 _BASE_ENV = {
     "JENKINS_URL": "https://jenkins.example.com",
     "JENKINS_USER": "testuser",
@@ -35,7 +37,7 @@ def settings_with_tests_repo() -> Generator[Settings, None, None]:
     env = {
         **_BASE_ENV,
         "TESTS_REPO_URL": "https://github.com/org/test-repo",
-        "GITHUB_TOKEN": "ghp_test_token_123",
+        "GITHUB_TOKEN": _TEST_GITHUB_TOKEN,
     }
     with patch.dict(os.environ, env, clear=True):
         yield Settings(_env_file=None)
@@ -160,7 +162,7 @@ class TestSearchGitHubIssues:
             candidates = await search_github_issues(
                 ["login selector"],
                 "https://github.com/org/repo",
-                "ghp_token",
+                _TEST_GITHUB_TOKEN,
             )
 
         assert len(candidates) == 1
@@ -169,6 +171,12 @@ class TestSearchGitHubIssues:
         assert candidates[0]["number"] == 42
         assert candidates[0]["status"] == "open"
         assert candidates[0]["url"] == "https://github.com/org/repo/issues/42"
+
+        # Verify the outbound query includes repo scope and issue filter
+        call_kwargs = mock_client.get.call_args
+        query = call_kwargs.kwargs["params"]["q"]
+        assert "repo:org/repo" in query
+        assert "is:issue" in query
 
     async def test_empty_keywords(self) -> None:
         """Search with empty keywords returns empty list."""
@@ -198,6 +206,12 @@ class TestSearchGitHubIssues:
             result = await search_github_issues(["test"], "https://github.com/org/repo")
 
         assert result == []
+
+        # Verify the outbound query still included repo scope and issue filter
+        call_kwargs = mock_client.get.call_args
+        query = call_kwargs.kwargs["params"]["q"]
+        assert "repo:org/repo" in query
+        assert "is:issue" in query
 
     async def test_network_error_returns_empty(self) -> None:
         """Network errors return empty list (never raises)."""
@@ -230,12 +244,12 @@ class TestSearchGitHubIssues:
             mock_cls.return_value = mock_client
 
             await search_github_issues(
-                ["test"], "https://github.com/org/repo", "ghp_my_token"
+                ["test"], "https://github.com/org/repo", _TEST_GITHUB_TOKEN
             )
 
             call_kwargs = mock_client.get.call_args
             headers = call_kwargs.kwargs.get("headers", {})
-            assert headers["Authorization"] == "Bearer ghp_my_token"
+            assert headers["Authorization"] == f"Bearer {_TEST_GITHUB_TOKEN}"
 
 
 class TestCollectCodeFixReports:
