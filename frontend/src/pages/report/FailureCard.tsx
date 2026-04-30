@@ -21,7 +21,7 @@ import { ClassificationSelect } from './ClassificationSelect'
 import { BugCreationDialog } from './BugCreationDialog'
 import { useReviewSuggestion } from './useReviewSuggestion'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { ChevronDown, ChevronRight, Bug, MessageSquare, CheckCircle2, Copy, Check, Clock } from 'lucide-react'
+import { ChevronDown, ChevronRight, Bug, MessageSquare, CheckCircle2, Copy, Check } from 'lucide-react'
 
 function IssueButton({ disabled, tooltip, label, onClick }: {
   disabled: boolean
@@ -326,12 +326,7 @@ export function FailureCard({ group, jobId, childJobName, childBuildNumber, inde
                   sectionId="analysis"
                   copiedSection={copiedSection}
                   onCopy={copyToClipboard}
-                  extra={/timed?\s*-?\s*out/i.test(analysis.details) ? (
-                    <Badge variant="warning" className="text-[10px] gap-1">
-                      <Clock className="h-3 w-3" />
-                      Timed Out
-                    </Badge>
-                  ) : undefined}
+
                 />
                 <div className="rounded-md bg-glow-blue p-3 text-sm text-text-secondary whitespace-pre-wrap"><LinkedText text={analysis.details} repoUrls={repoUrls} /></div>
               </div>
