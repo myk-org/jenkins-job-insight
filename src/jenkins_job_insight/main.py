@@ -2609,7 +2609,9 @@ async def get_issue_prompt(
     tests_repo_token = ""
     if request_params:
         decrypted = decrypt_sensitive_fields(request_params)
-        tests_repo_token = decrypted.get("tests_repo_token", "")
+        stored_token = decrypted.get("tests_repo_token", "")
+        if not _is_encrypted_value(stored_token):
+            tests_repo_token = stored_token
     if not tests_repo_token and settings.tests_repo_token:
         tests_repo_token = settings.tests_repo_token.get_secret_value()
 
