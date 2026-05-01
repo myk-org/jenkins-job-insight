@@ -1417,7 +1417,8 @@ class TestGetIssuePrompt:
         mock_mgr.create_workspace.assert_called_once()
         mock_mgr.cleanup.assert_called_once()
         mock_mgr.clone_into.assert_called_once()
-        _, kwargs = mock_mgr.clone_into.call_args
+        args, kwargs = mock_mgr.clone_into.call_args
+        assert args[0] == "https://github.com/org/repo"  # normalized, no :ref suffix
         assert kwargs["branch"] == "release-4.19"
         assert kwargs["token"] == FAKE_GITHUB_TOKEN
 
@@ -1435,8 +1436,7 @@ class TestGetIssuePrompt:
         await storage.save_result(
             "job-ip-norepo", "http://jenkins", "completed", result_data
         )
-        with patch("jenkins_job_insight.main._resolve_tests_repo_url", return_value=""):
-            response = test_client.get("/results/job-ip-norepo/issue-prompt")
+        response = test_client.get("/results/job-ip-norepo/issue-prompt")
 
         assert response.status_code == 200
         assert response.json()["prompt"] == ""

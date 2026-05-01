@@ -2505,10 +2505,10 @@ async def enrich_comments(
 
 
 def _resolve_tests_repo_url(settings: Settings, result_data: dict) -> str:
-    """Resolve tests repo URL from settings or job request params."""
-    url = str(settings.tests_repo_url or "")
+    """Resolve tests repo URL from job request params or server settings."""
+    url = str(result_data.get("request_params", {}).get("tests_repo_url", ""))
     if not url:
-        url = str(result_data.get("request_params", {}).get("tests_repo_url", ""))
+        url = str(settings.tests_repo_url or "")
     return url
 
 
