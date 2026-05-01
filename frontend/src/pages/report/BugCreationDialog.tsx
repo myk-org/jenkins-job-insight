@@ -134,17 +134,23 @@ export function BugCreationDialog({
   // Fetch default issue prompt when dialog opens
   useEffect(() => {
     if (!open || phase !== 'idle') return
+    let ignore = false
     setPhase('loading-prompt')
     api
       .get<{ prompt?: string; issue_prompt?: string }>(`/results/${jobId}/issue-prompt`)
       .then((res) => {
+        if (ignore) return
         setIssuePrompt(res.issue_prompt ?? res.prompt ?? '')
         setPhase('prompt')
       })
       .catch(() => {
+        if (ignore) return
         setIssuePrompt('')
         setPhase('prompt')
       })
+    return () => {
+      ignore = true
+    }
   }, [open, phase, jobId])
 
   function handleContinueFromPrompt() {
