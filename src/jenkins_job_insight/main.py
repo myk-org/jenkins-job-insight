@@ -2594,6 +2594,11 @@ async def get_issue_prompt(
     if not tests_repo_url:
         return {"prompt": ""}
 
+    # Resolve ref: prefer stored request_params, then parse from URL
+    tests_repo_ref = request_params.get("tests_repo_ref", "")
+    if not tests_repo_ref:
+        tests_repo_url, tests_repo_ref = parse_repo_ref(tests_repo_url)
+
     # Resolve token: decrypt stored request_params first
     tests_repo_token = ""
     if request_params:
@@ -2605,11 +2610,13 @@ async def get_issue_prompt(
     try:
         repo_manager = RepositoryManager()
         try:
+            workspace = repo_manager.create_workspace()
             clone_dir = await asyncio.to_thread(
                 repo_manager.clone_into,
                 tests_repo_url,
-                repo_manager.base_path / f"issue-prompt-{job_id[:8]}",
+                workspace / "repo",
                 depth=1,
+                branch=tests_repo_ref,
                 token=tests_repo_token or None,
             )
             prompt_file = clone_dir / JOB_INSIGHT_ISSUE_PROMPT_FILENAME

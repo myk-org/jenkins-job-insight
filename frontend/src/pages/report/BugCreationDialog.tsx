@@ -20,7 +20,7 @@ import { getGithubToken, getJiraToken, getJiraEmail } from '@/lib/cookies'
 import { useReportDispatch, useRefreshEnrichments } from './ReportContext'
 
 type BugTarget = 'github' | 'jira'
-type Phase = 'idle' | 'prompt' | 'loading' | 'preview' | 'creating' | 'success' | 'error'
+type Phase = 'idle' | 'loading-prompt' | 'prompt' | 'loading' | 'preview' | 'creating' | 'success' | 'error'
 
 interface BugCreationDialogProps {
   open: boolean
@@ -134,10 +134,11 @@ export function BugCreationDialog({
   // Fetch default issue prompt when dialog opens
   useEffect(() => {
     if (!open || phase !== 'idle') return
+    setPhase('loading-prompt')
     api
-      .get<{ issue_prompt: string }>(`/results/${jobId}/issue-prompt`)
+      .get<{ prompt?: string; issue_prompt?: string }>(`/results/${jobId}/issue-prompt`)
       .then((res) => {
-        setIssuePrompt(res.issue_prompt ?? '')
+        setIssuePrompt(res.issue_prompt ?? res.prompt ?? '')
         setPhase('prompt')
       })
       .catch(() => {
@@ -199,7 +200,7 @@ export function BugCreationDialog({
     }
   }
 
-  const isBusy = phase === 'loading' || phase === 'prompt' || phase === 'preview' || phase === 'creating'
+  const isBusy = phase === 'loading-prompt' || phase === 'loading' || phase === 'prompt' || phase === 'preview' || phase === 'creating'
 
   function resetState() {
     setTimeout(() => {
@@ -242,6 +243,14 @@ export function BugCreationDialog({
           <DialogTitle>{phase === 'success' ? `${label} Created` : `Create ${label}`}</DialogTitle>
           {phase === 'preview' && <DialogDescription>Review and edit before creating.</DialogDescription>}
         </DialogHeader>
+
+        {/* Loading prompt */}
+        {phase === 'loading-prompt' && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <LoadingSpinner size="lg" />
+            <p className="text-sm text-text-secondary">Loading issue prompt...</p>
+          </div>
+        )}
 
         {/* Prompt */}
         {phase === 'prompt' && (

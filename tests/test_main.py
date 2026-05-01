@@ -1396,9 +1396,10 @@ class TestGetIssuePrompt:
         with patch("jenkins_job_insight.main.RepositoryManager") as MockRepoMgr:
             mock_mgr = MagicMock()
             MockRepoMgr.return_value = mock_mgr
-            mock_mgr.base_path = Path(tempfile.mkdtemp())
+            workspace_dir = Path(tempfile.mkdtemp())
+            mock_mgr.create_workspace.return_value = workspace_dir
 
-            def fake_clone_into(url, target, depth=1, token=None):
+            def fake_clone_into(url, target, depth=1, branch="", token=None):
                 target.mkdir(parents=True, exist_ok=True)
                 (target / "JOB_INSIGHT_ISSUE_PROMPT.md").write_text(
                     "Include product version info"
@@ -1411,6 +1412,7 @@ class TestGetIssuePrompt:
 
         assert response.status_code == 200
         assert response.json()["prompt"] == "Include product version info"
+        mock_mgr.create_workspace.assert_called_once()
         mock_mgr.cleanup.assert_called_once()
 
     @pytest.mark.asyncio
@@ -1482,9 +1484,10 @@ class TestGetIssuePrompt:
         with patch("jenkins_job_insight.main.RepositoryManager") as MockRepoMgr:
             mock_mgr = MagicMock()
             MockRepoMgr.return_value = mock_mgr
-            mock_mgr.base_path = Path(tempfile.mkdtemp())
+            workspace_dir = Path(tempfile.mkdtemp())
+            mock_mgr.create_workspace.return_value = workspace_dir
 
-            def fake_clone_into(url, target, depth=1, token=None):
+            def fake_clone_into(url, target, depth=1, branch="", token=None):
                 target.mkdir(parents=True, exist_ok=True)
                 # No JOB_INSIGHT_ISSUE_PROMPT.md file created
                 return target
