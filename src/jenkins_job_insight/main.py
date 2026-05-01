@@ -2574,6 +2574,7 @@ async def _load_effective_failure(
 @app.get("/results/{job_id}/issue-prompt")
 async def get_issue_prompt(
     job_id: str,
+    request: Request,
     settings: Settings = Depends(get_settings),
     _: None = Depends(_bind_job_id),
 ) -> dict:
@@ -2583,6 +2584,8 @@ async def get_issue_prompt(
     repo root, and returns its content.  Returns ``{"prompt": ""}`` when no
     repo is configured, the file does not exist, or any error occurs.
     """
+    _check_allow_list(request)
+
     stored = await storage.get_result(job_id, strip_sensitive=False)
     if not stored or not stored.get("result"):
         return {"prompt": ""}

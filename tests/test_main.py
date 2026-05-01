@@ -1388,7 +1388,7 @@ class TestGetIssuePrompt:
             "request_params": encrypt_sensitive_fields(
                 {
                     "tests_repo_url": "https://github.com/org/repo:release-4.19",
-                    "tests_repo_token": "tok",
+                    "tests_repo_token": FAKE_GITHUB_TOKEN,
                 }
             ),
         }
@@ -1419,7 +1419,7 @@ class TestGetIssuePrompt:
         mock_mgr.clone_into.assert_called_once()
         _, kwargs = mock_mgr.clone_into.call_args
         assert kwargs["branch"] == "release-4.19"
-        assert kwargs["token"] == "tok"
+        assert kwargs["token"] == FAKE_GITHUB_TOKEN
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_no_repo_configured(self, test_client):
