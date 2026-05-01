@@ -1215,6 +1215,7 @@ async def _enrich_result_with_tests_repo_matches(
             ``enrich_with_tests_repo_matches`` sees the URL.
     """
     effective_url = tests_repo_url or str(settings.tests_repo_url or "")
+    effective_url, _ = parse_repo_ref(effective_url)
     if not effective_url:
         return
 
