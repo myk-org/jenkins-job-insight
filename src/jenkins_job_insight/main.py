@@ -2504,12 +2504,43 @@ async def enrich_comments(
     return {"enrichments": enrichments}
 
 
-def _resolve_tests_repo_url(settings: Settings, result_data: dict) -> str:
-    """Resolve tests repo URL from job request params or server settings."""
-    url = str(result_data.get("request_params", {}).get("tests_repo_url", ""))
-    if not url:
-        url = str(settings.tests_repo_url or "")
-    return url
+def _resolve_analyzed_repo(
+    settings: Settings, result_data: dict
+) -> tuple[str, str, str]:
+    """Resolve tests repo URL, ref, and token from stored result and settings.
+
+    Resolution order for each component:
+      - **URL**: stored ``request_params.tests_repo_url`` → ``settings.tests_repo_url``
+      - **ref**: stored ``request_params.tests_repo_ref`` → ref parsed from URL suffix
+      - **token**: decrypted ``request_params.tests_repo_token`` → ``settings.tests_repo_token``
+
+    Returns:
+        Tuple of ``(url, ref, token)`` — any element may be an empty string.
+    """
+    request_params = result_data.get("request_params", {})
+
+    # URL: prefer stored, fall back to server default
+    repo_spec = str(request_params.get("tests_repo_url", ""))
+    if not repo_spec:
+        repo_spec = str(settings.tests_repo_url or "")
+    url, parsed_ref = parse_repo_ref(repo_spec)
+
+    # Ref: prefer explicit stored ref, then parsed from URL suffix
+    ref = str(request_params.get("tests_repo_ref", ""))
+    if not ref:
+        ref = parsed_ref
+
+    # Token: decrypt stored value, fall back to server token
+    token = ""
+    if request_params:
+        decrypted = decrypt_sensitive_fields(request_params)
+        stored_token = decrypted.get("tests_repo_token", "")
+        if not _is_encrypted_value(stored_token):
+            token = stored_token
+    if not token and settings.tests_repo_token:
+        token = settings.tests_repo_token.get_secret_value()
+
+    return url, ref, token
 
 
 def _resolve_github_repo_url(
@@ -2519,7 +2550,7 @@ def _resolve_github_repo_url(
 
     If *body_repo_url* is provided it is validated via ``_parse_github_repo_url``
     (which raises ``ValueError`` on bad input).  Otherwise falls back to
-    ``_resolve_tests_repo_url``.
+    ``_resolve_analyzed_repo``.
 
     Raises:
         HTTPException: 400 when *body_repo_url* is invalid.
@@ -2532,7 +2563,8 @@ def _resolve_github_repo_url(
                 status_code=400, detail=f"Invalid github_repo_url: {exc}"
             ) from exc
         return body_repo_url
-    return _resolve_tests_repo_url(settings, result_data)
+    url, _ref, _token = _resolve_analyzed_repo(settings, result_data)
+    return url
 
 
 async def _load_effective_failure(
@@ -2591,29 +2623,12 @@ async def get_issue_prompt(
         return {"prompt": ""}
 
     result_data = stored["result"]
-    request_params = result_data.get("request_params", {})
 
-    # Resolve from analyzed job context first, then server default
-    stored_repo_spec = str(request_params.get("tests_repo_url", ""))
-    effective_repo_spec = stored_repo_spec or str(settings.tests_repo_url or "")
-    tests_repo_url, parsed_repo_ref = parse_repo_ref(effective_repo_spec)
+    tests_repo_url, tests_repo_ref, tests_repo_token = _resolve_analyzed_repo(
+        settings, result_data
+    )
     if not tests_repo_url:
         return {"prompt": ""}
-
-    # Resolve ref: prefer stored request_params, then parsed from repo spec
-    tests_repo_ref = request_params.get("tests_repo_ref", "")
-    if not tests_repo_ref:
-        tests_repo_ref = parsed_repo_ref
-
-    # Resolve token: decrypt stored request_params first
-    tests_repo_token = ""
-    if request_params:
-        decrypted = decrypt_sensitive_fields(request_params)
-        stored_token = decrypted.get("tests_repo_token", "")
-        if not _is_encrypted_value(stored_token):
-            tests_repo_token = stored_token
-    if not tests_repo_token and settings.tests_repo_token:
-        tests_repo_token = settings.tests_repo_token.get_secret_value()
 
     try:
         repo_manager = RepositoryManager()
