@@ -1214,13 +1214,13 @@ async def _enrich_result_with_tests_repo_matches(
             temporary settings copy is created so that
             ``enrich_with_tests_repo_matches`` sees the URL.
     """
-    effective_url = str(settings.tests_repo_url or "") or tests_repo_url
+    effective_url = tests_repo_url or str(settings.tests_repo_url or "")
     if not effective_url:
         return
 
     # When the URL came from the request (not env), inject it into a
     # settings copy so downstream helpers see it.
-    if not settings.tests_repo_url and effective_url:
+    if effective_url != str(settings.tests_repo_url or ""):
         merged_data = settings.model_dump(mode="python")
         merged_data["tests_repo_url"] = effective_url
         settings = Settings.model_validate(merged_data)
