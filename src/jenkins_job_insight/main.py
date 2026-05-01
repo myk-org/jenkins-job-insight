@@ -2582,22 +2582,24 @@ async def get_issue_prompt(
     repo root, and returns its content.  Returns ``{"prompt": ""}`` when no
     repo is configured, the file does not exist, or any error occurs.
     """
-    stored = await storage.get_result(job_id)
+    stored = await storage.get_result(job_id, strip_sensitive=False)
     if not stored or not stored.get("result"):
         return {"prompt": ""}
 
     result_data = stored["result"]
     request_params = result_data.get("request_params", {})
 
-    # Resolve tests_repo_url from settings or stored request_params
-    tests_repo_url = _resolve_tests_repo_url(settings, result_data)
+    # Resolve from analyzed job context first, then server default
+    stored_repo_spec = str(request_params.get("tests_repo_url", ""))
+    effective_repo_spec = stored_repo_spec or str(settings.tests_repo_url or "")
+    tests_repo_url, parsed_repo_ref = parse_repo_ref(effective_repo_spec)
     if not tests_repo_url:
         return {"prompt": ""}
 
-    # Resolve ref: prefer stored request_params, then parse from URL
+    # Resolve ref: prefer stored request_params, then parsed from repo spec
     tests_repo_ref = request_params.get("tests_repo_ref", "")
     if not tests_repo_ref:
-        tests_repo_url, tests_repo_ref = parse_repo_ref(tests_repo_url)
+        tests_repo_ref = parsed_repo_ref
 
     # Resolve token: decrypt stored request_params first
     tests_repo_token = ""

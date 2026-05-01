@@ -1385,10 +1385,12 @@ class TestGetIssuePrompt:
             "status": "completed",
             "summary": "",
             "failures": [],
-            "request_params": {
-                "tests_repo_url": "https://github.com/org/repo",
-                "tests_repo_token": "",
-            },
+            "request_params": encrypt_sensitive_fields(
+                {
+                    "tests_repo_url": "https://github.com/org/repo:release-4.19",
+                    "tests_repo_token": "tok",
+                }
+            ),
         }
         await storage.save_result(
             "job-ip-exists", "http://jenkins", "completed", result_data
@@ -1414,6 +1416,10 @@ class TestGetIssuePrompt:
         assert response.json()["prompt"] == "Include product version info"
         mock_mgr.create_workspace.assert_called_once()
         mock_mgr.cleanup.assert_called_once()
+        mock_mgr.clone_into.assert_called_once()
+        _, kwargs = mock_mgr.clone_into.call_args
+        assert kwargs["branch"] == "release-4.19"
+        assert kwargs["token"] == "tok"
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_no_repo_configured(self, test_client):
