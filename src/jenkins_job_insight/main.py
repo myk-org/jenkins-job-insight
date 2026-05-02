@@ -602,8 +602,10 @@ async def lifespan(app: FastAPI):
     await init_db()
     await storage.cleanup_expired_sessions()
 
-    # Load LLM pricing cache (best-effort)
-    await pricing_cache.load()
+    # Load LLM pricing cache asynchronously (best-effort, non-blocking)
+    _warmup = asyncio.create_task(pricing_cache.load())
+    _background_tasks.add(_warmup)
+    _warmup.add_done_callback(_background_tasks.discard)
     pricing_cache.start_background_refresh()
 
     # Wire AI model cache to pricing data and pre-populate cursor models
@@ -612,14 +614,14 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(_safe_preload_cursor_models())
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
-    waiting_jobs = await storage.mark_stale_results_failed()
-    if waiting_jobs:
-        # Schedule resumption as a background task so it runs after the
-        # app is fully started and ready to serve internal API requests.
-        task = asyncio.create_task(_deferred_resume_waiting_jobs(waiting_jobs))
-        _background_tasks.add(task)
-        task.add_done_callback(_background_tasks.discard)
     try:
+        waiting_jobs = await storage.mark_stale_results_failed()
+        if waiting_jobs:
+            # Schedule resumption as a background task so it runs after the
+            # app is fully started and ready to serve internal API requests.
+            task = asyncio.create_task(_deferred_resume_waiting_jobs(waiting_jobs))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
         yield
     finally:
         pricing_cache.stop_background_refresh()

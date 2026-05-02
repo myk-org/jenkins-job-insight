@@ -107,7 +107,7 @@ function SummaryCard({ title, icon, calls, tokens, inputTokens, outputTokens, co
             <span className="font-mono text-xs text-text-secondary">{formatCompactNumber(outputTokens)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-text-tertiary">Cost (estimated)</span>
+            <span className="text-xs text-text-tertiary">Cost</span>
             <span className="font-mono text-sm font-medium text-signal-green">
               {formatCostCell(cost)}
             </span>
@@ -250,7 +250,7 @@ export function TokenUsagePage() {
       <div>
         <h1 className="font-display text-xl font-bold text-text-primary">Token Usage</h1>
         <p className="mt-0.5 text-sm text-text-tertiary inline-flex items-center gap-1">
-          AI provider token consumption and costs (estimated)
+          AI provider token consumption and costs
           <Tooltip>
             <TooltipTrigger asChild>
               <Info className="h-3.5 w-3.5 text-text-tertiary cursor-help inline-block" />
@@ -397,7 +397,7 @@ export function TokenUsagePage() {
               <SortableHeader label="Output Tokens" sortKey="output_tokens" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
               <SortableHeader label="Cache Read" sortKey="cache_read_tokens" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
               <SortableHeader label="Cache Write" sortKey="cache_write_tokens" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
-              <SortableHeader label="Cost (estimated)" sortKey="cost_usd" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
+              <SortableHeader label="Cost" sortKey="cost_usd" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
               <SortableHeader label="Avg Duration" sortKey="avg_duration_ms" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
             </TableRow>
           </TableHeader>
