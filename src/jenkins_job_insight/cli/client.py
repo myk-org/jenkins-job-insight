@@ -181,6 +181,10 @@ class JJIClient:
         """List analysis jobs with dashboard metadata. GET /api/dashboard"""
         return self._request("GET", "/api/dashboard")
 
+    def get_active_count(self) -> dict:
+        """Get count of currently active analyses. GET /api/dashboard/active-count"""
+        return self._request("GET", "/api/dashboard/active-count")
+
     def get_result(self, job_id: str) -> dict:
         """Get a stored result by job_id. GET /results/{job_id}"""
         return self._request("GET", f"/results/{job_id}")

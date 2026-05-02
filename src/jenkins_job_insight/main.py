@@ -3801,6 +3801,18 @@ async def delete_job_endpoint(
     return {"status": "deleted", "job_id": job_id}
 
 
+@app.get("/api/dashboard/active-count")
+async def get_active_analysis_count() -> dict:
+    """Get count of currently active analyses (running/pending/waiting)."""
+    logger.debug("GET /api/dashboard/active-count")
+    try:
+        count = await storage.count_active_analyses()
+        return {"count": count}
+    except Exception:
+        logger.warning("Failed to get active analysis count", exc_info=True)
+        return {"count": 0}
+
+
 @app.get("/api/dashboard")
 async def api_dashboard() -> list[dict]:
     """Return dashboard job list as JSON for the React frontend."""

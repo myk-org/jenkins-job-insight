@@ -45,11 +45,11 @@ export function NavBar() {
     }
   }, [])
 
-  const fetchActiveCount = useCallback(async () => {
+  const fetchActiveCount = useCallback(async (ignore?: { current: boolean }) => {
     try {
-      const res = await api.get<Array<{ status: string }>>('/api/dashboard')
-      const active = res.filter(j => ['running', 'pending', 'waiting'].includes(j.status))
-      setActiveCount(active.length)
+      const res = await api.get<{ count: number }>('/api/dashboard/active-count')
+      if (ignore?.current) return
+      setActiveCount(res.count)
     } catch {
       // best-effort
     }
@@ -66,9 +66,11 @@ export function NavBar() {
 
   useEffect(() => {
     if (!username) return
-    fetchActiveCount()
-    activeIntervalRef.current = setInterval(fetchActiveCount, UNREAD_POLL_INTERVAL)
+    const ignore = { current: false }
+    fetchActiveCount(ignore)
+    activeIntervalRef.current = setInterval(() => fetchActiveCount(ignore), UNREAD_POLL_INTERVAL)
     return () => {
+      ignore.current = true
       if (activeIntervalRef.current) clearInterval(activeIntervalRef.current)
     }
   }, [username, fetchActiveCount])

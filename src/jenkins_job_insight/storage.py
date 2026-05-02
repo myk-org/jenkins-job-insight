@@ -1643,7 +1643,25 @@ async def get_job_stats(job_name: str, exclude_job_id: str = "") -> dict:
     }
 
 
+ACTIVE_STATUSES = ("running", "pending", "waiting")
+
 DEFAULT_DASHBOARD_LIMIT = 500
+
+
+async def count_active_analyses() -> int:
+    """Return the number of analyses with an active status.
+
+    Active statuses are: running, pending, waiting.
+    Uses a lightweight COUNT query — no result_json is fetched.
+    """
+    placeholders = ",".join("?" for _ in ACTIVE_STATUSES)
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            f"SELECT COUNT(*) FROM results WHERE status IN ({placeholders})",
+            ACTIVE_STATUSES,
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
 
 
 async def list_results_for_dashboard(
