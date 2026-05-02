@@ -1078,6 +1078,70 @@ class TestAiConfigsCommand:
         assert "No AI configurations found" in result.output
 
 
+class TestAiModelsCommand:
+    def test_ai_models_with_provider(self, mock_client):
+        mock_client.list_ai_models.return_value = {
+            "provider": "claude",
+            "models": [
+                {"id": "claude-sonnet-4", "name": "Claude Sonnet 4"},
+                {"id": "claude-opus-4-6", "name": "Claude Opus 4 6"},
+            ],
+        }
+        result = runner.invoke(app, ["ai-models", "--provider", "claude"])
+        assert result.exit_code == 0
+        assert "claude-sonnet-4" in result.output
+        assert "claude-opus-4-6" in result.output
+
+    def test_ai_models_no_provider(self, mock_client):
+        mock_client.list_ai_models.return_value = {
+            "providers": {
+                "claude": [{"id": "claude-sonnet-4", "name": "Claude Sonnet 4"}],
+                "cursor": [],
+                "gemini": [{"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro"}],
+            }
+        }
+        result = runner.invoke(app, ["ai-models"])
+        assert result.exit_code == 0
+        assert "claude" in result.output
+        assert "gemini" in result.output
+
+    def test_ai_models_json(self, mock_client):
+        mock_client.list_ai_models.return_value = {
+            "provider": "claude",
+            "models": [{"id": "claude-sonnet-4", "name": "Claude Sonnet 4"}],
+        }
+        result = runner.invoke(app, ["ai-models", "--provider", "claude", "--json"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed["provider"] == "claude"
+        assert len(parsed["models"]) == 1
+
+    def test_ai_models_empty_provider(self, mock_client):
+        mock_client.list_ai_models.return_value = {
+            "provider": "cursor",
+            "models": [],
+        }
+        result = runner.invoke(app, ["ai-models", "--provider", "cursor"])
+        assert result.exit_code == 0
+        assert "No models found" in result.output
+
+    def test_ai_models_empty_all(self, mock_client):
+        mock_client.list_ai_models.return_value = {"providers": {}}
+        result = runner.invoke(app, ["ai-models"])
+        assert result.exit_code == 0
+        assert "No models found" in result.output
+
+    def test_ai_models_error(self, mock_client):
+        from jenkins_job_insight.cli.client import JJIError
+
+        mock_client.list_ai_models.side_effect = JJIError(
+            status_code=500, detail="Server error"
+        )
+        result = runner.invoke(app, ["ai-models"])
+        assert result.exit_code == 1
+        assert "Error" in result.output
+
+
 class TestMentionableUsersCommand:
     def test_mentionable_users(self, mock_client):
         mock_client.get_mentionable_users.return_value = {

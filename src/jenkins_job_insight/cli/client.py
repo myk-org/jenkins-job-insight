@@ -742,6 +742,15 @@ class JJIClient:
         """Mark all mentions as read. POST /api/users/mentions/read-all"""
         return self._request("POST", "/api/users/mentions/read-all")
 
+    # -- AI Models ------------------------------------------------------------
+
+    def list_ai_models(self, provider: str = "") -> dict:
+        """List available AI models. GET /api/ai-models"""
+        params: dict = {}
+        if provider:
+            params["provider"] = provider
+        return self._request("GET", "/api/ai-models", params=params)
+
     # -- AI Configs -----------------------------------------------------------
 
     def get_ai_configs(self) -> list[dict]:

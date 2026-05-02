@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,8 @@ import type { AiConfig } from '@/types'
 import { Section } from '@/components/shared/Section'
 import { Toggle } from '@/components/shared/Toggle'
 import { FieldLabel } from '@/components/shared/FieldLabel'
+import { ModelCombobox } from '@/components/shared/ModelCombobox'
+import type { ModelOption } from '@/components/shared/ModelCombobox'
 import { Plus, Trash2, Send, Upload } from 'lucide-react'
 
 function toIntInRange(value: string, min: number, max: number, fallback: number): number {
@@ -45,6 +47,7 @@ export function NewAnalysisPage() {
   // AI configuration
   const [aiProvider, setAiProvider] = useState('claude')
   const [aiModel, setAiModel] = useState('')
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>([])
   const [aiCliTimeout, setAiCliTimeout] = useState<number | undefined>(undefined)
   const [rawPrompt, setRawPrompt] = useState('')
 
@@ -71,6 +74,14 @@ export function NewAnalysisPage() {
   const [maxArtifactsSize, setMaxArtifactsSize] = useState<number | undefined>(undefined)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch available models when provider changes
+  useEffect(() => {
+    if (!aiProvider) { setAvailableModels([]); return }
+    api.get<{ models: ModelOption[] }>(`/api/ai-models?provider=${aiProvider}`)
+      .then(res => setAvailableModels(res.models ?? []))
+      .catch(() => setAvailableModels([]))
+  }, [aiProvider])
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -397,10 +408,11 @@ export function NewAnalysisPage() {
             </div>
             <div className="space-y-1.5">
               <FieldLabel>AI Model</FieldLabel>
-              <Input
-                placeholder="Default model"
+              <ModelCombobox
                 value={aiModel}
-                onChange={(e) => setAiModel(e.target.value)}
+                onChange={setAiModel}
+                options={availableModels}
+                placeholder="Default model"
               />
             </div>
             <div className="space-y-1.5">

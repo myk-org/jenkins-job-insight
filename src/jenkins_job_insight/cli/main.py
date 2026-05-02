@@ -1362,6 +1362,58 @@ def ai_configs(
         )
 
 
+# -- AI Models ----------------------------------------------------------------
+
+
+@app.command("ai-models")
+def ai_models_cmd(
+    provider: str = typer.Option(
+        "",
+        "--provider",
+        "-p",
+        help="Filter by AI provider (e.g. cursor, claude, gemini).",
+    ),
+    json_output: bool = _JSON_OPTION,
+):
+    """List available AI models per provider."""
+    _set_json(json_output)
+    try:
+        client = _get_client()
+        data = client.list_ai_models(provider=provider)
+    except JJIError as err:
+        _handle_error(err)
+
+    if _state.get("json", False):
+        print_output(data, columns=[], as_json=True)
+    else:
+        if provider:
+            models = data.get("models", [])
+            if not models:
+                typer.echo(f"No models found for provider '{provider}'.")
+                raise typer.Exit()
+            typer.echo(f"Models for {provider}:")
+            print_output(
+                models,
+                columns=["id", "name"],
+                labels={"id": "MODEL ID", "name": "DISPLAY NAME"},
+                as_json=False,
+            )
+        else:
+            providers_data = data.get("providers", {})
+            if not providers_data:
+                typer.echo("No models found.")
+                raise typer.Exit()
+            for prov, models in sorted(providers_data.items()):
+                typer.echo(f"\n{prov} ({len(models)} models):")
+                if models:
+                    print_output(
+                        models,
+                        columns=["id", "name"],
+                        labels={"id": "MODEL ID", "name": "DISPLAY NAME"},
+                        as_json=False,
+                    )
+
+
 # -- Users ----------------------------------------------------------------
 # Note: /api/notifications/subscribe, /api/notifications/unsubscribe, and
 # /api/notifications/vapid-public-key are intentionally browser-only (Web Push

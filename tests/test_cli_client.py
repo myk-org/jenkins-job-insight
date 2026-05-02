@@ -1609,6 +1609,57 @@ class TestAnalyzeCommentIntent:
         assert exc_info.value.status_code == 500
 
 
+class TestJJIClientAiModels:
+    def test_list_ai_models_no_provider(self):
+        def handler(request):
+            assert request.method == "GET"
+            assert request.url.path == "/api/ai-models"
+            # No provider param
+            assert "provider" not in str(request.url.params)
+            return httpx.Response(
+                200,
+                json={
+                    "providers": {
+                        "claude": [
+                            {"id": "claude-sonnet-4", "name": "Claude Sonnet 4"}
+                        ],
+                        "cursor": [],
+                    }
+                },
+            )
+
+        client = _make_client(handler)
+        result = client.list_ai_models()
+        assert "providers" in result
+        assert len(result["providers"]["claude"]) == 1
+
+    def test_list_ai_models_with_provider(self):
+        def handler(request):
+            assert request.method == "GET"
+            assert request.url.path == "/api/ai-models"
+            assert request.url.params["provider"] == "claude"
+            return httpx.Response(
+                200,
+                json={
+                    "provider": "claude",
+                    "models": [{"id": "claude-sonnet-4", "name": "Claude Sonnet 4"}],
+                },
+            )
+
+        client = _make_client(handler)
+        result = client.list_ai_models(provider="claude")
+        assert result["provider"] == "claude"
+        assert len(result["models"]) == 1
+
+    def test_list_ai_models_empty(self):
+        def handler(request):
+            return httpx.Response(200, json={"provider": "cursor", "models": []})
+
+        client = _make_client(handler)
+        result = client.list_ai_models(provider="cursor")
+        assert result["models"] == []
+
+
 class TestJJIClientApiKeyHeader:
     def test_api_key_sent_as_bearer_header(self):
         def check_header(request):
