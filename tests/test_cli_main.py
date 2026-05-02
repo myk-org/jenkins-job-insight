@@ -1089,6 +1089,7 @@ class TestAiModelsCommand:
         }
         result = runner.invoke(app, ["ai-models", "--provider", "claude"])
         assert result.exit_code == 0
+        mock_client.list_ai_models.assert_called_once_with(provider="claude")
         assert "claude-sonnet-4" in result.output
         assert "claude-opus-4-6" in result.output
 
@@ -1102,6 +1103,7 @@ class TestAiModelsCommand:
         }
         result = runner.invoke(app, ["ai-models"])
         assert result.exit_code == 0
+        mock_client.list_ai_models.assert_called_once_with(provider="")
         assert "claude" in result.output
         assert "gemini" in result.output
 

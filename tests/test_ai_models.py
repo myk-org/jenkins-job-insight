@@ -278,17 +278,23 @@ class TestIsValidModel:
     @pytest.mark.asyncio
     async def test_returns_true_when_model_found(self):
         cache = AIModelCache()
-        cache._cache["claude"] = [
-            {"id": "claude-sonnet-4", "name": "Claude Sonnet 4"},
-        ]
+        import time
+
+        cache._cache["claude"] = {
+            "models": [{"id": "claude-sonnet-4", "name": "Claude Sonnet 4"}],
+            "fetched_at": time.monotonic(),
+        }
         assert cache.is_valid_model("claude", "claude-sonnet-4") is True
 
     @pytest.mark.asyncio
     async def test_returns_false_when_model_not_found(self):
         cache = AIModelCache()
-        cache._cache["claude"] = [
-            {"id": "claude-sonnet-4", "name": "Claude Sonnet 4"},
-        ]
+        import time
+
+        cache._cache["claude"] = {
+            "models": [{"id": "claude-sonnet-4", "name": "Claude Sonnet 4"}],
+            "fetched_at": time.monotonic(),
+        }
         assert cache.is_valid_model("claude", "nonexistent-model") is False
 
 

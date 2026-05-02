@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 
 from simple_logger.logger import get_logger
 
@@ -54,6 +55,7 @@ _PROVIDER_PREFIXES = (
 )
 
 _CURSOR_SUBPROCESS_TIMEOUT = 10  # seconds
+_MODEL_CACHE_TTL_SECONDS = 3600  # 1 hour
 
 
 def _model_id_to_display_name(model_id: str) -> str:
@@ -65,12 +67,17 @@ class AIModelCache:
     """Cache for AI model listings per provider."""
 
     def __init__(self) -> None:
-        self._cache: dict[str, list[dict]] = {}
+        self._cache: dict[
+            str, dict
+        ] = {}  # {provider: {"models": [...], "fetched_at": float}}
         self._pricing_cache: object | None = None
 
     def set_pricing_cache(self, pricing_cache: object) -> None:
         """Set the LLM pricing cache instance for LiteLLM-based lookups."""
         self._pricing_cache = pricing_cache
+        # Invalidate cached providers that depend on pricing data
+        for p in ("claude", "gemini"):
+            self._cache.pop(p, None)
 
     async def list_models(self, provider: str) -> list[dict]:
         """Return cached models for *provider*, fetching if needed.
@@ -79,16 +86,21 @@ class AIModelCache:
         On any error, logs WARNING and returns ``[]``.
         """
         provider = provider.lower().strip()
-        if provider in self._cache:
-            logger.debug(
-                "Returning cached models for provider=%s (%d models)",
-                provider,
-                len(self._cache[provider]),
-            )
-            return self._cache[provider]
+        entry = self._cache.get(provider)
+        if entry is not None:
+            age = time.monotonic() - entry["fetched_at"]
+            if age < _MODEL_CACHE_TTL_SECONDS:
+                logger.debug(
+                    "Returning cached models for provider=%s (%d models, age=%.0fs)",
+                    provider,
+                    len(entry["models"]),
+                    age,
+                )
+                return entry["models"]
+            logger.debug("Cache expired for provider=%s (age=%.0fs)", provider, age)
 
         models = await self._fetch_models(provider)
-        self._cache[provider] = models
+        self._cache[provider] = {"models": models, "fetched_at": time.monotonic()}
         logger.debug("Fetched %d models for provider=%s", len(models), provider)
         return models
 
@@ -111,10 +123,10 @@ class AIModelCache:
         ``None`` when the cache is empty (can't validate).
         """
         provider = provider.lower().strip()
-        cached = self._cache.get(provider)
-        if cached is None:
+        entry = self._cache.get(provider)
+        if entry is None:
             return None
-        model_ids = {m["id"] for m in cached}
+        model_ids = {m["id"] for m in entry["models"]}
         return model in model_ids
 
     async def _fetch_models(self, provider: str) -> list[dict]:
@@ -158,7 +170,8 @@ class AIModelCache:
             )
             try:
                 proc.kill()  # type: ignore[union-attr]
-            except Exception:
+                await proc.wait()  # reap process to avoid zombies
+            except ProcessLookupError:
                 pass
             return []
         except Exception:

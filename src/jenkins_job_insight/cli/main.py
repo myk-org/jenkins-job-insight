@@ -1365,6 +1365,16 @@ def ai_configs(
 # -- AI Models ----------------------------------------------------------------
 
 
+def _print_ai_model_rows(models: list[dict]) -> None:
+    """Render an id/name table for AI model rows."""
+    print_output(
+        models,
+        columns=["id", "name"],
+        labels={"id": "MODEL ID", "name": "DISPLAY NAME"},
+        as_json=False,
+    )
+
+
 @app.command("ai-models")
 def ai_models_cmd(
     provider: str = typer.Option(
@@ -1392,12 +1402,7 @@ def ai_models_cmd(
                 typer.echo(f"No models found for provider '{provider}'.")
                 raise typer.Exit()
             typer.echo(f"Models for {provider}:")
-            print_output(
-                models,
-                columns=["id", "name"],
-                labels={"id": "MODEL ID", "name": "DISPLAY NAME"},
-                as_json=False,
-            )
+            _print_ai_model_rows(models)
         else:
             providers_data = data.get("providers", {})
             if not providers_data:
@@ -1406,12 +1411,7 @@ def ai_models_cmd(
             for prov, models in sorted(providers_data.items()):
                 typer.echo(f"\n{prov} ({len(models)} models):")
                 if models:
-                    print_output(
-                        models,
-                        columns=["id", "name"],
-                        labels={"id": "MODEL ID", "name": "DISPLAY NAME"},
-                        as_json=False,
-                    )
+                    _print_ai_model_rows(models)
 
 
 # -- Users ----------------------------------------------------------------

@@ -95,9 +95,12 @@ export function ReAnalyzeDialog({ open, onOpenChange, result, jobId }: ReAnalyze
   // Fetch available models when provider changes
   useEffect(() => {
     if (!aiProvider) { setAvailableModels([]); return }
+    let ignore = false
+    setAvailableModels([])
     api.get<{ models: ModelOption[] }>(`/api/ai-models?provider=${aiProvider}`)
-      .then(res => setAvailableModels(res.models ?? []))
-      .catch(() => setAvailableModels([]))
+      .then(res => { if (!ignore) setAvailableModels(res.models ?? []) })
+      .catch(() => { if (!ignore) setAvailableModels([]) })
+    return () => { ignore = true }
   }, [aiProvider])
 
   // Reset form state when dialog opens

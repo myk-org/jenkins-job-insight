@@ -4163,6 +4163,14 @@ async def list_ai_models(
     try:
         if provider:
             provider = provider.lower().strip()
+            if provider not in VALID_AI_PROVIDERS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Unsupported AI provider: {provider}. "
+                        f"Valid providers: {', '.join(sorted(VALID_AI_PROVIDERS))}"
+                    ),
+                )
             models = await model_cache.list_models(provider)
             return {"provider": provider, "models": models}
 

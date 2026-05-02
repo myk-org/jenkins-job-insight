@@ -1610,6 +1610,17 @@ class TestAnalyzeCommentIntent:
 
 
 class TestJJIClientAiModels:
+    def test_list_ai_models_empty_string_provider_omits_query_param(self):
+        def handler(request):
+            assert request.method == "GET"
+            assert request.url.path == "/api/ai-models"
+            assert request.url.params.get("provider") is None
+            return httpx.Response(200, json={"providers": {}})
+
+        client = _make_client(handler)
+        result = client.list_ai_models(provider="")
+        assert result == {"providers": {}}
+
     def test_list_ai_models_no_provider(self):
         def handler(request):
             assert request.method == "GET"

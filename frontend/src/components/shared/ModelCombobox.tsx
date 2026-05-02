@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useId } from 'react'
 import { cn } from '@/lib/utils'
 import { ChevronDown } from 'lucide-react'
 
@@ -27,6 +27,7 @@ export function ModelCombobox({
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  const listboxId = useId()
 
   // Fuzzy filter: case-insensitive substring match on id or name
   const filtered = options.filter((m) => {
@@ -132,6 +133,12 @@ export function ModelCombobox({
           aria-expanded={showDropdown}
           aria-haspopup="listbox"
           aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-activedescendant={
+            highlightIndex >= 0 && filtered[highlightIndex]
+              ? `${listboxId}-opt-${highlightIndex}`
+              : undefined
+          }
           autoComplete="off"
         />
         <button
@@ -157,11 +164,13 @@ export function ModelCombobox({
         <ul
           ref={listRef}
           role="listbox"
+          id={listboxId}
           className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border-default bg-surface-card shadow-lg animate-fade-in"
         >
           {filtered.map((model, i) => (
             <li
               key={model.id}
+              id={`${listboxId}-opt-${i}`}
               role="option"
               aria-selected={model.id === value}
               className={cn(
