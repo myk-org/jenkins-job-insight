@@ -29,14 +29,26 @@ export function NavBar() {
   const location = useLocation()
   const { isAdmin, username } = useAuth()
   const [unreadCount, setUnreadCount] = useState(0)
+  const [activeCount, setActiveCount] = useState(0)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackEnabled, setFeedbackEnabled] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const activeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchUnread = useCallback(async () => {
     try {
       const res = await api.get<{ count: number }>('/api/users/mentions/unread-count')
       setUnreadCount(res.count)
+    } catch {
+      // best-effort
+    }
+  }, [])
+
+  const fetchActiveCount = useCallback(async () => {
+    try {
+      const res = await api.get<Array<{ status: string }>>('/api/dashboard')
+      const active = res.filter(j => ['running', 'pending', 'waiting'].includes(j.status))
+      setActiveCount(active.length)
     } catch {
       // best-effort
     }
@@ -53,6 +65,15 @@ export function NavBar() {
 
   useEffect(() => {
     if (!username) return
+    fetchActiveCount()
+    activeIntervalRef.current = setInterval(fetchActiveCount, UNREAD_POLL_INTERVAL)
+    return () => {
+      if (activeIntervalRef.current) clearInterval(activeIntervalRef.current)
+    }
+  }, [username, fetchActiveCount])
+
+  useEffect(() => {
+    if (!username) return
     function handleMentionsUpdated() {
       fetchUnread()
     }
@@ -65,15 +86,19 @@ export function NavBar() {
     function handleVisibility() {
       if (document.visibilityState === 'visible') {
         fetchUnread()
+        fetchActiveCount()
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [username, fetchUnread])
+  }, [username, fetchUnread, fetchActiveCount])
 
-  // Clear stale unread count when user is logged out
+  // Clear stale counts when user is logged out
   useEffect(() => {
-    if (!username) setUnreadCount(0)
+    if (!username) {
+      setUnreadCount(0)
+      setActiveCount(0)
+    }
   }, [username])
 
   // Fetch server capabilities to check if feedback is enabled
@@ -128,6 +153,11 @@ export function NavBar() {
                 )}
               >
                 {label}
+                {to === '/' && activeCount > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-signal-orange px-1 text-[10px] font-bold text-white">
+                    {activeCount > 99 ? '99+' : activeCount}
+                  </span>
+                )}
                 {to === '/mentions' && unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-signal-blue px-1 text-[10px] font-bold text-white">
                     {unreadCount > 99 ? '99+' : unreadCount}
