@@ -3098,7 +3098,10 @@ class TestExtractFailuresFromTestReport:
         )
         failures = extract_failures_from_test_report(report)
         assert len(failures) == 1
-        assert failures[0].error_message == "Expected"
+        assert (
+            failures[0].error_message
+            == "Expected <v1.PersistentVolumeAccessMode>: ReadWriteMany to equal <v1.PersistentVolumeAccessMode>: ReadWriteOnce"
+        )
         assert "ReadWriteMany" in failures[0].stack_trace
         assert "ReadWriteOnce" in failures[0].stack_trace
 

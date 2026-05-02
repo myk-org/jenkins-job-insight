@@ -909,13 +909,15 @@ def extract_failures_from_test_report(test_report: dict) -> list[TestFailure]:
 
                 # Fallback: when errorDetails is empty, extract error summary from errorStackTrace
                 if not error_details and stack_trace:
-                    # errorStackTrace often starts with file:line, followed by the actual error
-                    # Extract first substantive line (skip file:line references)
+                    # errorStackTrace often contains file:line refs interleaved with actual error
+                    # Collect all non-file:line lines and join into a single error message
+                    parts: list[str] = []
                     for line in stack_trace.split("\n"):
                         stripped = line.strip()
                         if stripped and not re.match(r"^[\w/._-]+\.\w+:\d+$", stripped):
-                            error_details = stripped
-                            break
+                            parts.append(stripped)
+                    if parts:
+                        error_details = " ".join(parts)
 
                 failures.append(
                     TestFailure(
