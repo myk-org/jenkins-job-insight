@@ -13,6 +13,7 @@ from jenkins_job_insight.analyzer import (
     _call_ai_cli_with_retry,
     _parse_json_response,
     _recover_from_details,
+    extract_failures_from_test_report,
     handle_jenkins_exception,
 )
 from jenkins_job_insight.config import Settings
@@ -3049,3 +3050,173 @@ class TestRecoverFromDetailsCodeFields:
         assert result.code_fix
         assert result.code_fix.original_code is None
         assert result.code_fix.suggested_code is None
+
+
+class TestExtractFailuresFromTestReport:
+    """Tests for extract_failures_from_test_report()."""
+
+    @staticmethod
+    def _make_report(cases: list[dict]) -> dict:
+        """Build a minimal Jenkins test report with the given cases."""
+        return {"suites": [{"cases": cases}]}
+
+    def test_basic_failure_with_error_details(self) -> None:
+        """Standard failure with errorDetails and errorStackTrace."""
+        report = self._make_report(
+            [
+                {
+                    "className": "com.example.MyTest",
+                    "name": "testFoo",
+                    "status": "FAILED",
+                    "errorDetails": "expected 1 but got 2",
+                    "errorStackTrace": "at MyTest.java:42\nat Runner.java:10",
+                    "duration": 1.5,
+                }
+            ]
+        )
+        failures = extract_failures_from_test_report(report)
+        assert len(failures) == 1
+        assert failures[0].test_name == "com.example.MyTest.testFoo"
+        assert failures[0].error_message == "expected 1 but got 2"
+        assert failures[0].stack_trace == "at MyTest.java:42\nat Runner.java:10"
+        assert failures[0].duration == 1.5
+        assert failures[0].status == "FAILED"
+
+    def test_fallback_to_stack_trace_when_error_details_null(self) -> None:
+        """When errorDetails is null, extract error summary from errorStackTrace."""
+        report = self._make_report(
+            [
+                {
+                    "className": "pkg",
+                    "name": "TestVmState",
+                    "status": "FAILED",
+                    "errorDetails": None,
+                    "errorStackTrace": "tests/vm_state_test.go:201\nExpected\n    <v1.PersistentVolumeAccessMode>: ReadWriteMany\nto equal\n    <v1.PersistentVolumeAccessMode>: ReadWriteOnce\ntests/vm_state_test.go:167",
+                    "duration": 0.3,
+                }
+            ]
+        )
+        failures = extract_failures_from_test_report(report)
+        assert len(failures) == 1
+        assert failures[0].error_message == "Expected"
+        assert "ReadWriteMany" in failures[0].stack_trace
+        assert "ReadWriteOnce" in failures[0].stack_trace
+
+    def test_fallback_skips_file_line_references(self) -> None:
+        """When errorStackTrace starts with file:line, skip to first substantive line."""
+        report = self._make_report(
+            [
+                {
+                    "className": "",
+                    "name": "TestGoUnit",
+                    "status": "REGRESSION",
+                    "errorDetails": None,
+                    "errorStackTrace": "tests/some_test.go:42\nExpected true to be false",
+                    "duration": 0.1,
+                }
+            ]
+        )
+        failures = extract_failures_from_test_report(report)
+        assert len(failures) == 1
+        assert failures[0].test_name == "TestGoUnit"
+        assert failures[0].error_message == "Expected true to be false"
+        assert (
+            failures[0].stack_trace
+            == "tests/some_test.go:42\nExpected true to be false"
+        )
+
+    def test_no_fallback_when_error_details_present(self) -> None:
+        """When errorDetails is present, errorStackTrace is not used as fallback."""
+        report = self._make_report(
+            [
+                {
+                    "className": "C",
+                    "name": "t",
+                    "status": "FAILED",
+                    "errorDetails": "real error",
+                    "errorStackTrace": "tests/foo.go:10\nsome trace",
+                }
+            ]
+        )
+        failures = extract_failures_from_test_report(report)
+        assert failures[0].error_message == "real error"
+        assert failures[0].stack_trace == "tests/foo.go:10\nsome trace"
+
+    def test_stack_trace_fallback_extracts_error_summary(self) -> None:
+        """When errorDetails is empty but errorStackTrace exists, extract summary from it."""
+        report = self._make_report(
+            [
+                {
+                    "className": "C",
+                    "name": "t",
+                    "status": "FAILED",
+                    "errorDetails": "",
+                    "errorStackTrace": "existing trace with details",
+                }
+            ]
+        )
+        failures = extract_failures_from_test_report(report)
+        assert failures[0].error_message == "existing trace with details"
+        assert failures[0].stack_trace == "existing trace with details"
+
+    def test_all_fields_null_no_crash(self) -> None:
+        """When errorDetails and errorStackTrace are null, no crash and empty strings returned."""
+        report = self._make_report(
+            [
+                {
+                    "className": "C",
+                    "name": "t",
+                    "status": "FAILED",
+                    "errorDetails": None,
+                    "errorStackTrace": None,
+                }
+            ]
+        )
+        failures = extract_failures_from_test_report(report)
+        assert len(failures) == 1
+        assert failures[0].error_message == ""
+        assert failures[0].stack_trace == ""
+
+    def test_passed_tests_are_excluded(self) -> None:
+        """Tests with PASSED status are not extracted."""
+        report = self._make_report(
+            [
+                {"className": "C", "name": "ok", "status": "PASSED"},
+                {
+                    "className": "C",
+                    "name": "bad",
+                    "status": "FAILED",
+                    "errorDetails": "err",
+                },
+            ]
+        )
+        failures = extract_failures_from_test_report(report)
+        assert len(failures) == 1
+        assert failures[0].test_name == "C.bad"
+
+    def test_child_reports_structure(self) -> None:
+        """Failures from childReports are extracted correctly."""
+        report = {
+            "childReports": [
+                {
+                    "result": {
+                        "suites": [
+                            {
+                                "cases": [
+                                    {
+                                        "className": "Sub",
+                                        "name": "test1",
+                                        "status": "REGRESSION",
+                                        "errorDetails": "regressed",
+                                        "errorStackTrace": "trace",
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        failures = extract_failures_from_test_report(report)
+        assert len(failures) == 1
+        assert failures[0].status == "REGRESSION"
