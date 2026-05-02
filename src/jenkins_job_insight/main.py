@@ -606,15 +606,17 @@ async def lifespan(app: FastAPI):
     _warmup = asyncio.create_task(pricing_cache.load())
     _background_tasks.add(_warmup)
     _warmup.add_done_callback(_background_tasks.discard)
-    pricing_cache.start_background_refresh()
 
-    # Wire AI model cache to pricing data and pre-populate cursor models
-    model_cache.set_pricing_cache(pricing_cache)
-    # Pre-populate cursor models in background (don't block startup)
-    task = asyncio.create_task(_safe_preload_cursor_models())
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
     try:
+        pricing_cache.start_background_refresh()
+
+        # Wire AI model cache to pricing data and pre-populate cursor models
+        model_cache.set_pricing_cache(pricing_cache)
+        # Pre-populate cursor models in background (don't block startup)
+        task = asyncio.create_task(_safe_preload_cursor_models())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+
         waiting_jobs = await storage.mark_stale_results_failed()
         if waiting_jobs:
             # Schedule resumption as a background task so it runs after the
