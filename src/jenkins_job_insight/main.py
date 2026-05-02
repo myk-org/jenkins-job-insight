@@ -2658,7 +2658,8 @@ async def get_issue_prompt(
         owner, repo = _parse_github_repo_url(tests_repo_url)
     except ValueError:
         logger.warning(
-            "Cannot parse GitHub repo URL for issue prompt: %s", tests_repo_url
+            "Cannot parse GitHub repo URL for issue prompt: %s",
+            _redact_url(tests_repo_url),
         )
         return {"prompt": ""}
 
