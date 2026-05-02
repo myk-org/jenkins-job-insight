@@ -2756,6 +2756,7 @@ async def preview_github_issue(
         result_data=result_data,
     )
 
+    issue_prompt = (body.issue_prompt or "").strip()
     content = await generate_github_issue_content(
         failure=failure,
         report_url=report_url,
@@ -2764,7 +2765,7 @@ async def preview_github_issue(
         jenkins_url=jenkins_url,
         include_links=effective_include_links,
         job_id=job_id,
-        issue_prompt=body.issue_prompt,
+        issue_prompt=issue_prompt,
     )
 
     # Duplicate detection (best-effort: failures must not break preview)
@@ -2833,6 +2834,7 @@ async def preview_jira_bug(
         result_data=result_data,
     )
 
+    issue_prompt = (body.issue_prompt or "").strip()
     content = await generate_jira_bug_content(
         failure=failure,
         report_url=report_url,
@@ -2841,7 +2843,7 @@ async def preview_jira_bug(
         jenkins_url=jenkins_url,
         include_links=effective_include_links,
         job_id=job_id,
-        issue_prompt=body.issue_prompt,
+        issue_prompt=issue_prompt,
     )
 
     # Duplicate detection (best-effort: failures must not break preview)
