@@ -4188,6 +4188,8 @@ async def list_ai_models(
                 )
                 all_models[p] = []
         return {"providers": all_models}
+    except HTTPException:
+        raise
     except Exception:
         logger.warning(
             "Failed to list AI models for provider=%s", provider, exc_info=True

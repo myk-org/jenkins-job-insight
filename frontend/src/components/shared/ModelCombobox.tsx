@@ -145,9 +145,13 @@ export function ModelCombobox({
           type="button"
           tabIndex={-1}
           className="absolute right-0 top-0 flex h-9 w-8 items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
-            setOpen(!open)
-            inputRef.current?.focus()
+            setOpen((prev) => {
+              const next = !prev
+              if (next) inputRef.current?.focus()
+              return next
+            })
           }}
           aria-label="Toggle model list"
         >
