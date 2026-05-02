@@ -3220,3 +3220,25 @@ class TestExtractFailuresFromTestReport:
         failures = extract_failures_from_test_report(report)
         assert len(failures) == 1
         assert failures[0].status == "REGRESSION"
+
+    def test_whitespace_only_error_details_falls_back_to_stack_trace(self) -> None:
+        """When errorDetails is whitespace-only, treat as empty and extract from errorStackTrace."""
+        report = self._make_report(
+            [
+                {
+                    "className": "pkg",
+                    "name": "TestWhitespace",
+                    "status": "FAILED",
+                    "errorDetails": "   ",
+                    "errorStackTrace": "tests/some_test.go:99\nActual value did not match expected",
+                    "duration": 0.5,
+                }
+            ]
+        )
+        failures = extract_failures_from_test_report(report)
+        assert len(failures) == 1
+        assert failures[0].error_message == "Actual value did not match expected"
+        assert (
+            failures[0].stack_trace
+            == "tests/some_test.go:99\nActual value did not match expected"
+        )

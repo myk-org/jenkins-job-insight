@@ -904,7 +904,7 @@ def extract_failures_from_test_report(test_report: dict) -> list[TestFailure]:
                 test_name = case.get("name", "")
                 full_name = f"{class_name}.{test_name}" if class_name else test_name
 
-                error_details = case.get("errorDetails", "") or ""
+                error_details = (case.get("errorDetails", "") or "").strip()
                 stack_trace = case.get("errorStackTrace", "") or ""
 
                 # Fallback: when errorDetails is empty, extract error summary from errorStackTrace
@@ -913,7 +913,7 @@ def extract_failures_from_test_report(test_report: dict) -> list[TestFailure]:
                     # Extract first substantive line (skip file:line references)
                     for line in stack_trace.split("\n"):
                         stripped = line.strip()
-                        if stripped and not re.match(r"^[\w/._-]+\.go:\d+$", stripped):
+                        if stripped and not re.match(r"^[\w/._-]+\.\w+:\d+$", stripped):
                             error_details = stripped
                             break
 
