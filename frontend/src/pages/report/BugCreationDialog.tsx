@@ -151,7 +151,7 @@ export function BugCreationDialog({
     return () => {
       ignore = true
     }
-  }, [open, phase, jobId])
+  }, [open, jobId])
 
   function handleContinueFromPrompt() {
     setPhase('loading')
