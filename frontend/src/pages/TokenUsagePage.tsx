@@ -22,7 +22,13 @@ import { SortableHeader } from '@/components/shared/SortableHeader'
 import { DateRangeFilter } from '@/components/shared/DateRangeFilter'
 import { useTableSort } from '@/lib/useTableSort'
 import type { TokenUsageDashboard } from '@/types'
-import { Zap, TrendingUp, Calendar, DollarSign } from 'lucide-react'
+import { Zap, TrendingUp, Calendar, DollarSign, Info } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 interface BreakdownRow {
   group: string
@@ -101,7 +107,7 @@ function SummaryCard({ title, icon, calls, tokens, inputTokens, outputTokens, co
             <span className="font-mono text-xs text-text-secondary">{formatCompactNumber(outputTokens)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-text-tertiary">Cost</span>
+            <span className="text-xs text-text-tertiary">Cost (estimated)</span>
             <span className="font-mono text-sm font-medium text-signal-green">
               {formatCostCell(cost)}
             </span>
@@ -238,11 +244,22 @@ export function TokenUsagePage() {
   }, [])
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="font-display text-xl font-bold text-text-primary">Token Usage</h1>
-        <p className="mt-0.5 text-sm text-text-tertiary">AI provider token consumption and costs</p>
+        <p className="mt-0.5 text-sm text-text-tertiary inline-flex items-center gap-1">
+          AI provider token consumption and costs (estimated)
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-3.5 w-3.5 text-text-tertiary cursor-help inline-block" />
+            </TooltipTrigger>
+            <TooltipContent side="right" className="max-w-xs">
+              Cost is calculated from token counts using LiteLLM pricing data when not provided natively by the AI provider.
+            </TooltipContent>
+          </Tooltip>
+        </p>
       </div>
 
       {/* Errors */}
@@ -380,7 +397,7 @@ export function TokenUsagePage() {
               <SortableHeader label="Output Tokens" sortKey="output_tokens" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
               <SortableHeader label="Cache Read" sortKey="cache_read_tokens" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
               <SortableHeader label="Cache Write" sortKey="cache_write_tokens" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
-              <SortableHeader label="Cost" sortKey="cost_usd" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
+              <SortableHeader label="Cost (estimated)" sortKey="cost_usd" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
               <SortableHeader label="Avg Duration" sortKey="avg_duration_ms" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort} className="text-right" />
             </TableRow>
           </TableHeader>
@@ -404,5 +421,6 @@ export function TokenUsagePage() {
         </Table>
       )}
     </div>
+    </TooltipProvider>
   )
 }

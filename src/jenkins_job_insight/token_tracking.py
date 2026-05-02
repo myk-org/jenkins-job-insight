@@ -10,6 +10,7 @@ from ai_cli_runner import AIResult
 from simple_logger.logger import get_logger
 
 from jenkins_job_insight import storage
+from jenkins_job_insight.llm_pricing import pricing_cache
 from jenkins_job_insight.models import TokenUsageEntry, TokenUsageSummary
 
 logger = get_logger(name=__name__, level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -33,16 +34,38 @@ async def record_ai_usage(
             return
 
         usage = result.usage
+        resolved_provider = (usage.provider if usage else "") or ai_provider
+        resolved_model = (usage.model if usage else "") or ai_model
+        cost = usage.cost_usd if usage else None
+
+        # If CLI didn't provide cost, calculate from pricing cache
+        if cost is None and usage is not None:
+            try:
+                cost = pricing_cache.calculate_cost(
+                    provider=resolved_provider,
+                    model=resolved_model,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cache_read_tokens=usage.cache_read_tokens,
+                    cache_write_tokens=usage.cache_write_tokens,
+                )
+            except Exception:
+                logger.debug(
+                    "Failed to calculate cost from pricing cache for job %s",
+                    job_id,
+                    exc_info=True,
+                )
+
         await storage.record_token_usage(
             job_id=job_id,
-            ai_provider=(usage.provider if usage else "") or ai_provider,
-            ai_model=(usage.model if usage else "") or ai_model,
+            ai_provider=resolved_provider,
+            ai_model=resolved_model,
             call_type=call_type,
             input_tokens=usage.input_tokens if usage else 0,
             output_tokens=usage.output_tokens if usage else 0,
             cache_read_tokens=usage.cache_read_tokens if usage else 0,
             cache_write_tokens=usage.cache_write_tokens if usage else 0,
-            cost_usd=usage.cost_usd if usage else None,
+            cost_usd=cost,
             duration_ms=usage.duration_ms if usage else None,
             prompt_chars=prompt_chars,
             response_chars=len(result.text),
