@@ -2619,11 +2619,11 @@ async def get_issue_prompt(
     settings: Settings = Depends(get_settings),
     _: None = Depends(_bind_job_id),
 ) -> dict:
-    """Read JOB_INSIGHT_ISSUE_PROMPT.md from the test repo associated with a job.
+    """Fetch JOB_INSIGHT_ISSUE_PROMPT.md from the test repo via the GitHub Contents API.
 
-    Clones the test repo (shallow, depth=1), reads the prompt file from the
-    repo root, and returns its content.  Returns ``{"prompt": ""}`` when no
-    repo is configured, the file does not exist, or any error occurs.
+    Makes a single HTTP call instead of cloning the repo.  Returns
+    ``{"prompt": ""}`` when no repo is configured, the file does not exist,
+    or any error occurs.
     """
     _check_allow_list(request)
 
@@ -2640,28 +2640,59 @@ async def get_issue_prompt(
         return {"prompt": ""}
 
     try:
-        repo_manager = RepositoryManager()
-        try:
-            workspace = repo_manager.create_workspace()
-            clone_dir = await asyncio.to_thread(
-                repo_manager.clone_into,
-                tests_repo_url,
-                workspace / "repo",
-                depth=1,
-                branch=tests_repo_ref,
-                token=tests_repo_token or None,
+        owner, repo = _parse_github_repo_url(tests_repo_url)
+    except ValueError:
+        logger.warning(
+            "Cannot parse GitHub repo URL for issue prompt: %s", tests_repo_url
+        )
+        return {"prompt": ""}
+
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{JOB_INSIGHT_ISSUE_PROMPT_FILENAME}"
+    if tests_repo_ref:
+        api_url += f"?ref={tests_repo_ref}"
+
+    headers: dict[str, str] = {"Accept": "application/vnd.github.raw+json"}
+    if tests_repo_token:
+        headers["Authorization"] = f"Bearer {tests_repo_token}"
+
+    logger.debug(
+        "Fetching issue prompt from %s/%s ref=%s",
+        owner,
+        repo,
+        tests_repo_ref or "(default)",
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(api_url, headers=headers)
+
+        if resp.status_code == 200:
+            content = resp.text
+            logger.debug(
+                "Issue prompt found (%d chars) for job %s", len(content), job_id
             )
-            prompt_file = clone_dir / JOB_INSIGHT_ISSUE_PROMPT_FILENAME
-            if prompt_file.is_file():
-                content = prompt_file.read_text(encoding="utf-8", errors="replace")
-                return {"prompt": content}
+            return {"prompt": content}
+
+        if resp.status_code == 404:
+            logger.debug("No issue prompt file in %s/%s", owner, repo)
             return {"prompt": ""}
-        finally:
-            repo_manager.cleanup()
+
+        logger.warning(
+            "Failed to fetch issue prompt from %s/%s: HTTP %d",
+            owner,
+            repo,
+            resp.status_code,
+        )
+        return {"prompt": ""}
+
+    except httpx.TimeoutException:
+        logger.warning("Timeout fetching issue prompt from %s/%s", owner, repo)
+        return {"prompt": ""}
     except Exception:  # noqa: BLE001 — never crash; empty prompt is safe
-        logger.debug(
-            "Failed to read issue prompt from repo for job_id=%s",
-            job_id,
+        logger.warning(
+            "Failed to fetch issue prompt from %s/%s",
+            owner,
+            repo,
             exc_info=True,
         )
         return {"prompt": ""}

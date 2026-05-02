@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
+import httpx
 import jenkins
 import pytest
 
@@ -1378,9 +1379,7 @@ class TestGetIssuePrompt:
 
     @pytest.mark.asyncio
     async def test_returns_prompt_when_file_exists(self, test_client):
-        """GET /results/{job_id}/issue-prompt returns prompt content when file exists."""
-        import tempfile
-
+        """GET /results/{job_id}/issue-prompt returns prompt content via GitHub API."""
         result_data = {
             "status": "completed",
             "summary": "",
@@ -1395,32 +1394,31 @@ class TestGetIssuePrompt:
         await storage.save_result(
             "job-ip-exists", "http://jenkins", "completed", result_data
         )
-        with patch("jenkins_job_insight.main.RepositoryManager") as MockRepoMgr:
-            mock_mgr = MagicMock()
-            MockRepoMgr.return_value = mock_mgr
-            workspace_dir = Path(tempfile.mkdtemp())
-            mock_mgr.create_workspace.return_value = workspace_dir
 
-            def fake_clone_into(url, target, depth=1, branch="", token=None):
-                target.mkdir(parents=True, exist_ok=True)
-                (target / "JOB_INSIGHT_ISSUE_PROMPT.md").write_text(
-                    "Include product version info"
-                )
-                return target
-
-            mock_mgr.clone_into.side_effect = fake_clone_into
+        mock_response = httpx.Response(
+            200,
+            text="Include product version info",
+            request=httpx.Request("GET", "https://api.github.com"),
+        )
+        with patch("jenkins_job_insight.main.httpx.AsyncClient") as MockClient:
+            mock_client_instance = AsyncMock()
+            MockClient.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client_instance
+            )
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+            mock_client_instance.get.return_value = mock_response
 
             response = test_client.get("/results/job-ip-exists/issue-prompt")
 
         assert response.status_code == 200
         assert response.json()["prompt"] == "Include product version info"
-        mock_mgr.create_workspace.assert_called_once()
-        mock_mgr.cleanup.assert_called_once()
-        mock_mgr.clone_into.assert_called_once()
-        args, kwargs = mock_mgr.clone_into.call_args
-        assert args[0] == "https://github.com/org/repo"  # normalized, no :ref suffix
-        assert kwargs["branch"] == "release-4.19"
-        assert kwargs["token"] == FAKE_GITHUB_TOKEN
+        mock_client_instance.get.assert_called_once()
+        call_args = mock_client_instance.get.call_args
+        assert "ref=release-4.19" in call_args.args[0]
+        assert (
+            call_args.kwargs["headers"]["Authorization"]
+            == f"Bearer {FAKE_GITHUB_TOKEN}"
+        )
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_no_repo_configured(self, test_client):
@@ -1442,10 +1440,8 @@ class TestGetIssuePrompt:
         assert response.json()["prompt"] == ""
 
     @pytest.mark.asyncio
-    async def test_returns_empty_on_clone_failure(self, test_client):
-        """GET /results/{job_id}/issue-prompt returns empty on clone failure."""
-        import tempfile
-
+    async def test_returns_empty_on_network_error(self, test_client):
+        """GET /results/{job_id}/issue-prompt returns empty on network error with warning."""
         result_data = {
             "status": "completed",
             "summary": "",
@@ -1456,25 +1452,26 @@ class TestGetIssuePrompt:
             },
         }
         await storage.save_result(
-            "job-ip-cfail", "http://jenkins", "completed", result_data
+            "job-ip-neterr", "http://jenkins", "completed", result_data
         )
-        with patch("jenkins_job_insight.main.RepositoryManager") as MockRepoMgr:
-            mock_mgr = MagicMock()
-            MockRepoMgr.return_value = mock_mgr
-            mock_mgr.base_path = Path(tempfile.mkdtemp())
-            mock_mgr.clone_into.side_effect = RuntimeError("clone failed")
+        with patch("jenkins_job_insight.main.httpx.AsyncClient") as MockClient:
+            mock_client_instance = AsyncMock()
+            MockClient.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client_instance
+            )
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+            mock_client_instance.get.side_effect = httpx.ConnectError(
+                "connection refused"
+            )
 
-            response = test_client.get("/results/job-ip-cfail/issue-prompt")
+            response = test_client.get("/results/job-ip-neterr/issue-prompt")
 
         assert response.status_code == 200
         assert response.json()["prompt"] == ""
-        mock_mgr.cleanup.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_file_not_found(self, test_client):
-        """GET /results/{job_id}/issue-prompt returns empty when prompt file is missing."""
-        import tempfile
-
+        """GET /results/{job_id}/issue-prompt returns empty when prompt file missing (404)."""
         result_data = {
             "status": "completed",
             "summary": "",
@@ -1487,24 +1484,24 @@ class TestGetIssuePrompt:
         await storage.save_result(
             "job-ip-nofile", "http://jenkins", "completed", result_data
         )
-        with patch("jenkins_job_insight.main.RepositoryManager") as MockRepoMgr:
-            mock_mgr = MagicMock()
-            MockRepoMgr.return_value = mock_mgr
-            workspace_dir = Path(tempfile.mkdtemp())
-            mock_mgr.create_workspace.return_value = workspace_dir
 
-            def fake_clone_into(url, target, depth=1, branch="", token=None):
-                target.mkdir(parents=True, exist_ok=True)
-                # No JOB_INSIGHT_ISSUE_PROMPT.md file created
-                return target
-
-            mock_mgr.clone_into.side_effect = fake_clone_into
+        mock_response = httpx.Response(
+            404,
+            text="Not Found",
+            request=httpx.Request("GET", "https://api.github.com"),
+        )
+        with patch("jenkins_job_insight.main.httpx.AsyncClient") as MockClient:
+            mock_client_instance = AsyncMock()
+            MockClient.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client_instance
+            )
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+            mock_client_instance.get.return_value = mock_response
 
             response = test_client.get("/results/job-ip-nofile/issue-prompt")
 
         assert response.status_code == 200
         assert response.json()["prompt"] == ""
-        mock_mgr.cleanup.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_job_not_found(self, test_client):
@@ -1512,6 +1509,46 @@ class TestGetIssuePrompt:
         response = test_client.get("/results/nonexistent-job/issue-prompt")
         assert response.status_code == 200
         assert response.json()["prompt"] == ""
+
+    @pytest.mark.asyncio
+    async def test_private_repo_with_token(self, test_client):
+        """GET /results/{job_id}/issue-prompt passes token in Authorization header."""
+        result_data = {
+            "status": "completed",
+            "summary": "",
+            "failures": [],
+            "request_params": encrypt_sensitive_fields(
+                {
+                    "tests_repo_url": "https://github.com/private-org/private-repo",
+                    "tests_repo_token": "ghp_secret123",
+                }
+            ),
+        }
+        await storage.save_result(
+            "job-ip-private", "http://jenkins", "completed", result_data
+        )
+
+        mock_response = httpx.Response(
+            200,
+            text="Private repo prompt",
+            request=httpx.Request("GET", "https://api.github.com"),
+        )
+        with patch("jenkins_job_insight.main.httpx.AsyncClient") as MockClient:
+            mock_client_instance = AsyncMock()
+            MockClient.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client_instance
+            )
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+            mock_client_instance.get.return_value = mock_response
+
+            response = test_client.get("/results/job-ip-private/issue-prompt")
+
+        assert response.status_code == 200
+        assert response.json()["prompt"] == "Private repo prompt"
+        call_args = mock_client_instance.get.call_args
+        assert call_args.kwargs["headers"]["Authorization"] == "Bearer ghp_secret123"
+        # URL should target the correct repo
+        assert "/private-org/private-repo/" in call_args.args[0]
 
 
 class TestPreviewGithubIssue:
