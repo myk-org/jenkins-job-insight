@@ -3807,10 +3807,13 @@ async def get_active_analysis_count() -> dict:
     logger.debug("GET /api/dashboard/active-count")
     try:
         count = await storage.count_active_analyses()
-        return {"count": count}
-    except Exception:
+    except Exception as exc:
         logger.warning("Failed to get active analysis count", exc_info=True)
-        return {"count": 0}
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to get active analysis count",
+        ) from exc
+    return {"count": count}
 
 
 @app.get("/api/dashboard")
