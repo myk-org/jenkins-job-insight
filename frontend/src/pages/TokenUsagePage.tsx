@@ -252,8 +252,8 @@ export function TokenUsagePage() {
         <p className="mt-0.5 text-sm text-text-tertiary inline-flex items-center gap-1">
           AI provider token consumption and costs
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Info className="h-3.5 w-3.5 text-text-tertiary cursor-help inline-block" />
+            <TooltipTrigger aria-label="About cost calculation">
+              <Info className="h-3.5 w-3.5 text-text-tertiary cursor-help" aria-hidden="true" />
             </TooltipTrigger>
             <TooltipContent side="right" className="max-w-xs">
               Cost is calculated from token counts using LiteLLM pricing data when not provided natively by the AI provider.
