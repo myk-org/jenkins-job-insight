@@ -445,37 +445,45 @@ class TestAnalyzeFailuresEndpoint:
 
     def test_analyze_failures_missing_ai_provider(self, test_client) -> None:
         """Test that missing AI provider (no env var, no body param) returns 400."""
-        response = test_client.post(
-            "/analyze-failures",
-            json={
-                "failures": [
-                    {
-                        "test_name": "test_foo",
-                        "error_message": "assert False",
-                    }
-                ],
-                "ai_model": "test-model",
-            },
-        )
-        assert response.status_code == 400
-        assert "AI provider" in response.json()["detail"]
+        with (
+            patch("jenkins_job_insight.main.AI_PROVIDER", ""),
+            patch("jenkins_job_insight.main.AI_MODEL", ""),
+        ):
+            response = test_client.post(
+                "/analyze-failures",
+                json={
+                    "failures": [
+                        {
+                            "test_name": "test_foo",
+                            "error_message": "assert False",
+                        }
+                    ],
+                    "ai_model": "test-model",
+                },
+            )
+            assert response.status_code == 400
+            assert "AI provider" in response.json()["detail"]
 
     def test_analyze_failures_missing_ai_model(self, test_client) -> None:
         """Test that missing AI model returns 400."""
-        response = test_client.post(
-            "/analyze-failures",
-            json={
-                "failures": [
-                    {
-                        "test_name": "test_foo",
-                        "error_message": "assert False",
-                    }
-                ],
-                "ai_provider": "claude",
-            },
-        )
-        assert response.status_code == 400
-        assert "AI model" in response.json()["detail"]
+        with (
+            patch("jenkins_job_insight.main.AI_PROVIDER", ""),
+            patch("jenkins_job_insight.main.AI_MODEL", ""),
+        ):
+            response = test_client.post(
+                "/analyze-failures",
+                json={
+                    "failures": [
+                        {
+                            "test_name": "test_foo",
+                            "error_message": "assert False",
+                        }
+                    ],
+                    "ai_provider": "claude",
+                },
+            )
+            assert response.status_code == 400
+            assert "AI model" in response.json()["detail"]
 
     def test_analyze_failures_handles_analysis_exception(self, test_client) -> None:
         """Test that when analyze_failure_group raises, endpoint returns status 'failed'."""
