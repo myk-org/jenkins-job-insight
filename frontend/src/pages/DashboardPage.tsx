@@ -35,7 +35,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { SortableHeader } from '@/components/shared/SortableHeader'
 import { DateRangeFilter } from '@/components/shared/DateRangeFilter'
 import { useTableSort } from '@/lib/useTableSort'
-import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle, Github, Plus } from 'lucide-react'
+import { Trash2, MessageSquare, CheckCircle2, GitFork, AlertTriangle, Github } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useMetadataOptions, MetadataDropdowns, MetadataLabelChips, MetadataClearButton } from '@/components/shared/MetadataFilterBar'
 import { MetadataBadges } from '@/components/shared/MetadataBadges'
@@ -427,10 +427,6 @@ export function DashboardPage() {
             </SelectContent>
           </Select>
           <MetadataClearButton hasFilters={hasMetadataFilters} onClearAll={clearMetadataFilters} />
-          <Button onClick={() => navigate('/new-analysis')} className="gap-1.5 whitespace-nowrap">
-            <Plus className="h-3.5 w-3.5" />
-            New Analysis
-          </Button>
         </div>
 
         {/* Tag filter chips — only shown when labels exist */}

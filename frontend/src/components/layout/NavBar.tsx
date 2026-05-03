@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, MessageSquarePlus, type LucideIcon } from 'lucide-react'
+import { BookOpen, MessageSquarePlus, Plus, type LucideIcon } from 'lucide-react'
 import { UserBadge } from './UserBadge'
 import { FeedbackDialog } from '@/components/shared/FeedbackDialog'
 import { NavBadge } from '@/components/shared/NavBadge'
@@ -160,6 +160,19 @@ export function NavBar() {
                 {to === '/mentions' && <NavBadge count={unreadCount} color="blue" />}
               </Link>
             ))}
+            <div className="h-6 w-px bg-border-default" />
+            <Link
+              to="/new-analysis"
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150',
+                location.pathname === '/new-analysis'
+                  ? 'bg-surface-elevated text-text-primary'
+                  : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+              )}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New Analysis
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3">
