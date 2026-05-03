@@ -156,8 +156,8 @@ export function NavBar() {
                 )}
               >
                 {label}
-                {to === '/' && <NavBadge count={activeCount} color="orange" />}
-                {to === '/mentions' && <NavBadge count={unreadCount} color="blue" />}
+                {to === '/' && <NavBadge count={activeCount} color="orange" tooltip={`${activeCount} ${activeCount === 1 ? 'analysis' : 'analyses'} running`} pulse />}
+                {to === '/mentions' && <NavBadge count={unreadCount} color="blue" tooltip={`${unreadCount} unread ${unreadCount === 1 ? 'mention' : 'mentions'}`} />}
               </Link>
             ))}
             <div className="h-6 w-px bg-border-default" />
